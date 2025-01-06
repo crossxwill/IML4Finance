@@ -1,0 +1,9 @@
+*.csv
+*.pkl
+*.parquet
+*_files/
+External*.xlsx
+Internal*.xlsx
+Unseen*.xlsx
+Performance_All.zip
+Data/home-credit-default-risk
