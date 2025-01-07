@@ -23,7 +23,7 @@ bibliography: references.bib
 William Chiu, FRM
 
 -   Financial Risk Manager (FRM) Certified since 2012
--   MLDS Alum since 2013
+-   Northwestern MLDS Alum (Class of 2013)
 -   Senior Credit Risk Analyst at a credit bureau (2013-2014)
 -   Head of Statistical Modeling at a bank (2014-2023)
 -   VP of Predictive Modeling at an insurance company since 2023
@@ -49,9 +49,7 @@ timeline
                                 : Optimize Inference Speed
                                 : Feature & Target Drift
                                 : Model Retirement
-
 ```
-
 
 ## Business Context
 
@@ -67,7 +65,6 @@ timeline
 
 5.  Detect fraud with a cost-sensitive model
 
-
 ## Data Sets
 
 1.  Borrower data from an Indian Bank and Credit Bureau. The instructor modified the data to include `campaign_id`, `control_group`, and `response_flag`. [@cibil-data].
@@ -78,11 +75,21 @@ timeline
 
 4.  Simulated data from the *Fraud Detection Handbook* . [@leborgne2022fraud]
 
-## Model Development Tools
 
-* AutoGluon is an open-source AutoML framework that automates model training and ensembling.
+## Model Development Tools{.smaller}
 
-* Rather than focussing on hyperparameter optimization (HPO), AutoGluon focuses on delivering strong performance through ensembling.
+:::::::::::: {layout="[[70,30], [100]]"}
+
+![](Images/autogluon.png)
+
+![](Images/Scikit_learn_logo_small.svg.png)
+
+-   AutoGluon is an open-source AutoML framework designed to automate model training and ensembling.
+-   AutoGluon achieves strong performance by using ensembling techniques and a comprehensive library of preset hyperparameters for each base learner.
+-   AutoGluon offers data preprocessing like automatic encoding of categorical variables and automatic removal of features with no variance.
+-   Scikit-learn provides calibration methods (e.g., Platt scaling, isotonic regression) to improve the reliability of predicted probabilities.
+
+::::::::::::
 
 ## Interpretable ML Tools
 
@@ -102,7 +109,6 @@ timeline
 -   Explain individual predictions
     -   SHAP values
     -   Counterfactuals
-
 
 ## Prerequisites
 
@@ -128,75 +134,119 @@ timeline
 # Introduction to Retail Banking
 
 ## What is a Retail Bank?
-- Serves individual consumers and small businesses
-- Offers checking accounts, savings accounts, personal loans, mortgages, and other financial products
-- Focuses on everyday banking services rather than large-scale corporate or investment activities
+
+-   A retail bank serves individual consumers, households, and small businesses
+-   Offers deposit and lending products: checking/savings accounts, certificates of deposit, credit cards, and mortgages
+-   Some retail banks also offer brokerage and wealth management services
+-   A large bank holding company, like JPMorgan Chase, has both a retail bank (Chase Bank) and a bank that serves large businesses, governments, and institutional investors (JPMorgan).
 
 ## Revenue Sources
-- Collects interest on loans (e.g., mortgages, auto loans)
-- Earns revenue from transaction fees, service charges, and other financial products (e.g., credit cards)
-- Major contributor to profitability: spread between interest charged on loans and interest paid on deposits
+
+-   Interest collected from loans (e.g., credit cards, auto loans, personal loans, mortgages)
+-   Transaction fees, commissions, and service charges
+-   Major contributor to profitability: spread between interest collected from loans and interest paid to depositors
 
 ## Expense Sources
-- Employee salaries
-- Branch operations
-- Technology infrastructure
-- Regulatory compliance costs
-- Capital for loan loss provisions
-- Marketing and customer acquisition costs
+
+-   Employee compensation
+-   Interest paid to depositors
+-   Provision for loan losses
 
 ## How could a Bank fail?
-- Insufficient liquidity
-- Massive loan defaults
-- Sudden loss of depositor confidence leading to a bank run
-- Poor risk management, reckless lending, or major market downturns
-- Regulatory sanctions and reputational damage
+
+-   Insufficient liquidity (not enough cash to meet obligations)
+-   Insufficient capital (not enough equity to absorb losses)
+-   High levels of non-performing loans or significant credit losses
+-   Sudden loss of depositor confidence leading to a bank run
+-   Poor risk management and poor investment decisions
 
 ## What is FDIC insurance?
-- Protects depositors by guaranteeing their funds up to a certain limit if a bank fails
-- Aims to maintain public confidence and prevent bank runs
-- Standard insurance amount in the US: $250,000 per depositor, per insured bank
+
+-   Protects depositors by guaranteeing their funds up to a certain limit if a bank fails
+-   Aims to maintain public confidence and prevent bank runs
+-   Standard insurance amount in the US: \$250,000 per depositor, per insured bank
 
 ## How do Banks use machine learning?
-- Improve credit risk assessment
-- Detect fraudulent activities
-- Optimize marketing campaigns
-- Predict customer behaviors, default risks, and repayment probabilities
-- Automate processes such as loan underwriting and customer service
+
+-   Improve the effectiveness of marketing campaigns
+-   Measure the credit risk of loan applicants
+-   Estimate the lifetime credit losses of a loan portfolio
+-   Detect fraudulent activities
 
 # Introduction to Credit Bureaus
 
 ## US Credit Bureaus
-- Experian
-- TransUnion
-- Equifax
+
+-   The US has three major credit bureaus:
+    -   Experian
+    -   TransUnion
+    -   Equifax
+-   Credit bureaus serve three major functions:
+    -   Collect and maintain consumer credit information
+    -   Provide credit reports to lenders
+    -   Generate credit scores
+
+## Credit Score Range: 300 to 850 {.nonincremental}
+
+-   Excellent: 800+
+-   Very Good: 740-799
+-   Good: 670-739
+-   Fair: 580-669
+-   Poor: Below 580
 
 ## Bureau Data
-- **Borrowers**: Consumer demographics, employment information, and credit history
-- **Trades**: Details on lines of credit, outstanding balances, and payment patterns
-- **Trade History**: Monthly updates, delinquencies, and overall account performance
+
+-   **Borrowers**: Consumer identification, address, birthdate, employment information, and credit scores
+-   **Trades**: Lending accounts associated with the borrower; details include creditor name, account type, credit limit, outstanding balance, credit utilization rate, and account status
+-   **Trade History**: Monthly payment history for each account including payment status, balance changes, and delinquency information
+
+## (More) Bureau Data
+
+-   **Inquiries**: Records of lenders that requested the borrower's credit report
+    -   Hard inquiries: affect credit score
+    -   Soft inquiries: do not affect credit score
 
 # Prescreen Campaigns to Acquire New Clients
 
 ## Business Problem
-- Identify potential borrowers likely to respond positively to credit offers
-- Target specific consumers based on attributes like credit profile and spending behavior
-- Maximize response while minimizing costs and regulatory risks
+
+-   Identify consumers likely to respond to pre-approved credit offers
+-   Target prospects based on bureau attributes including recent inquiries, credit scores, and credit history
+-   Maximize campaign response rates while adhering to risk policy, legal, and budget constraints
+
+## Prescreening Compliance Framework{.smaller}
+
+- Fair Credit Reporting Act (FCRA)
+
+    - Verify permissible purpose and consumer opt-out status prior to prescreening
+    - Ensure firm offers match the criteria used during prescreening
+    - Include clear opt-out notices and instructions in every prescreened offer
+    - If declined after prescreening, provide an Adverse Action Notice
+
+
+- Equal Credit Opportunity Act (ECOA)
+
+    - Prohibits discrimination based on race, color, religion, national origin, sex, marital status, or age
+    - Apply consistent underwriting standards to all applicants
+    - Maintain documentation to demonstrate non-discriminatory practices and facilitate regulatory reviews
+
 
 ## Business Solution
-- Use targeted mailing lists or digital ads to market credit products
-- Selection criteria: credit scores, income levels, past responsiveness to similar campaigns
-- Tailor offers to the right audience to grow customer base efficiently
+
+-   Develop selection criteria for credit bureau prescreening
+-   Combine bureau data with internal customer data if available
+-   Selection criteria typically includes: credit scores, geographic location, bureau attributes, estimated income, existing relationship data, and prior campaign responses
 
 ## Machine Learning Problem
-- Predict which prospects are most likely to accept the offer
-- Requires historical campaign data, response flags, and relevant borrower attributes
-- Build a model that balances precision (fewer false positives) with recall (capturing most likely responders)
+
+-   Requires historical campaign data, response flags, and relevant borrower attributes
+-   Predict which prospects are most likely to accept the offer
+-   Develop a model that maximizes AUC and estimate a probability threshold that maximizes the F1 score
 
 ## Machine Learning Solution
-- Train a classification model (e.g., gradient boosting or logistic regression) on labeled data to identify strong responders
-- Incorporate performance metrics such as AUC or recall to gauge effectiveness
-- Score new prospects, select high-scoring individuals for the campaign, and measure the uplift over a control group
+
+-   Train a classification model on labeled data to identify strong responders
+-   Incorporate performance metrics such as AUC, F1 score, lift chart, and gains chart to gauge effectiveness
+-   Score new prospects, select high-scoring individuals for the campaign, and measure the lift and gains chart over a control group
 
 ## Citations
-

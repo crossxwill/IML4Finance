@@ -168,7 +168,7 @@
 <p>William Chiu, FRM</p>
 <ul>
 <li class="fragment">Financial Risk Manager (FRM) Certified since 2012</li>
-<li class="fragment">MLDS Alum since 2013</li>
+<li class="fragment">Northwestern MLDS Alum (Class of 2013)</li>
 <li class="fragment">Senior Credit Risk Analyst at a credit bureau (2013-2014)</li>
 <li class="fragment">Head of Statistical Modeling at a bank (2014-2023)</li>
 <li class="fragment">VP of Predictive Modeling at an insurance company since 2023</li>
@@ -199,7 +199,6 @@
                                 : Optimize Inference Speed
                                 : Feature &amp; Target Drift
                                 : Model Retirement
-
 </pre>
 </div>
 <p></p></figure><p></p>
@@ -227,12 +226,31 @@
 <li class="fragment"><p>Simulated data from the <em>Fraud Detection Handbook</em> . <span class="citation" data-cites="leborgne2022fraud">(<a href="#/citations" role="doc-biblioref" onclick="">Le Borgne et al. 2022</a>)</span></p></li>
 </ol>
 </section>
-<section id="model-development-tools" class="slide level2">
+<section id="model-development-tools" class="slide level2 smaller">
 <h2>Model Development Tools</h2>
+<div>
+
+</div>
+<div class="quarto-layout-panel" data-layout="[[70,30], [100]]">
+<div class="quarto-layout-row">
+<div class="quarto-layout-cell" style="flex-basis: 70.0%;justify-content: center;">
+<p><img data-src="Images/autogluon.png"></p>
+</div>
+<div class="quarto-layout-cell" style="flex-basis: 30.0%;justify-content: center;">
+<p><img data-src="Images/Scikit_learn_logo_small.svg.png"></p>
+</div>
+</div>
+<div class="quarto-layout-row">
+<div class="quarto-layout-cell" style="flex-basis: 100.0%;justify-content: flex-start;">
 <ul>
-<li class="fragment"><p>AutoGluon is an open-source AutoML framework that automates model training and ensembling.</p></li>
-<li class="fragment"><p>Rather than focussing on hyperparameter optimization (HPO), AutoGluon focuses on delivering strong performance through ensembling.</p></li>
+<li class="fragment">AutoGluon is an open-source AutoML framework designed to automate model training and ensembling.</li>
+<li class="fragment">AutoGluon achieves strong performance by using ensembling techniques and a comprehensive library of preset hyperparameters for each base learner.</li>
+<li class="fragment">AutoGluon offers data preprocessing like automatic encoding of categorical variables and automatic removal of features with no variance.</li>
+<li class="fragment">Scikit-learn provides calibration methods (e.g., Platt scaling, isotonic regression) to improve the reliability of predicted probabilities.</li>
 </ul>
+</div>
+</div>
+</div>
 </section>
 <section id="interpretable-ml-tools" class="slide level2">
 <h2>Interpretable ML Tools</h2>
@@ -301,38 +319,36 @@
 <section id="what-is-a-retail-bank" class="slide level2">
 <h2>What is a Retail Bank?</h2>
 <ul>
-<li class="fragment">Serves individual consumers and small businesses</li>
-<li class="fragment">Offers checking accounts, savings accounts, personal loans, mortgages, and other financial products</li>
-<li class="fragment">Focuses on everyday banking services rather than large-scale corporate or investment activities</li>
+<li class="fragment">A retail bank serves individual consumers, households, and small businesses</li>
+<li class="fragment">Offers deposit and lending products: checking/savings accounts, certificates of deposit, credit cards, and mortgages</li>
+<li class="fragment">Some retail banks also offer brokerage and wealth management services</li>
+<li class="fragment">A large bank holding company, like JPMorgan Chase, has both a retail bank (Chase Bank) and a bank that serves large businesses, governments, and institutional investors (JPMorgan).</li>
 </ul>
 </section>
 <section id="revenue-sources" class="slide level2">
 <h2>Revenue Sources</h2>
 <ul>
-<li class="fragment">Collects interest on loans (e.g., mortgages, auto loans)</li>
-<li class="fragment">Earns revenue from transaction fees, service charges, and other financial products (e.g., credit cards)</li>
-<li class="fragment">Major contributor to profitability: spread between interest charged on loans and interest paid on deposits</li>
+<li class="fragment">Interest collected from loans (e.g., credit cards, auto loans, personal loans, mortgages)</li>
+<li class="fragment">Transaction fees, commissions, and service charges</li>
+<li class="fragment">Major contributor to profitability: spread between interest collected from loans and interest paid to depositors</li>
 </ul>
 </section>
 <section id="expense-sources" class="slide level2">
 <h2>Expense Sources</h2>
 <ul>
-<li class="fragment">Employee salaries</li>
-<li class="fragment">Branch operations</li>
-<li class="fragment">Technology infrastructure</li>
-<li class="fragment">Regulatory compliance costs</li>
-<li class="fragment">Capital for loan loss provisions</li>
-<li class="fragment">Marketing and customer acquisition costs</li>
+<li class="fragment">Employee compensation</li>
+<li class="fragment">Interest paid to depositors</li>
+<li class="fragment">Provision for loan losses</li>
 </ul>
 </section>
 <section id="how-could-a-bank-fail" class="slide level2">
 <h2>How could a Bank fail?</h2>
 <ul>
-<li class="fragment">Insufficient liquidity</li>
-<li class="fragment">Massive loan defaults</li>
+<li class="fragment">Insufficient liquidity (not enough cash to meet obligations)</li>
+<li class="fragment">Insufficient capital (not enough equity to absorb losses)</li>
+<li class="fragment">High levels of non-performing loans or significant credit losses</li>
 <li class="fragment">Sudden loss of depositor confidence leading to a bank run</li>
-<li class="fragment">Poor risk management, reckless lending, or major market downturns</li>
-<li class="fragment">Regulatory sanctions and reputational damage</li>
+<li class="fragment">Poor risk management and poor investment decisions</li>
 </ul>
 </section>
 <section id="what-is-fdic-insurance" class="slide level2">
@@ -346,11 +362,10 @@
 <section id="how-do-banks-use-machine-learning" class="slide level2">
 <h2>How do Banks use machine learning?</h2>
 <ul>
-<li class="fragment">Improve credit risk assessment</li>
+<li class="fragment">Improve the effectiveness of marketing campaigns</li>
+<li class="fragment">Measure the credit risk of loan applicants</li>
+<li class="fragment">Estimate the lifetime credit losses of a loan portfolio</li>
 <li class="fragment">Detect fraudulent activities</li>
-<li class="fragment">Optimize marketing campaigns</li>
-<li class="fragment">Predict customer behaviors, default risks, and repayment probabilities</li>
-<li class="fragment">Automate processes such as loan underwriting and customer service</li>
 </ul>
 </section></section>
 <section>
@@ -361,17 +376,46 @@
 <section id="us-credit-bureaus" class="slide level2">
 <h2>US Credit Bureaus</h2>
 <ul>
+<li class="fragment">The US has three major credit bureaus:
+<ul>
 <li class="fragment">Experian</li>
 <li class="fragment">TransUnion</li>
 <li class="fragment">Equifax</li>
+</ul></li>
+<li class="fragment">Credit bureaus serve three major functions:
+<ul>
+<li class="fragment">Collect and maintain consumer credit information</li>
+<li class="fragment">Provide credit reports to lenders</li>
+<li class="fragment">Generate credit scores</li>
+</ul></li>
+</ul>
+</section>
+<section id="credit-score-range-300-to-850" class="slide level2 nonincremental">
+<h2>Credit Score Range: 300 to 850</h2>
+<ul>
+<li class="fragment">Excellent: 800+</li>
+<li class="fragment">Very Good: 740-799</li>
+<li class="fragment">Good: 670-739</li>
+<li class="fragment">Fair: 580-669</li>
+<li class="fragment">Poor: Below 580</li>
 </ul>
 </section>
 <section id="bureau-data" class="slide level2">
 <h2>Bureau Data</h2>
 <ul>
-<li class="fragment"><strong>Borrowers</strong>: Consumer demographics, employment information, and credit history</li>
-<li class="fragment"><strong>Trades</strong>: Details on lines of credit, outstanding balances, and payment patterns</li>
-<li class="fragment"><strong>Trade History</strong>: Monthly updates, delinquencies, and overall account performance</li>
+<li class="fragment"><strong>Borrowers</strong>: Consumer identification, address, birthdate, employment information, and credit scores</li>
+<li class="fragment"><strong>Trades</strong>: Lending accounts associated with the borrower; details include creditor name, account type, credit limit, outstanding balance, credit utilization rate, and account status</li>
+<li class="fragment"><strong>Trade History</strong>: Monthly payment history for each account including payment status, balance changes, and delinquency information</li>
+</ul>
+</section>
+<section id="more-bureau-data" class="slide level2">
+<h2>(More) Bureau Data</h2>
+<ul>
+<li class="fragment"><strong>Inquiries</strong>: Records of lenders that requested the borrower’s credit report
+<ul>
+<li class="fragment">Hard inquiries: affect credit score</li>
+<li class="fragment">Soft inquiries: do not affect credit score</li>
+</ul></li>
 </ul>
 </section></section>
 <section>
@@ -382,33 +426,51 @@
 <section id="business-problem" class="slide level2">
 <h2>Business Problem</h2>
 <ul>
-<li class="fragment">Identify potential borrowers likely to respond positively to credit offers</li>
-<li class="fragment">Target specific consumers based on attributes like credit profile and spending behavior</li>
-<li class="fragment">Maximize response while minimizing costs and regulatory risks</li>
+<li class="fragment">Identify consumers likely to respond to pre-approved credit offers</li>
+<li class="fragment">Target prospects based on bureau attributes including recent inquiries, credit scores, and credit history</li>
+<li class="fragment">Maximize campaign response rates while adhering to risk policy, legal, and budget constraints</li>
+</ul>
+</section>
+<section id="prescreening-compliance-framework" class="slide level2 smaller">
+<h2>Prescreening Compliance Framework</h2>
+<ul>
+<li class="fragment"><p>Fair Credit Reporting Act (FCRA)</p>
+<ul>
+<li class="fragment">Verify permissible purpose and consumer opt-out status prior to prescreening</li>
+<li class="fragment">Ensure firm offers match the criteria used during prescreening</li>
+<li class="fragment">Include clear opt-out notices and instructions in every prescreened offer</li>
+<li class="fragment">If declined after prescreening, provide an Adverse Action Notice</li>
+</ul></li>
+<li class="fragment"><p>Equal Credit Opportunity Act (ECOA)</p>
+<ul>
+<li class="fragment">Prohibits discrimination based on race, color, religion, national origin, sex, marital status, or age</li>
+<li class="fragment">Apply consistent underwriting standards to all applicants</li>
+<li class="fragment">Maintain documentation to demonstrate non-discriminatory practices and facilitate regulatory reviews</li>
+</ul></li>
 </ul>
 </section>
 <section id="business-solution" class="slide level2">
 <h2>Business Solution</h2>
 <ul>
-<li class="fragment">Use targeted mailing lists or digital ads to market credit products</li>
-<li class="fragment">Selection criteria: credit scores, income levels, past responsiveness to similar campaigns</li>
-<li class="fragment">Tailor offers to the right audience to grow customer base efficiently</li>
+<li class="fragment">Develop selection criteria for credit bureau prescreening</li>
+<li class="fragment">Combine bureau data with internal customer data if available</li>
+<li class="fragment">Selection criteria typically includes: credit scores, geographic location, bureau attributes, estimated income, existing relationship data, and prior campaign responses</li>
 </ul>
 </section>
 <section id="machine-learning-problem" class="slide level2">
 <h2>Machine Learning Problem</h2>
 <ul>
-<li class="fragment">Predict which prospects are most likely to accept the offer</li>
 <li class="fragment">Requires historical campaign data, response flags, and relevant borrower attributes</li>
-<li class="fragment">Build a model that balances precision (fewer false positives) with recall (capturing most likely responders)</li>
+<li class="fragment">Predict which prospects are most likely to accept the offer</li>
+<li class="fragment">Develop a model that maximizes AUC and estimate a probability threshold that maximizes the F1 score</li>
 </ul>
 </section>
 <section id="machine-learning-solution" class="slide level2">
 <h2>Machine Learning Solution</h2>
 <ul>
-<li class="fragment">Train a classification model (e.g., gradient boosting or logistic regression) on labeled data to identify strong responders</li>
-<li class="fragment">Incorporate performance metrics such as AUC or recall to gauge effectiveness</li>
-<li class="fragment">Score new prospects, select high-scoring individuals for the campaign, and measure the uplift over a control group</li>
+<li class="fragment">Train a classification model on labeled data to identify strong responders</li>
+<li class="fragment">Incorporate performance metrics such as AUC, F1 score, lift chart, and gains chart to gauge effectiveness</li>
+<li class="fragment">Score new prospects, select high-scoring individuals for the campaign, and measure the lift and gains chart over a control group</li>
 </ul>
 </section>
 <section id="citations" class="slide level2 smaller scrollable">
