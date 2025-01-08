@@ -126,19 +126,19 @@ timeline
     -   Reinforce understanding of weekly material and practical application of concepts.
 2.  Kaggle Competition (30%)
     -   Develop a scorecard model for loan underwriting.
-    -   Apply modeling techniques in a competitive scenario.
-    -   Students will be given a labeled training set and an unlabeled test set.
     -   Students will be asked why the model rejected a loan application.
     -   Grades will depend on model performance in an unlabeled test set and the quality of the explanation.
 
+
 # Introduction to Retail Banking
+
+![](Images/dalle-bank-building.png){fig-align="center"}
 
 ## What is a Retail Bank?
 
 -   A retail bank serves individual consumers, households, and small businesses
 -   Offers deposit and lending products: checking/savings accounts, certificates of deposit, credit cards, and mortgages
--   Some retail banks also offer brokerage and wealth management services
--   A large bank holding company, like JPMorgan Chase, has both a retail bank (Chase Bank) and a bank that serves large businesses, governments, and institutional investors (JPMorgan).
+-   Large retail banks also offer brokerage and wealth management services
 
 ## Revenue Sources
 
@@ -158,7 +158,6 @@ timeline
 -   Insufficient capital (not enough equity to absorb losses)
 -   High levels of non-performing loans or significant credit losses
 -   Sudden loss of depositor confidence leading to a bank run
--   Poor risk management and poor investment decisions
 
 ## What is FDIC insurance?
 
@@ -175,44 +174,95 @@ timeline
 
 # Introduction to Credit Bureaus
 
+![](/Images/dalle-bank-bureau.png){fig-align="center"}
+
 ## US Credit Bureaus
 
 -   The US has three major credit bureaus:
     -   Experian
     -   TransUnion
     -   Equifax
+
 -   Credit bureaus serve three major functions:
     -   Collect and maintain consumer credit information
     -   Provide credit reports to lenders
     -   Generate credit scores
 
-## Credit Score Range: 300 to 850 {.nonincremental}
 
--   Excellent: 800+
--   Very Good: 740-799
--   Good: 670-739
--   Fair: 580-669
--   Poor: Below 580
+## Bureau Data Structure
 
-## Bureau Data
+-   **Consumer Information**: 
+    -   Borrower details: Name, address, SSN, birthdate
+    -   Employment data (if reported)
+    -   Credit scores from different scoring models
 
--   **Borrowers**: Consumer identification, address, birthdate, employment information, and credit scores
--   **Trades**: Lending accounts associated with the borrower; details include creditor name, account type, credit limit, outstanding balance, credit utilization rate, and account status
--   **Trade History**: Monthly payment history for each account including payment status, balance changes, and delinquency information
+-   **Trade Lines (Accounts)**:
+    -   Account details: Creditor, type, opened/closed dates
+    -   Credit terms: Limit, payment amount, loan amount
+    -   Current status: Balance, utilization, payment status
+    -   Payment history: 24-84 months of payment records
 
-## (More) Bureau Data
+## Credit Report Inquiries
 
--   **Inquiries**: Records of lenders that requested the borrower's credit report
-    -   Hard inquiries: affect credit score
-    -   Soft inquiries: do not affect credit score
+-   **Hard Inquiries**:
+    -   Result from credit applications
+    -   Visible to all lenders
+    -   Impact credit scores
+
+-   **Soft Inquiries**:
+    -   Account reviews, promotional screening
+    -   Only visible to consumer
+    -   No impact on credit scores
+
+
+## Credit Scores
+
+- Two major scoring models:
+    - FICO
+    - VantageScore
+
+- Credit Score Ranges:
+    -   Excellent: 800+
+    -   Very Good: 740-799
+    -   Good: 670-739
+    -   Fair: 580-669
+    -   Poor: Below 580
 
 # Prescreen Campaigns to Acquire New Clients
 
+![](/Images/dalle-credit-card-offer.png){fig-align="center"}
+
 ## Business Problem
 
--   Identify consumers likely to respond to pre-approved credit offers
--   Target prospects based on bureau attributes including recent inquiries, credit scores, and credit history
--   Maximize campaign response rates while adhering to risk policy, legal, and budget constraints
+-   Bank wants to acquire new credit card customers through targeted marketing
+-   Marketing budget is limited, so need to focus on high-response rate prospects
+-   Must comply with regulatory requirements (FCRA, ECOA)
+-   Need to balance response rates against credit risk
+-   Campaign costs include: mailing, credit bureau fees, and expected credit losses
+
+## Business Solution{.smaller}
+
+-   Develop data-driven selection criteria for credit bureau prescreening
+-   Selection criteria typically includes:
+    - Credit scores from major bureaus (FICO, VantageScore)
+    - Geographic targeting based on market strategy
+    - Key bureau attributes (payment history, utilization, delinquencies)
+    - Existing banking relationship data if available
+    - Historical campaign response patterns
+    - Age of credit history and recent inquiries
+-   Establish control groups to measure campaign effectiveness
+
+## Machine Learning Problem
+
+-   Requires historical campaign data, response flags, and relevant bureau attributes
+-   Predict which prospects are most likely to accept the offer
+-   Develop a model that maximizes AUC and estimate a probability threshold that maximizes the F1 score, precision, or recall
+
+## Machine Learning Solution
+
+-   Train a classification model on labeled data to identify strong responders
+-   Incorporate performance metrics such as AUC, F1 score, lift chart, and gains chart to gauge effectiveness
+-   Score prospects, select high-scoring individuals for the campaign, and measure the lift and gains chart over a control group
 
 ## Prescreening Compliance Framework{.smaller}
 
@@ -223,30 +273,10 @@ timeline
     - Include clear opt-out notices and instructions in every prescreened offer
     - If declined after prescreening, provide an Adverse Action Notice
 
-
 - Equal Credit Opportunity Act (ECOA)
 
     - Prohibits discrimination based on race, color, religion, national origin, sex, marital status, or age
     - Apply consistent underwriting standards to all applicants
     - Maintain documentation to demonstrate non-discriminatory practices and facilitate regulatory reviews
-
-
-## Business Solution
-
--   Develop selection criteria for credit bureau prescreening
--   Combine bureau data with internal customer data if available
--   Selection criteria typically includes: credit scores, geographic location, bureau attributes, estimated income, existing relationship data, and prior campaign responses
-
-## Machine Learning Problem
-
--   Requires historical campaign data, response flags, and relevant borrower attributes
--   Predict which prospects are most likely to accept the offer
--   Develop a model that maximizes AUC and estimate a probability threshold that maximizes the F1 score
-
-## Machine Learning Solution
-
--   Train a classification model on labeled data to identify strong responders
--   Incorporate performance metrics such as AUC, F1 score, lift chart, and gains chart to gauge effectiveness
--   Score new prospects, select high-scoring individuals for the campaign, and measure the lift and gains chart over a control group
 
 ## Citations

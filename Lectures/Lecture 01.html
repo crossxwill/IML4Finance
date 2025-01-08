@@ -304,8 +304,6 @@
 <li class="fragment">Kaggle Competition (30%)
 <ul>
 <li class="fragment">Develop a scorecard model for loan underwriting.</li>
-<li class="fragment">Apply modeling techniques in a competitive scenario.</li>
-<li class="fragment">Students will be given a labeled training set and an unlabeled test set.</li>
 <li class="fragment">Students will be asked why the model rejected a loan application.</li>
 <li class="fragment">Grades will depend on model performance in an unlabeled test set and the quality of the explanation.</li>
 </ul></li>
@@ -315,14 +313,13 @@
 <section id="introduction-to-retail-banking" class="title-slide slide level1 center">
 <h1>Introduction to Retail Banking</h1>
 
-</section>
+<img data-src="Images/dalle-bank-building.png" class="quarto-figure quarto-figure-center r-stretch"></section>
 <section id="what-is-a-retail-bank" class="slide level2">
 <h2>What is a Retail Bank?</h2>
 <ul>
 <li class="fragment">A retail bank serves individual consumers, households, and small businesses</li>
 <li class="fragment">Offers deposit and lending products: checking/savings accounts, certificates of deposit, credit cards, and mortgages</li>
-<li class="fragment">Some retail banks also offer brokerage and wealth management services</li>
-<li class="fragment">A large bank holding company, like JPMorgan Chase, has both a retail bank (Chase Bank) and a bank that serves large businesses, governments, and institutional investors (JPMorgan).</li>
+<li class="fragment">Large retail banks also offer brokerage and wealth management services</li>
 </ul>
 </section>
 <section id="revenue-sources" class="slide level2">
@@ -348,7 +345,6 @@
 <li class="fragment">Insufficient capital (not enough equity to absorb losses)</li>
 <li class="fragment">High levels of non-performing loans or significant credit losses</li>
 <li class="fragment">Sudden loss of depositor confidence leading to a bank run</li>
-<li class="fragment">Poor risk management and poor investment decisions</li>
 </ul>
 </section>
 <section id="what-is-fdic-insurance" class="slide level2">
@@ -372,7 +368,7 @@
 <section id="introduction-to-credit-bureaus" class="title-slide slide level1 center">
 <h1>Introduction to Credit Bureaus</h1>
 
-</section>
+<img data-src=".\Images/dalle-bank-bureau.png" class="quarto-figure quarto-figure-center r-stretch"></section>
 <section id="us-credit-bureaus" class="slide level2">
 <h2>US Credit Bureaus</h2>
 <ul>
@@ -390,31 +386,56 @@
 </ul></li>
 </ul>
 </section>
-<section id="credit-score-range-300-to-850" class="slide level2 nonincremental">
-<h2>Credit Score Range: 300 to 850</h2>
+<section id="bureau-data-structure" class="slide level2">
+<h2>Bureau Data Structure</h2>
+<ul>
+<li class="fragment"><strong>Consumer Information</strong>:
+<ul>
+<li class="fragment">Borrower details: Name, address, SSN, birthdate</li>
+<li class="fragment">Employment data (if reported)</li>
+<li class="fragment">Credit scores from different scoring models</li>
+</ul></li>
+<li class="fragment"><strong>Trade Lines (Accounts)</strong>:
+<ul>
+<li class="fragment">Account details: Creditor, type, opened/closed dates</li>
+<li class="fragment">Credit terms: Limit, payment amount, loan amount</li>
+<li class="fragment">Current status: Balance, utilization, payment status</li>
+<li class="fragment">Payment history: 24-84 months of payment records</li>
+</ul></li>
+</ul>
+</section>
+<section id="credit-report-inquiries" class="slide level2">
+<h2>Credit Report Inquiries</h2>
+<ul>
+<li class="fragment"><strong>Hard Inquiries</strong>:
+<ul>
+<li class="fragment">Result from credit applications</li>
+<li class="fragment">Visible to all lenders</li>
+<li class="fragment">Impact credit scores</li>
+</ul></li>
+<li class="fragment"><strong>Soft Inquiries</strong>:
+<ul>
+<li class="fragment">Account reviews, promotional screening</li>
+<li class="fragment">Only visible to consumer</li>
+<li class="fragment">No impact on credit scores</li>
+</ul></li>
+</ul>
+</section>
+<section id="credit-scores" class="slide level2">
+<h2>Credit Scores</h2>
+<ul>
+<li class="fragment">Two major scoring models:
+<ul>
+<li class="fragment">FICO</li>
+<li class="fragment">VantageScore</li>
+</ul></li>
+<li class="fragment">Credit Score Ranges:
 <ul>
 <li class="fragment">Excellent: 800+</li>
 <li class="fragment">Very Good: 740-799</li>
 <li class="fragment">Good: 670-739</li>
 <li class="fragment">Fair: 580-669</li>
 <li class="fragment">Poor: Below 580</li>
-</ul>
-</section>
-<section id="bureau-data" class="slide level2">
-<h2>Bureau Data</h2>
-<ul>
-<li class="fragment"><strong>Borrowers</strong>: Consumer identification, address, birthdate, employment information, and credit scores</li>
-<li class="fragment"><strong>Trades</strong>: Lending accounts associated with the borrower; details include creditor name, account type, credit limit, outstanding balance, credit utilization rate, and account status</li>
-<li class="fragment"><strong>Trade History</strong>: Monthly payment history for each account including payment status, balance changes, and delinquency information</li>
-</ul>
-</section>
-<section id="more-bureau-data" class="slide level2">
-<h2>(More) Bureau Data</h2>
-<ul>
-<li class="fragment"><strong>Inquiries</strong>: Records of lenders that requested the borrower’s credit report
-<ul>
-<li class="fragment">Hard inquiries: affect credit score</li>
-<li class="fragment">Soft inquiries: do not affect credit score</li>
 </ul></li>
 </ul>
 </section></section>
@@ -422,13 +443,47 @@
 <section id="prescreen-campaigns-to-acquire-new-clients" class="title-slide slide level1 center">
 <h1>Prescreen Campaigns to Acquire New Clients</h1>
 
-</section>
+<img data-src=".\Images/dalle-credit-card-offer.png" class="quarto-figure quarto-figure-center r-stretch"></section>
 <section id="business-problem" class="slide level2">
 <h2>Business Problem</h2>
 <ul>
-<li class="fragment">Identify consumers likely to respond to pre-approved credit offers</li>
-<li class="fragment">Target prospects based on bureau attributes including recent inquiries, credit scores, and credit history</li>
-<li class="fragment">Maximize campaign response rates while adhering to risk policy, legal, and budget constraints</li>
+<li class="fragment">Bank wants to acquire new credit card customers through targeted marketing</li>
+<li class="fragment">Marketing budget is limited, so need to focus on high-response rate prospects</li>
+<li class="fragment">Must comply with regulatory requirements (FCRA, ECOA)</li>
+<li class="fragment">Need to balance response rates against credit risk</li>
+<li class="fragment">Campaign costs include: mailing, credit bureau fees, and expected credit losses</li>
+</ul>
+</section>
+<section id="business-solution" class="slide level2 smaller">
+<h2>Business Solution</h2>
+<ul>
+<li class="fragment">Develop data-driven selection criteria for credit bureau prescreening</li>
+<li class="fragment">Selection criteria typically includes:
+<ul>
+<li class="fragment">Credit scores from major bureaus (FICO, VantageScore)</li>
+<li class="fragment">Geographic targeting based on market strategy</li>
+<li class="fragment">Key bureau attributes (payment history, utilization, delinquencies)</li>
+<li class="fragment">Existing banking relationship data if available</li>
+<li class="fragment">Historical campaign response patterns</li>
+<li class="fragment">Age of credit history and recent inquiries</li>
+</ul></li>
+<li class="fragment">Establish control groups to measure campaign effectiveness</li>
+</ul>
+</section>
+<section id="machine-learning-problem" class="slide level2">
+<h2>Machine Learning Problem</h2>
+<ul>
+<li class="fragment">Requires historical campaign data, response flags, and relevant bureau attributes</li>
+<li class="fragment">Predict which prospects are most likely to accept the offer</li>
+<li class="fragment">Develop a model that maximizes AUC and estimate a probability threshold that maximizes the F1 score, precision, or recall</li>
+</ul>
+</section>
+<section id="machine-learning-solution" class="slide level2">
+<h2>Machine Learning Solution</h2>
+<ul>
+<li class="fragment">Train a classification model on labeled data to identify strong responders</li>
+<li class="fragment">Incorporate performance metrics such as AUC, F1 score, lift chart, and gains chart to gauge effectiveness</li>
+<li class="fragment">Score prospects, select high-scoring individuals for the campaign, and measure the lift and gains chart over a control group</li>
 </ul>
 </section>
 <section id="prescreening-compliance-framework" class="slide level2 smaller">
@@ -447,30 +502,6 @@
 <li class="fragment">Apply consistent underwriting standards to all applicants</li>
 <li class="fragment">Maintain documentation to demonstrate non-discriminatory practices and facilitate regulatory reviews</li>
 </ul></li>
-</ul>
-</section>
-<section id="business-solution" class="slide level2">
-<h2>Business Solution</h2>
-<ul>
-<li class="fragment">Develop selection criteria for credit bureau prescreening</li>
-<li class="fragment">Combine bureau data with internal customer data if available</li>
-<li class="fragment">Selection criteria typically includes: credit scores, geographic location, bureau attributes, estimated income, existing relationship data, and prior campaign responses</li>
-</ul>
-</section>
-<section id="machine-learning-problem" class="slide level2">
-<h2>Machine Learning Problem</h2>
-<ul>
-<li class="fragment">Requires historical campaign data, response flags, and relevant borrower attributes</li>
-<li class="fragment">Predict which prospects are most likely to accept the offer</li>
-<li class="fragment">Develop a model that maximizes AUC and estimate a probability threshold that maximizes the F1 score</li>
-</ul>
-</section>
-<section id="machine-learning-solution" class="slide level2">
-<h2>Machine Learning Solution</h2>
-<ul>
-<li class="fragment">Train a classification model on labeled data to identify strong responders</li>
-<li class="fragment">Incorporate performance metrics such as AUC, F1 score, lift chart, and gains chart to gauge effectiveness</li>
-<li class="fragment">Score new prospects, select high-scoring individuals for the campaign, and measure the lift and gains chart over a control group</li>
 </ul>
 </section>
 <section id="citations" class="slide level2 smaller scrollable">
