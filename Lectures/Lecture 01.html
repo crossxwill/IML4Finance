@@ -182,23 +182,23 @@
 <p></p><figure class=""><p></p>
 <div>
 <pre class="mermaid mermaid-js">timeline
-    Business Context    : Understanding the Business Problem
+    1. Business Context : Understanding the Business Problem
                         : Converting a Business Problem to a ML Problem
-    Data Prep   : Data Dictionary
-                : Target &amp; Feature Engineering
-                : Data Splitting
-                : Exploratory Analysis
-    Development     : Choosing the Evaluation Metric
+    2. Data Prep    : Data Dictionary
+                    : Target &amp; Feature Engineering
+                    : Data Splitting
+                    : Exploratory Analysis
+    3. Development  : Choosing the Evaluation Metric
                     : Model Training &amp; Selection
                     : Backtesting
                     : Calibration
-    Interpretation  : Feature Importance
-                    : Feature Dependence
-                    : Explaining Individual Predictions
-    Validate, Deploy, Monitor   : Model Risk Management
-                                : Optimize Inference Speed
-                                : Feature &amp; Target Drift
-                                : Model Retirement
+    4. Interpretation   : Feature Importance
+                        : Feature Dependence
+                        : Explaining Individual Predictions
+    5. Validate, Deploy, Monitor    : Model Risk Management
+                                    : Optimize Inference Speed
+                                    : Feature &amp; Target Drift
+                                    : Model Retirement
 </pre>
 </div>
 <p></p></figure><p></p>
@@ -206,19 +206,43 @@
 </div>
 </div>
 </section>
-<section id="business-context" class="slide level2">
-<h2>Business Context</h2>
-<p><img data-src="Images/dalle-bank-building.png" class="absolute" style="top: 0px; right: 0px; width: 20%; "></p>
-<ol type="1">
-<li class="fragment"><p>Acquire new clients with a marketing response <br> model (aka prescreen model)</p></li>
-<li class="fragment"><p>Approve (or reject) loan applications with a credit scorecard model</p></li>
-<li class="fragment"><p>Explain rejected loan applications with counterfactuals</p></li>
-<li class="fragment"><p>Estimate lifetime credit losses with a transition matrix model</p></li>
-<li class="fragment"><p>Detect fraud with a cost-sensitive model</p></li>
-</ol>
+<section id="business-context" class="slide level2 smaller">
+<h2>1. Business Context</h2>
+<table class="caption-top">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<tbody>
+<tr class="odd">
+<td><strong>Business Problem</strong></td>
+<td><strong>ML Problem</strong></td>
+</tr>
+<tr class="even">
+<td>Acquire new clients through a direct-mail campaign</td>
+<td>Develop a marketing response model and target high-response prospects</td>
+</tr>
+<tr class="odd">
+<td>Approve or reject loan applications based on risk</td>
+<td>Develop a credit scorecard model and approve low-risk applications</td>
+</tr>
+<tr class="even">
+<td>Explain why a loan application was rejected</td>
+<td>List the differences between an approved application and a rejected application that are otherwise very similar (i.e., a counterfactual)</td>
+</tr>
+<tr class="odd">
+<td>Set aside an allowance for bad loans</td>
+<td>Develop a transition matrix model and calibrate loan default probabilities to observed frequencies</td>
+</tr>
+<tr class="even">
+<td>Block fraudulent transactions</td>
+<td>Develop a cost-sensitive model and block high-risk transactions</td>
+</tr>
+</tbody>
+</table>
 </section>
-<section id="data-sets" class="slide level2">
-<h2>Data Sets</h2>
+<section id="data-prep" class="slide level2">
+<h2>2. Data Prep</h2>
 <ol type="1">
 <li class="fragment"><p>Borrower data from an Indian Bank and Credit Bureau. The instructor modified the data to include <code>campaign_id</code>, <code>control_group</code>, and <code>response_flag</code>. <span class="citation" data-cites="cibil-data">(<a href="#/citations" role="doc-biblioref" onclick="">Azad 2024</a>)</span>.</p></li>
 <li class="fragment"><p>Loan Performance data from LendingClub. Includes both accepted and rejected loan applications. <span class="citation" data-cites="lendingclub-data">(<a href="#/citations" role="doc-biblioref" onclick="">George 2019</a>)</span></p></li>
@@ -226,8 +250,8 @@
 <li class="fragment"><p>Simulated data from the <em>Fraud Detection Handbook</em> . <span class="citation" data-cites="leborgne2022fraud">(<a href="#/citations" role="doc-biblioref" onclick="">Le Borgne et al. 2022</a>)</span></p></li>
 </ol>
 </section>
-<section id="model-development-tools" class="slide level2 smaller">
-<h2>Model Development Tools</h2>
+<section id="model-development" class="slide level2 smaller">
+<h2>3. Model Development</h2>
 <div>
 
 </div>
@@ -253,7 +277,7 @@
 </div>
 </section>
 <section id="interpretable-ml-tools" class="slide level2">
-<h2>Interpretable ML Tools</h2>
+<h2>4. Interpretable ML Tools</h2>
 <p><img data-src="Images/dalle-black-box-cogs.png" class="absolute" style="top: 0px; right: 0px; width: 20%; "></p>
 <ul>
 <li class="fragment">Rank features from most to least important
@@ -271,7 +295,7 @@
 </ul>
 </section>
 <section id="more-interpretable-ml-tools" class="slide level2">
-<h2>(More) Interpretable ML tools</h2>
+<h2>4. (More) Interpretable ML tools</h2>
 <ul>
 <li class="fragment">Explain individual predictions
 <ul>

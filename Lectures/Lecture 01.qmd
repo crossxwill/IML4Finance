@@ -32,40 +32,37 @@ William Chiu, FRM
 
 ```{mermaid}
 timeline
-    Business Context    : Understanding the Business Problem
+    1. Business Context : Understanding the Business Problem
                         : Converting a Business Problem to a ML Problem
-    Data Prep   : Data Dictionary
-                : Target & Feature Engineering
-                : Data Splitting
-                : Exploratory Analysis
-    Development     : Choosing the Evaluation Metric
+    2. Data Prep    : Data Dictionary
+                    : Target & Feature Engineering
+                    : Data Splitting
+                    : Exploratory Analysis
+    3. Development  : Choosing the Evaluation Metric
                     : Model Training & Selection
                     : Backtesting
                     : Calibration
-    Interpretation  : Feature Importance
-                    : Feature Dependence
-                    : Explaining Individual Predictions
-    Validate, Deploy, Monitor   : Model Risk Management
-                                : Optimize Inference Speed
-                                : Feature & Target Drift
-                                : Model Retirement
+    4. Interpretation   : Feature Importance
+                        : Feature Dependence
+                        : Explaining Individual Predictions
+    5. Validate, Deploy, Monitor    : Model Risk Management
+                                    : Optimize Inference Speed
+                                    : Feature & Target Drift
+                                    : Model Retirement
 ```
 
-## Business Context
+## 1. Business Context{.smaller}
 
-![](Images/dalle-bank-building.png){.absolute top="0" right="0" width="20%"}
+|  |  |
+|----|----|
+| **Business Problem** | **ML Problem** |
+| Acquire new clients through a direct-mail campaign | Develop a marketing response model and target high-response prospects |
+| Approve or reject loan applications based on risk | Develop a credit scorecard model and approve low-risk applications |
+| Explain why a loan application was rejected | List the differences between an approved application and a rejected application that are otherwise very similar (i.e., a counterfactual) |
+| Set aside an allowance for bad loans | Develop a transition matrix model and calibrate loan default probabilities to observed frequencies |
+| Block fraudulent transactions | Develop a cost-sensitive model and block high-risk transactions |
 
-1.  Acquire new clients with a marketing response <br> model (aka prescreen model)
-
-2.  Approve (or reject) loan applications with a credit scorecard model
-
-3.  Explain rejected loan applications with counterfactuals
-
-4.  Estimate lifetime credit losses with a transition matrix model
-
-5.  Detect fraud with a cost-sensitive model
-
-## Data Sets
+## 2. Data Prep
 
 1.  Borrower data from an Indian Bank and Credit Bureau. The instructor modified the data to include `campaign_id`, `control_group`, and `response_flag`. [@cibil-data].
 
@@ -75,11 +72,9 @@ timeline
 
 4.  Simulated data from the *Fraud Detection Handbook* . [@leborgne2022fraud]
 
+## 3. Model Development {.smaller}
 
-## Model Development Tools{.smaller}
-
-:::::::::::: {layout="[[70,30], [100]]"}
-
+::: {layout="[[70,30], [100]]"}
 ![](Images/autogluon.png)
 
 ![](Images/Scikit_learn_logo_small.svg.png)
@@ -88,10 +83,9 @@ timeline
 -   AutoGluon achieves strong performance by using ensembling techniques and a comprehensive library of preset hyperparameters for each base learner.
 -   AutoGluon offers data preprocessing like automatic encoding of categorical variables and automatic removal of features with no variance.
 -   Scikit-learn provides calibration methods (e.g., Platt scaling, isotonic regression) to improve the reliability of predicted probabilities.
+:::
 
-::::::::::::
-
-## Interpretable ML Tools
+## 4. Interpretable ML Tools
 
 ![](Images/dalle-black-box-cogs.png){.absolute top="0" right="0" width="20%"}
 
@@ -104,7 +98,7 @@ timeline
     -   Accumulated local effects (ALE) plots
     -   SHAP dependence plots
 
-## (More) Interpretable ML tools
+## 4. (More) Interpretable ML tools
 
 -   Explain individual predictions
     -   SHAP values
@@ -128,7 +122,6 @@ timeline
     -   Develop a scorecard model for loan underwriting.
     -   Students will be asked why the model rejected a loan application.
     -   Grades will depend on model performance in an unlabeled test set and the quality of the explanation.
-
 
 # Introduction to Retail Banking
 
@@ -182,20 +175,17 @@ timeline
     -   Experian
     -   TransUnion
     -   Equifax
-
 -   Credit bureaus serve three major functions:
     -   Collect and maintain consumer credit information
     -   Provide credit reports to lenders
     -   Generate credit scores
 
-
 ## Bureau Data Structure
 
--   **Consumer Information**: 
+-   **Consumer Information**:
     -   Borrower details: Name, address, SSN, birthdate
     -   Employment data (if reported)
     -   Credit scores from different scoring models
-
 -   **Trade Lines (Accounts)**:
     -   Account details: Creditor, type, opened/closed dates
     -   Credit terms: Limit, payment amount, loan amount
@@ -208,20 +198,17 @@ timeline
     -   Result from credit applications
     -   Visible to all lenders
     -   Impact credit scores
-
 -   **Soft Inquiries**:
     -   Account reviews, promotional screening
     -   Only visible to consumer
     -   No impact on credit scores
 
-
 ## Credit Scores
 
-- Two major scoring models:
-    - FICO
-    - VantageScore
-
-- Credit Score Ranges:
+-   Two major scoring models:
+    -   FICO
+    -   VantageScore
+-   Credit Score Ranges:
     -   Excellent: 800+
     -   Very Good: 740-799
     -   Good: 670-739
@@ -240,16 +227,16 @@ timeline
 -   Need to balance response rates against credit risk
 -   Campaign costs include: mailing, credit bureau fees, and expected credit losses
 
-## Business Solution{.smaller}
+## Business Solution {.smaller}
 
 -   Develop data-driven selection criteria for credit bureau prescreening
 -   Selection criteria typically includes:
-    - Credit scores from major bureaus (FICO, VantageScore)
-    - Geographic targeting based on market strategy
-    - Key bureau attributes (payment history, utilization, delinquencies)
-    - Existing banking relationship data if available
-    - Historical campaign response patterns
-    - Age of credit history and recent inquiries
+    -   Credit scores from major bureaus (FICO, VantageScore)
+    -   Geographic targeting based on market strategy
+    -   Key bureau attributes (payment history, utilization, delinquencies)
+    -   Existing banking relationship data if available
+    -   Historical campaign response patterns
+    -   Age of credit history and recent inquiries
 -   Establish control groups to measure campaign effectiveness
 
 ## Machine Learning Problem
@@ -264,19 +251,19 @@ timeline
 -   Incorporate performance metrics such as AUC, F1 score, lift chart, and gains chart to gauge effectiveness
 -   Score prospects, select high-scoring individuals for the campaign, and measure the lift and gains chart over a control group
 
-## Prescreening Compliance Framework{.smaller}
+## Prescreening Compliance Framework {.smaller}
 
-- Fair Credit Reporting Act (FCRA)
+-   Fair Credit Reporting Act (FCRA)
 
-    - Verify permissible purpose and consumer opt-out status prior to prescreening
-    - Ensure firm offers match the criteria used during prescreening
-    - Include clear opt-out notices and instructions in every prescreened offer
-    - If declined after prescreening, provide an Adverse Action Notice
+    -   Verify permissible purpose and consumer opt-out status prior to prescreening
+    -   Ensure firm offers match the criteria used during prescreening
+    -   Include clear opt-out notices and instructions in every prescreened offer
+    -   If declined after prescreening, provide an Adverse Action Notice
 
-- Equal Credit Opportunity Act (ECOA)
+-   Equal Credit Opportunity Act (ECOA)
 
-    - Prohibits discrimination based on race, color, religion, national origin, sex, marital status, or age
-    - Apply consistent underwriting standards to all applicants
-    - Maintain documentation to demonstrate non-discriminatory practices and facilitate regulatory reviews
+    -   Prohibits discrimination based on race, color, religion, national origin, sex, marital status, or age
+    -   Apply consistent underwriting standards to all applicants
+    -   Maintain documentation to demonstrate non-discriminatory practices and facilitate regulatory reviews
 
 ## Citations
