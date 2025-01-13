@@ -8,7 +8,7 @@ format:
         code-copy: true
         chalkboard:
             theme: whiteboard
-        mermaid:
+        mermaid: 
             theme: default
 execute:
     echo: false
@@ -168,6 +168,49 @@ timeline
 # Introduction to Credit Bureaus
 
 ![](/Images/dalle-bank-bureau.png){fig-align="center"}
+
+## When You Pay Your Loans
+
+```{dot}
+digraph {
+    size="8,5"  // Sets overall graph size to 8 inches wide, 5 inches tall
+    nodesep=1.0  // Increases horizontal spacing between nodes
+    Y [label="You" fillcolor="lightgray" style="filled"]
+    A [label="Bank A"]
+    B [label="Bank B"]
+    C [label="Bank C"]
+    D [label="Credit Bureau"]
+
+    Y -> A [label="Car Payments"]
+    Y -> B [label="Credit Card Payments"]
+    Y -> C [label="Mortgage Payments"]
+
+    A -> D [label="Data Sharing"]
+    B -> D [label="Data Sharing"]
+    C -> D [label="Data Sharing"]
+}
+
+```
+
+## When You Apply for a Loan
+
+```{dot}
+digraph {
+    size="8,5"  // Sets overall graph size to 8 inches wide, 5 inches tall
+    nodesep=1.0  // Increases horizontal spacing between nodes
+    Y [label="You" fillcolor="lightgray" style="filled"]
+    A [label="Bank A"]
+    B [label="Bank B"]
+    C [label="Bank C"]
+    D [label="Credit Bureau"]
+
+    Y -> B [label="Loan Application"]
+
+    B -> D [label="Hard Inquiry"]
+
+    D -> B [label="Provides Credit Report"]
+}
+```
 
 ## US Credit Bureaus
 
