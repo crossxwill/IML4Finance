@@ -262,37 +262,43 @@ digraph {
 
 ![](/Images/dalle-credit-card-offer.png){fig-align="center"}
 
-## Business Problem
+## Business Problem  {.smaller}
 
--   Bank wants to acquire new credit card customers through targeted marketing
--   Marketing budget is limited, so need to focus on high-response rate prospects
--   Must comply with regulatory requirements (FCRA, ECOA)
--   Need to balance response rates against credit risk
+-   The marketing team wants to acquire new credit card customers through a direct mail campaign
+-   The campaign features a **zero-interest balance transfer promotion** for 12 months
+-   The marketing budget is limited, so the focus is on high-response rate prospects
+-   Balance response rates against credit risk
 -   Campaign costs include: mailing, credit bureau fees, and expected credit losses
+-   Compliance with regulatory requirements (FCRA, ECOA) is necessary
 
-## Business Solution {.smaller}
+## Business Solution  {.smaller}
 
--   Develop data-driven selection criteria for credit bureau prescreening
--   Selection criteria typically includes:
-    -   Credit scores from major bureaus (FICO, VantageScore)
-    -   Geographic targeting based on market strategy
-    -   Key bureau attributes (payment history, utilization, delinquencies)
-    -   Existing banking relationship data if available
-    -   Historical campaign response patterns
-    -   Age of credit history and recent inquiries
--   Establish control groups to measure campaign effectiveness
+-   Develop selection criteria for credit bureau prescreening. 
+-   For example:
+    -   Credit Score >= 700
+    -   No delinquent loan payments in the last 60 months
+    -   At least one active credit card with 60 months of on-time payments
+    -   The borrower must live within a list of 20 metropolitan statistical areas (MSA)
+-  In addition to the selection criteria, your model would identify high-response prospects
 
-## Machine Learning Problem
+## Machine Learning Problem  {.smaller}
 
--   Requires historical campaign data, response flags, and relevant bureau attributes
--   Predict which prospects are most likely to accept the offer
+-   Train a classification model to identify prospects most likely to accept the offer.
+-   Requires historical campaign data, response flags, and relevant bureau attributes.
 -   Develop a model that maximizes AUC and estimate a probability threshold that maximizes the F1 score, precision, or recall
+-   Score prospects, select high-scoring individuals for the campaign
+-   Measure the effectiveness of the campaign using a control group
 
-## Machine Learning Solution
+## Features to Consider  {.smaller}
 
--   Train a classification model on labeled data to identify strong responders
--   Incorporate performance metrics such as AUC, F1 score, lift chart, and gains chart to gauge effectiveness
--   Score prospects, select high-scoring individuals for the campaign, and measure the lift and gains chart over a control group
+- Credit Utilization: Higher utilization → Higher response rates
+- Revolving Balances: Higher balances → Higher response rates
+- Balance Transfer History: Previous transfers → Higher response rates
+- Recent Inquiries: More inquiries → Higher response rates
+- Recent Mortgage: New mortgage → Higher response rates
+- Recent Auto Loan: New auto loan → Higher response rates
+- Prior Delinquencies: More delinquencies → Higher response rates
+
 
 ## Prescreening Compliance Framework {.smaller}
 
