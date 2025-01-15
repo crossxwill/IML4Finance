@@ -262,7 +262,7 @@ digraph {
 
 ![](/Images/dalle-credit-card-offer.png){fig-align="center"}
 
-## Prescreen Mechanics
+## Prescreen Process
 
 ```{dot}
 digraph {
@@ -289,26 +289,24 @@ digraph {
 ## Business Problem  {.smaller}
 
 -   The marketing team wants to acquire new credit card customers through a direct mail campaign
--   The campaign features a **zero-interest balance transfer promotion** for 12 months
--   The marketing budget is limited, so the focus is on high-response rate prospects
--   Balance response rates against credit risk
--   Campaign costs include: mailing, credit bureau fees, and expected credit losses
+-   The campaign features a **zero-interest rate balance transfer promotion** for 12 months
+-   Campaign costs include: mail costs, credit bureau fees, and expected credit losses
+-   The marketing budget is limited, so the marketing team asks you to identify high-response prospects
 -   Compliance with regulatory requirements (FCRA, ECOA) is necessary
 
 ## Business Solution  {.smaller}
 
--   Develop selection criteria for credit bureau prescreening. 
--   For example:
+-   Develop selection criteria for credit bureau prescreening
     -   Credit Score >= 700
     -   No delinquent loan payments in the last 60 months
     -   At least one active credit card with 60 months of on-time payments
-    -   The borrower must live within a list of 20 metropolitan statistical areas (MSA)
--  In addition to the selection criteria, your model would identify high-response prospects
+    -   Must live within a list of 20 metropolitan statistical areas (MSA)
+-   In addition to the selection criteria, your model would identify high-response prospects
 
 ## Machine Learning Problem  {.smaller}
 
--   Train a classification model to identify prospects most likely to accept the offer.
--   Requires historical campaign data, response flags, and relevant bureau attributes.
+-   Train a classification model to identify prospects most likely to accept the offer
+-   Requires historical campaign data, response flags, and relevant bureau attributes
 -   Develop a model that maximizes AUC and estimate a probability threshold that maximizes the F1 score, precision, or recall
 -   Score prospects, select high-scoring individuals for the campaign
 -   Measure the effectiveness of the campaign using a control group
@@ -319,24 +317,19 @@ digraph {
 - Revolving Balances: Higher balances → Higher response rates
 - Balance Transfer History: Previous transfers → Higher response rates
 - Recent Inquiries: More inquiries → Higher response rates
-- Recent Mortgage: New mortgage → Higher response rates
-- Recent Auto Loan: New auto loan → Higher response rates
-- Prior Delinquencies: More delinquencies → Higher response rates
-
 
 ## Prescreening Compliance Framework {.smaller}
 
 -   Fair Credit Reporting Act (FCRA)
-
-    -   Verify permissible purpose and consumer opt-out status prior to prescreening
-    -   Ensure firm offers match the criteria used during prescreening
-    -   Include clear opt-out notices and instructions in every prescreened offer
-    -   If declined after prescreening, provide an Adverse Action Notice
+    -   Do not prescreen consumers who are on the opt-out list
+    -   Applicants who meet the prescreening criteria should be approved for credit
+    -   If the application is declined, provide clear reasons
 
 -   Equal Credit Opportunity Act (ECOA)
-
     -   Prohibits discrimination based on race, color, religion, national origin, sex, marital status, or age
     -   Apply consistent underwriting standards to all applicants
     -   Maintain documentation to demonstrate non-discriminatory practices and facilitate regulatory reviews
+
+# Data Preparation
 
 ## Citations

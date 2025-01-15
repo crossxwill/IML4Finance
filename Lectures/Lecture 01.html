@@ -627,8 +627,8 @@
 <h1>Prescreen Campaigns to Acquire New Clients</h1>
 
 <img data-src=".\Images/dalle-credit-card-offer.png" class="quarto-figure quarto-figure-center r-stretch"></section>
-<section id="prescreen-mechanics" class="slide level2">
-<h2>Prescreen Mechanics</h2>
+<section id="prescreen-process" class="slide level2">
+<h2>Prescreen Process</h2>
 <div class="cell" data-layout-align="default">
 <div class="cell-output-display">
 <div>
@@ -694,23 +694,21 @@
 <h2>Business Problem</h2>
 <ul>
 <li class="fragment">The marketing team wants to acquire new credit card customers through a direct mail campaign</li>
-<li class="fragment">The campaign features a <strong>zero-interest balance transfer promotion</strong> for 12 months</li>
-<li class="fragment">The marketing budget is limited, so the focus is on high-response rate prospects</li>
-<li class="fragment">Balance response rates against credit risk</li>
-<li class="fragment">Campaign costs include: mailing, credit bureau fees, and expected credit losses</li>
+<li class="fragment">The campaign features a <strong>zero-interest rate balance transfer promotion</strong> for 12 months</li>
+<li class="fragment">Campaign costs include: mail costs, credit bureau fees, and expected credit losses</li>
+<li class="fragment">The marketing budget is limited, so the marketing team asks you to identify high-response prospects</li>
 <li class="fragment">Compliance with regulatory requirements (FCRA, ECOA) is necessary</li>
 </ul>
 </section>
 <section id="business-solution" class="slide level2 smaller">
 <h2>Business Solution</h2>
 <ul>
-<li class="fragment">Develop selection criteria for credit bureau prescreening.</li>
-<li class="fragment">For example:
+<li class="fragment">Develop selection criteria for credit bureau prescreening
 <ul>
 <li class="fragment">Credit Score &gt;= 700</li>
 <li class="fragment">No delinquent loan payments in the last 60 months</li>
 <li class="fragment">At least one active credit card with 60 months of on-time payments</li>
-<li class="fragment">The borrower must live within a list of 20 metropolitan statistical areas (MSA)</li>
+<li class="fragment">Must live within a list of 20 metropolitan statistical areas (MSA)</li>
 </ul></li>
 <li class="fragment">In addition to the selection criteria, your model would identify high-response prospects</li>
 </ul>
@@ -718,8 +716,8 @@
 <section id="machine-learning-problem" class="slide level2 smaller">
 <h2>Machine Learning Problem</h2>
 <ul>
-<li class="fragment">Train a classification model to identify prospects most likely to accept the offer.</li>
-<li class="fragment">Requires historical campaign data, response flags, and relevant bureau attributes.</li>
+<li class="fragment">Train a classification model to identify prospects most likely to accept the offer</li>
+<li class="fragment">Requires historical campaign data, response flags, and relevant bureau attributes</li>
 <li class="fragment">Develop a model that maximizes AUC and estimate a probability threshold that maximizes the F1 score, precision, or recall</li>
 <li class="fragment">Score prospects, select high-scoring individuals for the campaign</li>
 <li class="fragment">Measure the effectiveness of the campaign using a control group</li>
@@ -732,28 +730,29 @@
 <li class="fragment">Revolving Balances: Higher balances → Higher response rates</li>
 <li class="fragment">Balance Transfer History: Previous transfers → Higher response rates</li>
 <li class="fragment">Recent Inquiries: More inquiries → Higher response rates</li>
-<li class="fragment">Recent Mortgage: New mortgage → Higher response rates</li>
-<li class="fragment">Recent Auto Loan: New auto loan → Higher response rates</li>
-<li class="fragment">Prior Delinquencies: More delinquencies → Higher response rates</li>
 </ul>
 </section>
 <section id="prescreening-compliance-framework" class="slide level2 smaller">
 <h2>Prescreening Compliance Framework</h2>
 <ul>
-<li class="fragment"><p>Fair Credit Reporting Act (FCRA)</p>
+<li class="fragment">Fair Credit Reporting Act (FCRA)
 <ul>
-<li class="fragment">Verify permissible purpose and consumer opt-out status prior to prescreening</li>
-<li class="fragment">Ensure firm offers match the criteria used during prescreening</li>
-<li class="fragment">Include clear opt-out notices and instructions in every prescreened offer</li>
-<li class="fragment">If declined after prescreening, provide an Adverse Action Notice</li>
+<li class="fragment">Do not prescreen consumers who are on the opt-out list</li>
+<li class="fragment">Applicants who meet the prescreening criteria should be approved for credit</li>
+<li class="fragment">If the application is declined, provide clear reasons</li>
 </ul></li>
-<li class="fragment"><p>Equal Credit Opportunity Act (ECOA)</p>
+<li class="fragment">Equal Credit Opportunity Act (ECOA)
 <ul>
 <li class="fragment">Prohibits discrimination based on race, color, religion, national origin, sex, marital status, or age</li>
 <li class="fragment">Apply consistent underwriting standards to all applicants</li>
 <li class="fragment">Maintain documentation to demonstrate non-discriminatory practices and facilitate regulatory reviews</li>
 </ul></li>
 </ul>
+</section></section>
+<section>
+<section id="data-preparation" class="title-slide slide level1 center">
+<h1>Data Preparation</h1>
+
 </section>
 <section id="citations" class="slide level2 smaller scrollable">
 <h2>Citations</h2>
