@@ -262,6 +262,30 @@ digraph {
 
 ![](/Images/dalle-credit-card-offer.png){fig-align="center"}
 
+## Prescreen Mechanics
+
+```{dot}
+digraph {
+    rankdir=TD; // Top-down
+    size="8,5"; // Set graph aspect ratio
+    nodesep=1.0; // Increases horizontal spacing between nodes
+
+    // Define global style for nodes and edges
+    node [shape=rectangle, style=rounded];
+
+    // Define nodes
+    B [label="Bank B"];
+    C [label="Credit Bureau"];
+    M [label="Marketing Company"];
+    P [label="Prospect"];
+
+    // Define edges
+    B -> C [label="Sends Selection Criteria"];
+    C -> M [label="Generates Prospects List"];
+    M -> P [label="Mails Offers"];
+}
+```
+
 ## Business Problem  {.smaller}
 
 -   The marketing team wants to acquire new credit card customers through a direct mail campaign
