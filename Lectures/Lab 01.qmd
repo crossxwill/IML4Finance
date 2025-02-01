@@ -1,0 +1,210 @@
+---
+title: "Lab 01: Prescreening Model"
+format: 
+    html:
+        toc: true
+        code-fold: true
+        code-tools: true
+        code-line-numbers: true
+        page-layout: full
+number-sections: true
+---
+
+# Read Data
+
+Text and CSV files are common data formats for data science courses. However, in corporate settings, data is often stored in databases (like SQL Server, PostgreSQL, Snowflake, and DataBricks).
+
+In the lab, we will use the `duckdb` library to process data like a database.
+
+The code loads two parquet files into tables:
+
+-   `prospects.parquet`: Contains data about potential clients.
+-   `campaign_history.parquet`: Contains data about past prescreening campaigns.
+
+```{python}
+import duckdb
+
+tbl_prospects = duckdb.query("""
+  SELECT *
+  FROM '../Data/cibil/prospects.parquet'
+  """)
+
+tbl_campaign_history = duckdb.query("""
+  SELECT * 
+  FROM '../Data/cibil/campaign_history.parquet'
+  """)
+```
+
+Show the column names in `tbl_prospects`. The data dictionary (`../Data/cibil/Data Dictionary.xlsx`) defines each column in the table.
+
+```{python}
+print("\nColumns in tbl_prospects:")
+
+duckdb.sql("""
+  SELECT column_name, column_type
+  FROM
+  (DESCRIBE SELECT * FROM tbl_prospects)
+  """).show(max_rows=100)
+```
+
+```{python}
+print("\nRows in tbl_prospects:")
+
+duckdb.sql("""
+  SELECT COUNT(*) AS num_rows
+  FROM tbl_prospects
+""").show()
+```
+
+Show the column names in `tbl_campaign_history`. The columns are defined below:
+
+-   `PROSPECTID`: Unique identifier for each potential client.
+-   `CAMPAIGNID`: Unique identifier for each prescreening campaign. There are two historical campaigns and a current campaign (`campaign_id = '3'`).
+-   `response_flag`: Indicates whether the prospect responded to the campaign (1 for yes, 0 for no). For `campaign_id = '3'`, the flag is `NULL`.
+-   `direct_mail_flag`: Indicates whether the prospect was targeted in the campaign (Y for yes, N for no). For `campaign_id = '3'`, the flag is `NULL`.
+
+```{python}
+print("\nColumns in tbl_campaign_history:")
+
+duckdb.sql("""
+  SELECT column_name, column_type
+  FROM
+  (DESCRIBE SELECT * FROM tbl_campaign_history)
+  """).show()
+```
+
+```{python}
+print("\nRows in tbl_campaign_history:")
+
+duckdb.sql("""
+  SELECT COUNT(*) AS num_rows
+  FROM tbl_campaign_history
+""").show()
+```
+
+# Peek at the Tables
+
+Look at the first 5 rows of each table.
+
+```{python}
+duckdb.sql("""
+  SELECT *
+  FROM tbl_prospects
+  LIMIT 5
+""").show()
+```
+
+```{python}
+duckdb.sql("""
+  SELECT *
+  FROM tbl_campaign_history
+  LIMIT 5
+""").show()
+```
+
+Aggregate the `tbl_campaign_history` table to see how many prospects were targeted and responded to each campaign.
+
+```{python}
+duckdb.sql("""
+  SELECT campaign_id, 
+        COUNT(*) AS num_prospects,
+        SUM(CASE WHEN direct_mail_flag = 'Y'
+          THEN 1 
+          ELSE 0 END) AS num_direct_mails,
+        SUM(CASE WHEN response_flag = 1 
+          THEN 1 
+          ELSE 0 END) AS num_responses
+  FROM tbl_campaign_history
+  GROUP BY campaign_id
+  ORDER BY campaign_id
+""").show()
+```
+
+:::{.callout-note}
+## Problem 1.1
+In campaign 1, what percentage of prospects received direct mail?
+:::
+
+:::{.callout-note}
+## Problem 1.2
+In campaign 1, what was the response rate among prospects who received direct mail?
+:::
+
+:::{.callout-note}
+## Problem 1.3
+Suppose the average cost of sending direct mail is $5.00 per prospect. What was the total cost of campaign 1?
+:::
+
+:::{.callout-note}
+## Problem 1.4
+Suppose the average revenue from a response is $100 per client. What was the total revenue of campaign 1?
+:::
+
+:::{.callout-note}
+## Problem 1.5
+The return on investment (ROI) of the campaign is:
+
+$$ROI = \frac{TotalRevenue - TotalCost}{TotalCost} \times 100$$
+
+What was the ROI of campaign 1?
+:::
+
+Check whether there are duplicate `PROSPECTID` values in `tbl_campaign_history` or `tbl_prospects`.
+
+```{python}
+duckdb.sql("""
+  SELECT prospectid, COUNT(*) AS num_rows
+  FROM tbl_campaign_history
+  GROUP BY prospectid
+  HAVING COUNT(*) > 1
+""").show()
+```
+
+```{python}
+duckdb.sql("""
+  SELECT prospectid, COUNT(*) AS num_rows
+  FROM tbl_prospects
+  GROUP BY prospectid
+  HAVING COUNT(*) > 1
+""").show()
+```
+
+# Merge the Tables
+
+Merge the `tbl_prospects` and `tbl_campaign_history` tables to create a new table, `tbl_merged`, that contains all columns from both tables. Use a left join to keep all rows from `tbl_prospects`.
+
+```{python} 
+tbl_merged = duckdb.query("""
+  SELECT c.*, p.*
+  FROM tbl_prospects AS p
+  LEFT JOIN tbl_campaign_history AS c
+  ON p.prospectid = c.prospectid
+  ORDER BY c.campaign_id, p.prospectid
+""")
+```
+
+Convert `tbl_merged` to a Pandas DataFrame and display the first 5 rows.
+
+```{python}
+import pandas as pd
+
+df_merged = tbl_merged.to_df()
+
+df_merged.head()
+```
+
+Remove the `PROSPECTID_1` column from `df_merged`.
+
+```{python}
+df_merged = df_merged.drop(columns=['PROSPECTID_1'])
+df_merged.head()
+```
+
+Check the shape of `df_merged`.
+
+```{python}
+df_merged.shape
+```
+
+# Exploratory Data Analysis
+
