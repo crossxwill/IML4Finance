@@ -8,11 +8,31 @@ np.random.seed(42)
 df_external = pl.read_parquet("External_Cibil_Dataset.parquet")
 df_internal = pl.read_parquet("Internal_Bank_Dataset.parquet") 
 
-df_prospects = df_external.join(df_internal, on="PROSPECTID")
+df_prospects_orig = df_external.join(df_internal, on="PROSPECTID")
 
 remove_cols = ['Approved_Flag']
 
-df_prospects = df_prospects.drop(remove_cols)
+df_prospects_orig = df_prospects_orig.drop(remove_cols)
+
+# %%
+
+df_prospects_CC = df_prospects_orig.filter(pl.col('CC_utilization') > 0)
+
+df_prospects_CC_expanded = pl.concat([df_prospects_CC] * 20, how="vertical")
+
+df_prospects = df_prospects_CC_expanded.with_columns(
+    CC_utilization = pl.col('CC_utilization') + pl.Series(np.random.normal(0, 0.05, df_prospects_CC_expanded.height))
+)
+
+df_prospects = pl.concat([df_prospects_CC_expanded, df_prospects_orig], how="vertical")
+
+df_prospects = df_prospects.with_columns(
+    CC_utilization = pl.col('CC_utilization').clip(None, 1.0)
+)
+
+df_prospects = df_prospects.with_columns(
+    PROSPECTID = pl.arange(1, df_prospects.height + 1).cast(pl.Utf8)
+)
 
 # %%
 np_prospects = df_prospects.get_column('PROSPECTID').to_numpy()
@@ -85,3 +105,4 @@ df_campaign_history = df_campaign_history.with_columns(
 df_campaign_eval.write_parquet("campaign_eval.parquet")
 df_campaign_history.write_parquet("campaign_history.parquet") 
 df_prospects.write_parquet("prospects.parquet")
+# %%
