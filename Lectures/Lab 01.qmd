@@ -7,12 +7,13 @@ format:
         code-tools: true
         code-line-numbers: true
         page-layout: full
+    ipynb: default
 number-sections: true
 ---
 
 # Read Data
 
-Text and CSV files are common data formats for data science courses. However, in corporate settings, data is often stored in databases (like SQL Server, PostgreSQL, Snowflake, and DataBricks).
+Text and CSV files are common data formats for data science courses. However, in corporate settings, data is often stored in databases (like SQL Server, PostgreSQL, Snowflake, or DataBricks).
 
 In the lab, we will use the `duckdb` library to process data like a database.
 
@@ -35,7 +36,7 @@ tbl_campaign_history = duckdb.query("""
   """)
 ```
 
-Show the column names in `tbl_prospects`. The data dictionary (`../Data/cibil/Data Dictionary.xlsx`) defines each column in the table.
+Show the column names from `tbl_prospects` and refer to the data dictionary (`../Data/cibil/Data Dictionary.xlsx`) for column definitions.
 
 ```{python}
 print("\nColumns in tbl_prospects:")
@@ -132,7 +133,7 @@ In campaign 1, what was the response rate among prospects who received direct ma
 
 :::{.callout-note}
 ## Problem 1.3
-Suppose the average cost of sending direct mail is $5.00 per prospect. What was the total cost of campaign 1?
+Suppose the average cost of sending direct mail is $7.00 per prospect. What was the total cost of campaign 1?
 :::
 
 :::{.callout-note}
@@ -147,6 +148,11 @@ The return on investment (ROI) of the campaign is:
 $$ROI = \frac{TotalRevenue - TotalCost}{TotalCost} \times 100$$
 
 What was the ROI of campaign 1?
+:::
+
+:::{.callout-note}
+## Problem 1.6
+What was the ROI of campaign 2?
 :::
 
 Check whether there are duplicate `PROSPECTID` values in `tbl_campaign_history` or `tbl_prospects`.
@@ -171,7 +177,7 @@ duckdb.sql("""
 
 # Merge the Tables
 
-Merge the `tbl_prospects` and `tbl_campaign_history` tables to create a new table, `tbl_merged`, that contains all columns from both tables. Use a left join to keep all rows from `tbl_prospects`.
+Merge the tables (`tbl_prospects_subset` and `tbl_campaign_history`) to create a new table (`tbl_merged`) that contains all columns from both tables. Use a left join to keep all rows from `tbl_prospects`.
 
 ```{python} 
 tbl_merged = duckdb.query("""
@@ -179,7 +185,7 @@ tbl_merged = duckdb.query("""
   FROM tbl_prospects AS p
   LEFT JOIN tbl_campaign_history AS c
   ON p.prospectid = c.prospectid
-  ORDER BY c.campaign_id, p.prospectid
+  ORDER BY c.campaign_id, CAST(p.prospectid AS INT)
 """)
 ```
 
@@ -206,5 +212,311 @@ Check the shape of `df_merged`.
 df_merged.shape
 ```
 
+# Split the Data
+
+Split the data by `campaign_id` into three separate DataFrames: `df_campaign_1`, `df_campaign_2`, and `df_campaign_3`.
+
+```{python}
+df_campaign_1 = df_merged[df_merged['campaign_id'] == '1'].copy()
+df_campaign_2 = df_merged[df_merged['campaign_id'] == '2'].copy()
+df_campaign_3 = df_merged[df_merged['campaign_id'] == '3'].copy()
+```
+
+Split `df_campaign_1` into `df_campaign_1_train` and `df_campaign_1_test` using a 70/30 split.
+
+```{python}
+from sklearn.model_selection import train_test_split
+
+df_campaign_1_train, df_campaign_1_test = train_test_split(
+    df_campaign_1,
+    test_size=0.3,
+    random_state=42,
+    stratify=df_campaign_1['response_flag'].astype('category')
+)
+```
+
 # Exploratory Data Analysis
 
+Use the `ydata_profiling` library to compare `df_campaign_1_train` and `df_campaign_1_test`. 
+
+```{python}
+from ydata_profiling import ProfileReport
+
+p_frac = 0.10
+
+train_data_profile = ProfileReport(
+                      df_campaign_1_train.sample(frac=p_frac, random_state=42), 
+                      title="Train",
+                      duplicates=None,
+                      interactions=None
+                      )
+
+test_data_profile = ProfileReport(
+                      df_campaign_1_test.sample(frac=p_frac, random_state=42), 
+                      title="Test",
+                      duplicates=None,
+                      interactions=None
+                      )
+
+compare_profile = train_data_profile.compare(test_data_profile)
+
+compare_profile.to_file("eda_report_ydata.html")
+
+# compare_profile.to_notebook_iframe()
+```
+
+Many of the columns contain a special value called `-99999`. Replace the special values with `NaN`. Create a pipepline function from sklearn to do this.
+
+```{python} 
+import numpy as np
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer
+
+def replace_special_values(df):
+  # Create a copy of the dataframe
+  df_modified = df.copy()
+  
+  # Create indicator columns for each original column
+  for col in df.columns:
+    # Skip non-numeric columns
+    if df[col].dtype.kind not in 'biufc':
+      continue
+    # Skip if column doesn't contain -99999
+    if not (df[col] == -99999).any():
+      continue
+    # Create indicator column
+    indicator_col = f"{col}_99999_flag"
+    df_modified[indicator_col] = (df[col] == -99999).astype(bool)
+    
+  # Replace -99999 with np.nan
+  df_modified = df_modified.replace(-99999, np.nan)
+  return df_modified
+
+pipeline = Pipeline([
+  ('replace_special_values', FunctionTransformer(replace_special_values, validate=False))
+])
+
+df_camp_1_train_transf = pipeline.fit_transform(df_campaign_1_train)
+
+df_camp_1_test_transf = pipeline.transform(df_campaign_1_test)
+```
+
+Compare the data sets again.
+
+```{python}
+train_data_prof_transf = ProfileReport(
+                          df_camp_1_train_transf.sample(frac=p_frac, random_state=42), 
+                          title="Train Transformed",
+                          duplicates=None,
+                          interactions=None)
+
+compare_profile_train_trans = train_data_prof_transf.compare(train_data_profile)
+
+compare_profile_train_trans.to_file("eda_report_ydata_transformed.html")
+
+# compare_profile_train_trans.to_notebook_iframe()
+```
+
+
+# Subset the features
+
+The `df_campaign_1_train` and `df_camp_1_train_transf` data frames are very wide and the columns are highly collinear. We will subset the columns to make the data more manageable.
+
+```{python}
+subset_cols = ['PROSPECTID', 
+        'CC_utilization', 
+        'PL_utilization', 
+        'last_prod_enq2', 
+        'PL_enq_L6m', 
+        'CC_enq_L6m',
+        'response_flag']
+
+df_campaign_1_train_subset = df_campaign_1_train[subset_cols].copy()
+df_camp_1_train_transf_subset = df_camp_1_train_transf[subset_cols.copy()]
+```
+
+We will revist the full data frames later in the course. For now, we will use `df_campaign_1_train_subset` and `df_camp_1_train_transf_subset`.
+
+# Supervised Learning
+
+Create a function that sets random seed values.
+
+```{python}
+def global_set_seed(seed_value=2025):
+    import random
+    import numpy as np
+    import torch
+
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+
+```
+
+Use `autogluon` to train a model on `df_campaign_1_train_subset`.
+
+```{python}
+from autogluon.tabular import TabularDataset, TabularPredictor
+from sklearnex import patch_sklearn
+patch_sklearn()
+
+label = 'response_flag'
+
+train_data = TabularDataset(df_campaign_1_train_subset)
+test_data = TabularDataset(df_campaign_1_test)
+```
+
+```{python}
+import os
+import shutil
+
+model_folder = 'Lab01_ag_models_NoTransform'
+if os.path.exists(model_folder):
+  shutil.rmtree(model_folder)
+```
+
+```{python}
+global_set_seed()
+
+predictor = TabularPredictor(label=label,
+            problem_type='binary',
+            eval_metric='roc_auc',
+            path='Lab01_ag_models_NoTransform')
+
+predictor.fit(train_data, 
+        holdout_frac=0.2,
+        excluded_model_types=['KNN'])
+```
+
+Create a leaderboard using the test set `df_campaign_1_test`.
+
+```{python}
+df_leaders = predictor.leaderboard(test_data)
+
+display(df_leaders)
+```
+
+Use `autogluon` to train a model on `df_camp_1_train_transf_subset`. There are many missing values in the data.
+
+```{python}
+train_data_transf = TabularDataset(df_camp_1_train_transf_subset)
+test_data_transf = TabularDataset(df_camp_1_test_transf)
+```
+
+```{python}
+model_folder = 'Lab01_ag_models_Transform'
+if os.path.exists(model_folder):
+  shutil.rmtree(model_folder)
+```
+
+```{python}
+global_set_seed()
+
+predictor_transf = TabularPredictor(label=label, 
+                      problem_type='binary', 
+                      eval_metric='roc_auc', 
+                      path='Lab01_ag_models_Transform')
+
+predictor_transf.fit(train_data_transf,
+            holdout_frac=0.2,
+            excluded_model_types=['KNN'])
+```
+
+Create another leaderboard using the other test set `df_camp_1_test_transf`.
+
+```{python}
+df_leaders_transf = predictor_transf.leaderboard(test_data_transf)
+
+display(df_leaders_transf)
+```
+
+# Best Model
+
+The best model is from the transformed training data.
+
+```{python} 
+model_name = 'WeightedEnsemble_L2'
+predictor_transf.set_model_best(model_name)
+```
+
+# Explain the Best Model
+
+Using the best model, rank features from most important to least important.
+
+```{python}
+best_feature_importance = predictor_transf.feature_importance(test_data_transf)
+
+display(best_feature_importance)
+```
+
+Use partial dependence plots to describe the relationships between features and predictions.
+
+```{python}
+from sklearn.inspection import PartialDependenceDisplay
+from sklearn.base import BaseEstimator, ClassifierMixin
+import matplotlib.pyplot as plt
+
+# Wrap predictor_transf so that it can be used by scikit-learn's PartialDependenceDisplay
+class AutoGluonWrapper(BaseEstimator, ClassifierMixin):
+  def __init__(self, predictor):
+    self.predictor = predictor
+    self.is_fitted_ = True
+
+  @property
+  def classes_(self):
+    # Return the expected binary classification labels
+    return np.array([0, 1])
+
+  def fit(self, X, y=None):
+    # No fitting is needed; assume predictor is already trained.
+    return self
+  def predict(self, X):
+    return self.predictor.predict(X)
+  def predict_proba(self, X):
+    # Generate probability estimates and return the probability estimates as a 2D array
+    proba = self.predictor.predict_proba(X)
+    # Assuming proba is a DataFrame with two columns, convert to numpy array
+    return proba.values
+
+wrapped_model = AutoGluonWrapper(predictor_transf)
+
+X_train = train_data_transf.copy().drop(columns=['PROSPECTID', label])
+
+# Examine the dtypes collect categorical features
+categorical_features = X_train.select_dtypes(include=['object', 'category']).columns.tolist()
+all_features = X_train.columns.tolist()
+
+%matplotlib inline
+for feature in all_features:
+
+  fig = plt.figure(figsize=(12, 6))
+  ax = fig.add_subplot(111)
+
+  plt.rcParams.update({'font.size': 16})
+
+  disp = PartialDependenceDisplay.from_estimator(
+    estimator=wrapped_model,
+    X=X_train.sample(5000, random_state=42),
+    features=[feature],
+    categorical_features=categorical_features,
+    method='brute',
+    kind="average",
+    grid_resolution=5000,
+    percentiles=(0.001,0.999),
+    ax=ax,
+    n_jobs=4,
+    random_state=42,
+  )
+
+  ax.set_title(f"Partial Dependence for {feature}")
+  
+  # Set y-axis lower limit for all axes in the current figure
+  for a in fig.get_axes():
+      for a in fig.get_axes():
+          ylim = a.get_ylim()
+          a.set_ylim(bottom=0, top=ylim[1]*1.1)
+
+  plt.show()
+  plt.close('all')  # Prevent figure overload
+
+```

@@ -20,15 +20,21 @@ df_prospects_CC = df_prospects_orig.filter(pl.col('CC_utilization') > 0)
 
 df_prospects_CC_expanded = pl.concat([df_prospects_CC] * 20, how="vertical")
 
+df_prospects_baseline = pl.concat([df_prospects_orig] * 10, how="vertical")
+
 df_prospects = df_prospects_CC_expanded.with_columns(
-    CC_utilization = pl.col('CC_utilization') + pl.Series(np.random.normal(0, 0.05, df_prospects_CC_expanded.height))
+    CC_utilization = pl.col('CC_utilization') + pl.Series(np.random.normal(0, 0.01, df_prospects_CC_expanded.height))
 )
 
-df_prospects = pl.concat([df_prospects_CC_expanded, df_prospects_orig], how="vertical")
+df_prospects = pl.concat([df_prospects_CC_expanded, df_prospects_baseline], how="vertical")
 
 df_prospects = df_prospects.with_columns(
     CC_utilization = pl.col('CC_utilization').clip(None, 1.0)
 )
+
+np.random.seed(42)
+
+df_prospects = df_prospects.sample(fraction=1.0, shuffle=True, seed=42)
 
 df_prospects = df_prospects.with_columns(
     PROSPECTID = pl.arange(1, df_prospects.height + 1).cast(pl.Utf8)
