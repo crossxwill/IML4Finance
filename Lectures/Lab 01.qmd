@@ -20,19 +20,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Machine learning
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
 from sklearn.utils.validation import check_is_fitted
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer
+from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder
 from sklearn.calibration import calibration_curve, CalibrationDisplay, CalibratedClassifierCV
-from sklearn.feature_selection import SelectKBest, SelectFromModel, SequentialFeatureSelector
+from sklearn.feature_selection import SelectKBest, SelectFromModel, SequentialFeatureSelector, mutual_info_classif
 from sklearn.inspection import PartialDependenceDisplay
 from autogluon.tabular import TabularPredictor, TabularDataset
 from ydata_profiling import ProfileReport
 from scikitplot.metrics import plot_cumulative_gain, plot_lift_curve
 from PyALE import ale
 from sklearnex import patch_sklearn
+from sklearn.compose import make_column_transformer, make_column_selector
+from sklearn.preprocessing import OrdinalEncoder
+from sklearn import set_config
+import pandas as pd
 
 # System utilities
 import os
@@ -1257,30 +1261,44 @@ print(f"Treatment Group ROI: {roi_treatment:.2f}%")
 
 # Feature Reduction Methods
 
-Up until now, we used only a very small subset of the features.
+Up until now, we used only a small subset of the features.
 
 ```{python}
 display(subset_cols)
 ```
 
-We will now widen the data frames to include all features, and explore feature reduction methods.
+We will now widen the data frames to include more features, and explore feature reduction methods.
+
+We need to remove features that are protected by US law.
+
+```{python}
+protected_features = ['MARITALSTATUS', 'AGE', 'GENDER']
+```
+
+```{python}
+train_data_wide = df_campaign_1_train.copy().drop(columns=protected_features)
+test_data_wide = df_campaign_1_test.copy().drop(columns=protected_features)
+
+train_data_wide = TabularDataset(train_data_wide)
+test_data_wide = TabularDataset(test_data_wide)
+```
 
 ```{python}
 #| label: tbl-campaign-1-train-full
-#| tbl-cap: "First 5 rows of df_campaign_1_train"
+#| tbl-cap: "First 5 rows of train_data_wide"
 #| tbl-number: true
 
 
-df_campaign_1_train.head()
+train_data_wide.head()
 ```
 
 ```{python}
 #| label: tbl-campaign-1-test-full
-#| tbl-cap: "First 5 rows of df_campaign_1_test"
+#| tbl-cap: "First 5 rows of test_data_wide"
 #| tbl-number: true
 
 
-df_campaign_1_test.head()
+test_data_wide.head()
 ```
 
 ## Filter-based Methods
@@ -1295,13 +1313,36 @@ Filter-based methods select features by evaluating the relationship between each
 The chunk below creates a scikit-learn pipeline that uses `SelectKBest` to select the top 10 features based on mutual information. The top 10 features are then used to train an `autogluon` model.
 
 ```{python}
+class IndexPreservingSelectKBest(BaseEstimator, TransformerMixin):
+    def __init__(self, score_func=mutual_info_classif, k=10):
+        self.score_func = score_func
+        self.k = k
+        self.selector = SelectKBest(score_func=score_func, k=k)
+        
+    def fit(self, X, y=None):
+        self.selector.fit(X, y)
+        return self
+        
+    def transform(self, X):
+        # Transform while preserving index
+        Xt = self.selector.transform(X)
+        return pd.DataFrame(Xt, index=X.index)
+```
+
+```{python}
+# ensures that the output after is transformation is a data frame
+set_config(transform_output="pandas")
+
 ag_model_filter_method = Pipeline([
     ('replace_values', FunctionTransformer(replace_vals)),
-    ('feature_selection', SelectKBest(score_func=mutual_info_classif, k=10)),
+    ('ordinal_encoder', make_column_transformer(
+        (OrdinalEncoder(), make_column_selector(dtype_include=["object", "category"])),
+        remainder='passthrough'
+    )),
+    ('feature_selection', IndexPreservingSelectKBest(score_func=mutual_info_classif, k=10)),
     ('autogluon', AutoGluonSklearnWrapper(label=label,
                                     predictor_args={'problem_type': 'binary',
-                                                    'eval_metric': 'roc_auc',
-                                                    'path': model_folder},
+                                                    'eval_metric': 'roc_auc'},
                                     fit_args={'holdout_frac': 0.2,
                                                 'excluded_model_types': ['KNN'],
                                                 'presets': 'medium_quality',
@@ -1310,15 +1351,27 @@ ag_model_filter_method = Pipeline([
 
 global_set_seed()
 
-ag_model_filter_method.fit( X = df_campaign_1_train.drop(columns=[label]),
-            y = df_campaign_1_train[label]
+ag_model_filter_method.fit( X = train_data_wide.drop(
+                    columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']),
+            y = train_data_wide[label]
             )
 ```
 
 Check leaderboard using the test set.
 
 ```{python}
-df_leaders_filter_method = ag_model_filter_method.named_steps['autogluon'].predictor.leaderboard(df_campaign_1_test)
+preprocessed_test_data = ag_model_filter_method[:-1].transform(test_data_wide)
+
+preprocessed_test_data[label] = test_data_wide[label]
+
+df_leaders_filter_method = ag_model_filter_method.named_steps['autogluon'].predictor.leaderboard(preprocessed_test_data)
+```
+
+```{python}
+#| label: tbl-ag-leaderboard-filter-method
+#| tbl-cap: "Autogluon Leaderboard (Filter-based Method)"
+#| tbl-number: true
+
 
 display(df_leaders_filter_method)
 ```
@@ -1330,10 +1383,19 @@ best_feature_importance_filter = (ag_model_filter_method
                             .named_steps['autogluon']
                             .predictor
                             .feature_importance(
-                                    data = df_campaign_1_test, 
+                                    data = preprocessed_test_data, 
                                     model = best_model_name,
                                     subsample_size = None)
                         )
+
+```
+
+```{python}
+#| label: tbl-perm-feature-importance-filter-method
+#| tbl-cap: "Permutation Feature Importance (Filter-based Method)"
+#| tbl-number: true
+
+
 display(best_feature_importance_filter)
 ```
 
@@ -1351,11 +1413,11 @@ The chunk below creates a scikit-learn pipeline that uses `SelectFromModel` and 
 ```{python}
 ag_model_embedded_method = Pipeline([
     ('replace_values', FunctionTransformer(replace_vals)),
+    ('prepare_features', FunctionTransformer(prepare_features)),
     ('feature_selection', SelectFromModel(LogisticRegression(penalty='l1', solver='liblinear'))),
     ('autogluon', AutoGluonSklearnWrapper(label=label,
                                     predictor_args={'problem_type': 'binary',
-                                                    'eval_metric': 'roc_auc',
-                                                    'path': model_folder},
+                                                    'eval_metric': 'roc_auc'},
                                     fit_args={'holdout_frac': 0.2,
                                                 'excluded_model_types': ['KNN'],
                                                 'presets': 'medium_quality',
@@ -1364,15 +1426,15 @@ ag_model_embedded_method = Pipeline([
 
 global_set_seed()
 
-ag_model_embedded_method.fit( X = df_campaign_1_train.drop(columns=[label]),
-            y = df_campaign_1_train[label]
+ag_model_embedded_method.fit( X = train_data_wide.drop(columns=[label]),
+            y = train_data_wide[label]
             )
 ```
 
 Check leaderboard using the test set.
 
 ```{python}
-df_leaders_embedded_method = ag_model_embedded_method.named_steps['autogluon'].predictor.leaderboard(df_campaign_1_test)
+df_leaders_embedded_method = ag_model_embedded_method.named_steps['autogluon'].predictor.leaderboard(test_data_wide)
 display(df_leaders_embedded_method)
 ```
 
@@ -1383,7 +1445,7 @@ best_feature_importance_embedded = (ag_model_embedded_method
                             .named_steps['autogluon']
                             .predictor
                             .feature_importance(
-                                    data = df_campaign_1_test, 
+                                    data = test_data_wide, 
                                     model = best_model_name,
                                     subsample_size = None)
                         )
@@ -1405,6 +1467,7 @@ The chunk below creates a scikit-learn pipeline that uses forward selection (`Se
 ```{python}
 ag_model_wrapper_method = Pipeline([
     ('replace_values', FunctionTransformer(replace_vals)),
+    ('prepare_features', FunctionTransformer(prepare_features)),
     ('feature_selection', SequentialFeatureSelector(
         AutoGluonSklearnWrapper(label=label,
                             predictor_args={'problem_type': 'binary',
@@ -1421,8 +1484,7 @@ ag_model_wrapper_method = Pipeline([
     )),
     ('autogluon', AutoGluonSklearnWrapper(label=label,
                                     predictor_args={'problem_type': 'binary',
-                                                    'eval_metric': 'roc_auc',
-                                                    'path': model_folder},
+                                                    'eval_metric': 'roc_auc'},
                                     fit_args={'holdout_frac': 0.2,
                                                 'excluded_model_types': ['KNN'],
                                                 'presets': 'medium_quality',
@@ -1431,14 +1493,15 @@ ag_model_wrapper_method = Pipeline([
 
 global_set_seed()
 
-ag_model_wrapper_method.fit(X = df_campaign_1_train.drop(columns=[label]),
-                          y = df_campaign_1_train[label])
+ag_model_wrapper_method.fit(X = train_data_wide.drop(columns=[label]),
+                        y = train_data_wide[label])
 ```
 
 Check leaderboard using the test set.
 
 ```{python}
-df_leaders_wrapper_method = ag_model_wrapper_method.named_steps['autogluon'].predictor.leaderboard(df_campaign_1_test)
+df_leaders_wrapper_method = ag_model_wrapper_method.named_steps['autogluon'].predictor.leaderboard(test_data_wide)
+
 display(df_leaders_wrapper_method)
 ```
 
@@ -1449,9 +1512,10 @@ best_feature_importance_wrapper = (ag_model_wrapper_method
                             .named_steps['autogluon']
                             .predictor
                             .feature_importance(
-                                    data = df_campaign_1_test, 
+                                    data = test_data_wide, 
                                     model = best_model_name,
                                     subsample_size = None)
                         )
+
 display(best_feature_importance_wrapper)
 ```
