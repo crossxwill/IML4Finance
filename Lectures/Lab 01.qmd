@@ -7,15 +7,45 @@ format:
         code-tools: true
         code-line-numbers: true
         page-layout: full
-    ipynb: default
 number-sections: true
 ---
 
+# Import Python Libraries
+
+```{python}
+# Data manipulation and visualization
+import duckdb
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Machine learning
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.utils.validation import check_is_fitted
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer
+from sklearn.calibration import calibration_curve, CalibrationDisplay, CalibratedClassifierCV
+from sklearn.feature_selection import SelectKBest, SelectFromModel, SequentialFeatureSelector
+from sklearn.inspection import PartialDependenceDisplay
+from autogluon.tabular import TabularPredictor, TabularDataset
+from ydata_profiling import ProfileReport
+from scikitplot.metrics import plot_cumulative_gain, plot_lift_curve
+from PyALE import ale
+from sklearnex import patch_sklearn
+
+# System utilities
+import os
+import shutil
+import random
+import torch
+```
+
 # Read Data
 
-Text and CSV files are common data formats for data science courses. However, in corporate settings, data is often stored in databases (like SQL Server, PostgreSQL, Snowflake, or DataBricks).
+Text and CSV files are common data formats in universities. However, in companies, data is often stored in databases (like SQL Server, PostgreSQL, Snowflake, or DataBricks).
 
-In the lab, we will use the `duckdb` library to process data like a database.
+In the lab, we will use the `duckdb` library to process data as if we were using a database.
 
 The code loads two parquet files into tables:
 
@@ -23,41 +53,32 @@ The code loads two parquet files into tables:
 -   `campaign_history.parquet`: Contains data about past prescreening campaigns.
 
 ```{python}
-import duckdb
-
 tbl_prospects = duckdb.query("""
-  SELECT *
-  FROM '../Data/cibil/prospects.parquet'
-  """)
+    SELECT *
+    FROM '../Data/cibil/prospects.parquet'
+    """)
 
 tbl_campaign_history = duckdb.query("""
-  SELECT * 
-  FROM '../Data/cibil/campaign_history.parquet'
-  """)
+    SELECT * 
+    FROM '../Data/cibil/campaign_history.parquet'
+    """)
 ```
 
 Show the column names from `tbl_prospects` and refer to the data dictionary (`../Data/cibil/Data Dictionary.xlsx`) for column definitions.
 
 ```{python}
-print("\nColumns in tbl_prospects:")
+#| label: tbl-meta-prospects
+#| tbl-cap: "Metadata for tbl_prospects"
+#| tbl-number: true
 
 duckdb.sql("""
-  SELECT column_name, column_type
-  FROM
-  (DESCRIBE SELECT * FROM tbl_prospects)
-  """).show(max_rows=100)
+    SELECT column_name, column_type
+    FROM
+    (DESCRIBE SELECT * FROM tbl_prospects)
+    """).show(max_rows=100)
 ```
 
-```{python}
-print("\nRows in tbl_prospects:")
-
-duckdb.sql("""
-  SELECT COUNT(*) AS num_rows
-  FROM tbl_prospects
-""").show()
-```
-
-Show the column names in `tbl_campaign_history`. The columns are defined below:
+Show the column names from `tbl_campaign_history`. The columns are defined as follows:
 
 -   `PROSPECTID`: Unique identifier for each potential client.
 -   `CAMPAIGNID`: Unique identifier for each prescreening campaign. There are two historical campaigns and a current campaign (`campaign_id = '3'`).
@@ -65,84 +86,98 @@ Show the column names in `tbl_campaign_history`. The columns are defined below:
 -   `direct_mail_flag`: Indicates whether the prospect was targeted in the campaign (Y for yes, N for no). For `campaign_id = '3'`, the flag is `NULL`.
 
 ```{python}
-print("\nColumns in tbl_campaign_history:")
+#| label: tbl-meta-campaigns
+#| tbl-cap: "Metadata for tbl_campaign_history"
+#| tbl-number: true
 
 duckdb.sql("""
-  SELECT column_name, column_type
-  FROM
-  (DESCRIBE SELECT * FROM tbl_campaign_history)
-  """).show()
-```
-
-```{python}
-print("\nRows in tbl_campaign_history:")
-
-duckdb.sql("""
-  SELECT COUNT(*) AS num_rows
-  FROM tbl_campaign_history
-""").show()
+    SELECT column_name, column_type
+    FROM
+    (DESCRIBE SELECT * FROM tbl_campaign_history)
+    """).show()
 ```
 
 # Peek at the Tables
 
+## Data Checks
+
 Look at the first 5 rows of each table.
 
 ```{python}
+#| label: tbl-top5-prospects
+#| tbl-cap: "First 5 rows of tbl_prospects"
+#| tbl-number: true
+
 duckdb.sql("""
-  SELECT *
-  FROM tbl_prospects
-  LIMIT 5
+    SELECT *
+    FROM tbl_prospects
+    LIMIT 5
 """).show()
 ```
 
 ```{python}
+#| label: tbl-top5-campaigns
+#| tbl-cap: "First 5 rows of tbl_campaign_history"
+#| tbl-number: true
+
 duckdb.sql("""
-  SELECT *
-  FROM tbl_campaign_history
-  LIMIT 5
+    SELECT *
+    FROM tbl_campaign_history
+    LIMIT 5
 """).show()
 ```
 
 Aggregate the `tbl_campaign_history` table to see how many prospects were targeted and responded to each campaign.
 
 ```{python}
+#| label: tbl-campaign-history
+#| tbl-cap: "Campaign History"
+#| tbl-number: true
+
 duckdb.sql("""
-  SELECT campaign_id, 
-        COUNT(*) AS num_prospects,
-        SUM(CASE WHEN direct_mail_flag = 'Y'
-          THEN 1 
-          ELSE 0 END) AS num_direct_mails,
-        SUM(CASE WHEN response_flag = 1 
-          THEN 1 
-          ELSE 0 END) AS num_responses
-  FROM tbl_campaign_history
-  GROUP BY campaign_id
-  ORDER BY campaign_id
+    SELECT campaign_id, 
+            COUNT(*) AS num_prospects,
+            SUM(CASE WHEN direct_mail_flag = 'Y'
+            THEN 1 
+            ELSE 0 END) AS num_direct_mails,
+            SUM(CASE WHEN response_flag = 1 
+            THEN 1 
+            ELSE 0 END) AS num_responses
+    FROM tbl_campaign_history
+    GROUP BY campaign_id
+    ORDER BY campaign_id
 """).show()
 ```
 
-:::{.callout-note}
-## Problem 1.1
-In campaign 1, what percentage of prospects received direct mail?
+## Q&A
+
+### Question
+
+::: callout-note
+In campaign 1, what percentage of prospects were sent direct mail?
 :::
 
-:::{.callout-note}
-## Problem 1.2
-In campaign 1, what was the response rate among prospects who received direct mail?
+### Question
+
+::: callout-note
+In campaign 1, what was the response rate among prospects who were sent direct mail?
 :::
 
-:::{.callout-note}
-## Problem 1.3
-Suppose the average cost of sending direct mail is $7.00 per prospect. What was the total cost of campaign 1?
+### Question
+
+::: callout-note
+Suppose the average cost of sending direct mail is \$7.00 per prospect. What was the total cost of campaign 1?
 :::
 
-:::{.callout-note}
-## Problem 1.4
-Suppose the average revenue from a response is $100 per client. What was the total revenue of campaign 1?
+### Question
+
+::: callout-note
+Suppose the average revenue from a response is \$100 per client. What was the total revenue of campaign 1?
 :::
 
-:::{.callout-note}
-## Problem 1.5
+### Question
+
+::: callout-note
 The return on investment (ROI) of the campaign is:
 
 $$ROI = \frac{TotalRevenue - TotalCost}{TotalCost} \times 100$$
@@ -150,51 +185,36 @@ $$ROI = \frac{TotalRevenue - TotalCost}{TotalCost} \times 100$$
 What was the ROI of campaign 1?
 :::
 
-:::{.callout-note}
-## Problem 1.6
+### Question
+
+::: callout-note
 What was the ROI of campaign 2?
 :::
 
-Check whether there are duplicate `PROSPECTID` values in `tbl_campaign_history` or `tbl_prospects`.
-
-```{python}
-duckdb.sql("""
-  SELECT prospectid, COUNT(*) AS num_rows
-  FROM tbl_campaign_history
-  GROUP BY prospectid
-  HAVING COUNT(*) > 1
-""").show()
-```
-
-```{python}
-duckdb.sql("""
-  SELECT prospectid, COUNT(*) AS num_rows
-  FROM tbl_prospects
-  GROUP BY prospectid
-  HAVING COUNT(*) > 1
-""").show()
-```
-
 # Merge the Tables
 
-Merge the tables (`tbl_prospects_subset` and `tbl_campaign_history`) to create a new table (`tbl_merged`) that contains all columns from both tables. Use a left join to keep all rows from `tbl_prospects`.
+Merge the tables (`tbl_prospects` and `tbl_campaign_history`) to create a new table (`tbl_merged`) that contains all columns from both tables. Use a left join to keep all rows from `tbl_prospects`.
 
-```{python} 
+```{python}
 tbl_merged = duckdb.query("""
-  SELECT c.*, p.*
-  FROM tbl_prospects AS p
-  LEFT JOIN tbl_campaign_history AS c
-  ON p.prospectid = c.prospectid
-  ORDER BY c.campaign_id, CAST(p.prospectid AS INT)
+    SELECT c.*, p.*
+    FROM tbl_prospects AS p
+    LEFT JOIN tbl_campaign_history AS c
+    ON p.prospectid = c.prospectid
+    ORDER BY c.campaign_id, CAST(p.prospectid AS INT)
 """)
 ```
 
 Convert `tbl_merged` to a Pandas DataFrame and display the first 5 rows.
 
 ```{python}
-import pandas as pd
-
 df_merged = tbl_merged.to_df()
+```
+
+```{python}
+#| label: tbl-top5-merged
+#| tbl-cap: "First 5 rows of df_merged"
+#| tbl-number: true
 
 df_merged.head()
 ```
@@ -203,13 +223,16 @@ Remove the `PROSPECTID_1` column from `df_merged`.
 
 ```{python}
 df_merged = df_merged.drop(columns=['PROSPECTID_1'])
-df_merged.head()
 ```
 
-Check the shape of `df_merged`.
+Check the shapes of each data frame to ensure no rows were lost during the merge.
 
 ```{python}
-df_merged.shape
+display(tbl_prospects.shape)
+
+display(tbl_campaign_history.shape)
+
+display(df_merged.shape)
 ```
 
 # Split the Data
@@ -222,41 +245,46 @@ df_campaign_2 = df_merged[df_merged['campaign_id'] == '2'].copy()
 df_campaign_3 = df_merged[df_merged['campaign_id'] == '3'].copy()
 ```
 
+We will train the model only on `df_campaign_1`. We evaluate the model using `df_campaign_2` and `df_campaign_3`.
+
 Split `df_campaign_1` into `df_campaign_1_train` and `df_campaign_1_test` using a 70/30 split.
 
 ```{python}
-from sklearn.model_selection import train_test_split
-
 df_campaign_1_train, df_campaign_1_test = train_test_split(
     df_campaign_1,
     test_size=0.3,
-    random_state=42,
-    stratify=df_campaign_1['response_flag'].astype('category')
+    random_state=2025,
+    stratify=df_campaign_1['response_flag']
 )
+```
+
+```{python}
+display(f"Train data response rate: {df_campaign_1_train['response_flag'].mean()*100:.3f}%")
+display(f"Test data response rate: {df_campaign_1_test['response_flag'].mean()*100:.3f}%")
 ```
 
 # Exploratory Data Analysis
 
-Use the `ydata_profiling` library to compare `df_campaign_1_train` and `df_campaign_1_test`. 
+Use the `ydata_profiling` library to compare `df_campaign_1_train` and `df_campaign_1_test`.
 
 ```{python}
-from ydata_profiling import ProfileReport
-
-p_frac = 0.10
+p_frac = 0.1
 
 train_data_profile = ProfileReport(
-                      df_campaign_1_train.sample(frac=p_frac, random_state=42), 
-                      title="Train",
-                      duplicates=None,
-                      interactions=None
-                      )
+            df_campaign_1_train.sample(frac=p_frac, random_state=2025), 
+            title="Train",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
 
 test_data_profile = ProfileReport(
-                      df_campaign_1_test.sample(frac=p_frac, random_state=42), 
-                      title="Test",
-                      duplicates=None,
-                      interactions=None
-                      )
+            df_campaign_1_test.sample(frac=p_frac, random_state=2025), 
+            title="Test",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
 
 compare_profile = train_data_profile.compare(test_data_profile)
 
@@ -265,66 +293,49 @@ compare_profile.to_file("eda_report_ydata.html")
 # compare_profile.to_notebook_iframe()
 ```
 
-Many of the columns contain a special value called `-99999`. Replace the special values with `NaN`. Create a pipepline function from sklearn to do this.
+Many of the columns contain a special value called `-99999`.
 
-```{python} 
-import numpy as np
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer
+# Replace -99999 with -1
 
-def replace_special_values(df):
-  # Create a copy of the dataframe
-  df_modified = df.copy()
-  
-  # Create indicator columns for each original column
-  for col in df.columns:
-    # Skip non-numeric columns
-    if df[col].dtype.kind not in 'biufc':
-      continue
-    # Skip if column doesn't contain -99999
-    if not (df[col] == -99999).any():
-      continue
-    # Create indicator column
-    indicator_col = f"{col}_99999_flag"
-    df_modified[indicator_col] = (df[col] == -99999).astype(bool)
-    
-  # Replace -99999 with np.nan
-  df_modified = df_modified.replace(-99999, np.nan)
-  return df_modified
+Replace `-99999` with `-1` in the `df_campaign_1_train` and `df_campaign_1_test` data frames.
 
-pipeline = Pipeline([
-  ('replace_special_values', FunctionTransformer(replace_special_values, validate=False))
-])
-
-df_camp_1_train_transf = pipeline.fit_transform(df_campaign_1_train)
-
-df_camp_1_test_transf = pipeline.transform(df_campaign_1_test)
-```
-
-Compare the data sets again.
+Leaving the special value untreated would *not* cause problems for the models, but would make the PDP and ALE plots difficult to interpret.
 
 ```{python}
-train_data_prof_transf = ProfileReport(
-                          df_camp_1_train_transf.sample(frac=p_frac, random_state=42), 
-                          title="Train Transformed",
-                          duplicates=None,
-                          interactions=None)
-
-compare_profile_train_trans = train_data_prof_transf.compare(train_data_profile)
-
-compare_profile_train_trans.to_file("eda_report_ydata_transformed.html")
-
-# compare_profile_train_trans.to_notebook_iframe()
+df_campaign_1_train = df_campaign_1_train.replace(-99999, -1)
+df_campaign_1_test = df_campaign_1_test.replace(-99999, -1)
 ```
 
+```{python}
+train_data_profile_1 = ProfileReport(
+            df_campaign_1_train.sample(frac=p_frac, random_state=2025), 
+            title="Train",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
+
+test_data_profile_1 = ProfileReport(
+            df_campaign_1_test.sample(frac=p_frac, random_state=2025), 
+            title="Test",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
+
+compare_profile_1 = train_data_profile_1.compare(test_data_profile_1)
+
+compare_profile_1.to_file("eda_report_ydata_1.html")
+
+# compare_profile.to_notebook_iframe()
+```
 
 # Subset the features
 
-The `df_campaign_1_train` and `df_camp_1_train_transf` data frames are very wide and the columns are highly collinear. We will subset the columns to make the data more manageable.
+The `df_campaign_1_train` and `df_campaign_1_test` data frames are very wide and the columns are highly collinear. We will subset the columns to make the data more manageable.
 
 ```{python}
-subset_cols = ['PROSPECTID', 
-        'CC_utilization', 
+subset_cols = ['CC_utilization', 
         'PL_utilization', 
         'last_prod_enq2', 
         'PL_enq_L6m', 
@@ -332,10 +343,18 @@ subset_cols = ['PROSPECTID',
         'response_flag']
 
 df_campaign_1_train_subset = df_campaign_1_train[subset_cols].copy()
-df_camp_1_train_transf_subset = df_camp_1_train_transf[subset_cols.copy()]
+
+df_campaign_1_test_subset = df_campaign_1_test[subset_cols].copy()
 ```
 
-We will revist the full data frames later in the course. For now, we will use `df_campaign_1_train_subset` and `df_camp_1_train_transf_subset`.
+Convert `last_prod_enq2` to a categorical variable.
+
+```{python}
+df_campaign_1_train_subset['last_prod_enq2'] = df_campaign_1_train_subset['last_prod_enq2'].astype('category')
+df_campaign_1_test_subset['last_prod_enq2'] = df_campaign_1_test_subset['last_prod_enq2'].astype('category')
+```
+
+We will revisit the full data frames later in the course. For now, we will use the data frames with subsetted columns.
 
 # Supervised Learning
 
@@ -343,180 +362,1096 @@ Create a function that sets random seed values.
 
 ```{python}
 def global_set_seed(seed_value=2025):
-    import random
-    import numpy as np
-    import torch
-
     random.seed(seed_value)
     np.random.seed(seed_value)
     torch.manual_seed(seed_value)
+```
+
+Create a scikit-learn compatible wrapper for `autogluon`.
+
+```{python}
+class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
+    """
+    Scikit-learn compatible wrapper for AutoGluon TabularPredictor
+    
+    Inherits from scikit-learn's BaseEstimator and ClassifierMixin to provide
+    full compatibility with scikit-learn tools like PartialDependenceDisplay().
+    
+    Parameters
+    ----------
+    label : str
+        Name of the target column
+
+    **predictor_args : dict
+        Additional arguments passed to TabularPredictor()
+        (e.g., problem_type, eval_metric, path)
+
+    **fit_args : dict
+        Additional arguments passed to TabularPredictor.fit() method
+        (e.g., holdout_frac, presets, time_limit, excluded_model_types)
+
+
+    Attributes
+    ----------
+    predictor : TabularPredictor
+        The trained AutoGluon predictor
+
+    classes_ : ndarray
+        Class labels (for classification tasks)
+
+    n_features_in_ : int
+        Number of features seen during fit
+
+    feature_names_ : list
+        Feature names inferred during fitting
+
+    is_fitted_ : bool
+        Whether the estimator has been fitted
+    """
+    
+    def __init__(self, label, predictor_args=None, fit_args=None):
+        self.label = label
+        self.predictor_args = predictor_args if predictor_args else {}
+        self.fit_args = fit_args if fit_args else {}
+        self.predictor = None
+        self.classes_ = None
+        self.n_features_in_ = None
+        self.feature_names_ = None
+        self.is_fitted_ = False
+
+    def __sklearn_is_fitted__(self):
+        """Official scikit-learn API for checking fitted status"""
+        return self.is_fitted_
+
+    def fit(self, X, y):
+        """
+        Fit AutoGluon model using scikit-learn interface
+        
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Training data
+        y : array-like of shape (n_samples,)
+            Target values
+            
+        Returns
+        -------
+        self : object
+            Fitted estimator
+        """
+        self._check_feature_names(X, reset=True)
+        self._check_n_features(X, reset=True)
+        
+        # Convert to DataFrame with preserved feature names
+        train_data = pd.DataFrame(X, columns=self.feature_names_)
+        train_data[self.label] = y
+        
+        # Initialize and fit AutoGluon predictor
+        self.predictor = TabularPredictor(
+            label=self.label, 
+            **self.predictor_args
+        ).fit(train_data, **self.fit_args)
+        
+        # Store sklearn-specific attributes
+        if self.predictor.problem_type in ['binary', 'multiclass']:
+            # Convert class labels to a NumPy array
+            self.classes_ = np.array(self.predictor.class_labels)
+            
+        self.is_fitted_ = True
+
+        return self
+
+    def predict(self, X):
+        """
+        Make class predictions
+        
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Input data
+            
+        Returns
+        -------
+        y_pred : ndarray of shape (n_samples,)
+            Predicted class labels
+        """
+        check_is_fitted(self)
+        self._check_feature_names(X)
+        self._check_n_features(X)
+        return self.predictor.predict(pd.DataFrame(X, columns=self.feature_names_)).values
+
+    def predict_proba(self, X):
+        """
+        Predict class probabilities
+        
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Input data
+            
+        Returns
+        -------
+        proba : ndarray of shape (n_samples, n_classes)
+            Class probabilities
+        """
+        check_is_fitted(self)
+        self._check_feature_names(X)
+        self._check_n_features(X)
+        return self.predictor.predict_proba(pd.DataFrame(X, columns=self.feature_names_)).values
+
+    def get_params(self, deep=True):
+        """Get parameters for this estimator"""
+        return {
+            'label': self.label,
+            'predictor_args': self.predictor_args,
+            'fit_args': self.fit_args
+        }
+
+    def set_params(self, **params):
+        """Set parameters for this estimator"""
+        for param, value in params.items():
+            if param == 'label':
+                self.label = value
+            else:
+                self.predictor_args[param] = value
+        return self
+
+    def _check_n_features(self, X, reset=False):
+        """Validate number of features"""
+        n_features = X.shape[1]
+        if reset:
+            self.n_features_in_ = n_features
+        elif n_features != self.n_features_in_:
+            raise ValueError(f"Expected {self.n_features_in_} features, got {n_features}")
+
+    def _check_feature_names(self, X, reset=False):
+        """Validate feature names (AutoGluon requirement)"""
+        if reset:
+            if isinstance(X, np.ndarray):
+                self.feature_names_ = [f'feat_{i}' for i in range(X.shape[1])]
+            else:
+                self.feature_names_ = X.columns.tolist()
+        elif hasattr(X, 'columns'):
+            if list(X.columns) != self.feature_names_:
+                raise ValueError("Feature names mismatch between fit and predict")
 
 ```
 
-Use `autogluon` to train a model on `df_campaign_1_train_subset`.
+Use Intel-accelerated `sklearnex` to speed up the training process.
 
 ```{python}
-from autogluon.tabular import TabularDataset, TabularPredictor
-from sklearnex import patch_sklearn
 patch_sklearn()
+```
 
+Setup data frames for `autogluon`.
+
+```{python}
 label = 'response_flag'
 
 train_data = TabularDataset(df_campaign_1_train_subset)
-test_data = TabularDataset(df_campaign_1_test)
+test_data = TabularDataset(df_campaign_1_test_subset)
 ```
 
-```{python}
-import os
-import shutil
+Remove the model folder if it already exists.
 
+```{python}
 model_folder = 'Lab01_ag_models_NoTransform'
 if os.path.exists(model_folder):
   shutil.rmtree(model_folder)
 ```
 
+The code below trains multiple machine learning models using `autogluon` and evaluates them using the ROC AUC metric (on a validation set that is derived from `train_data`).
+
+Hyperparameter tuning is set to `medium_quality` to reduce compute time. The allotted training time is set to `180` seconds. In real-world situations, you should use a better preset (`good_quality`) and a longer training time (`3600`).
+
+Create a scikit-learn pipeline that replaces `-99999` with `-1` and trains `autogluon` models.
+
 ```{python}
+def replace_vals(X: pd.DataFrame) -> pd.DataFrame:
+  return X.replace(-99999, -1)
+
+ag_model = Pipeline([
+    ('replace_values', FunctionTransformer(replace_vals)),
+    ('autogluon', AutoGluonSklearnWrapper(label=label,
+                                    predictor_args={'problem_type': 'binary',
+                                                    'eval_metric': 'roc_auc',
+                                                    'path': model_folder},
+                                    fit_args={'holdout_frac': 0.2,
+                                                'excluded_model_types': ['KNN'],
+                                                'presets': 'medium_quality',
+                                                'time_limit': 180}))
+])
+
 global_set_seed()
 
-predictor = TabularPredictor(label=label,
-            problem_type='binary',
-            eval_metric='roc_auc',
-            path='Lab01_ag_models_NoTransform')
-
-predictor.fit(train_data, 
-        holdout_frac=0.2,
-        excluded_model_types=['KNN'])
+ag_model.fit( X = train_data.drop(columns=[label]),
+            y = train_data[label]
+            )
 ```
 
-Create a leaderboard using the test set `df_campaign_1_test`.
+The attribute `ag_model.named_steps['autogluon'].predictor` contains the original fit object from `autogluon`.
+
+Generate a leaderboard to see the performance of each model on `test_data`.
 
 ```{python}
-df_leaders = predictor.leaderboard(test_data)
+df_leaders = ag_model.named_steps['autogluon'].predictor.leaderboard(test_data)
+```
+
+```{python}
+#| label: tbl-ag-leaderboard
+#| tbl-cap: "Autogluon Leaderboard"
+#| tbl-number: true
 
 display(df_leaders)
 ```
 
-Use `autogluon` to train a model on `df_camp_1_train_transf_subset`. There are many missing values in the data.
-
-```{python}
-train_data_transf = TabularDataset(df_camp_1_train_transf_subset)
-test_data_transf = TabularDataset(df_camp_1_test_transf)
-```
-
-```{python}
-model_folder = 'Lab01_ag_models_Transform'
-if os.path.exists(model_folder):
-  shutil.rmtree(model_folder)
-```
-
-```{python}
-global_set_seed()
-
-predictor_transf = TabularPredictor(label=label, 
-                      problem_type='binary', 
-                      eval_metric='roc_auc', 
-                      path='Lab01_ag_models_Transform')
-
-predictor_transf.fit(train_data_transf,
-            holdout_frac=0.2,
-            excluded_model_types=['KNN'])
-```
-
-Create another leaderboard using the other test set `df_camp_1_test_transf`.
-
-```{python}
-df_leaders_transf = predictor_transf.leaderboard(test_data_transf)
-
-display(df_leaders_transf)
-```
-
 # Best Model
 
-The best model is from the transformed training data.
+Although `CatBoost` may not have the highest roc_auc score, the model generates very fast predictions with a very competitive roc_auc score.
 
-```{python} 
-model_name = 'WeightedEnsemble_L2'
-predictor_transf.set_model_best(model_name)
+Set the best model to `CatBoost`.
+
+```{python}
+best_model_name = 'CatBoost'
+ag_model.named_steps['autogluon'].predictor.set_model_best(best_model_name)
 ```
 
-# Explain the Best Model
+# Check Probability Calibration
+
+Measure how well the model scores align with the observed response rates in `test_data`.
+
+```{python}
+%matplotlib inline
+
+cal_disp = CalibrationDisplay.from_estimator(
+        estimator = ag_model,
+        X = test_data.drop(columns=[label]),
+        y = test_data[label],
+        n_bins = 20,
+        name = 'Uncalib_CatBoost',
+        color = 'orange'
+    )
+
+cal_disp.ax_.set_title("Calibration Plot")
+```
+
+Calibrate the model scores to the observed response rates in `df_campaign_2`.
+
+Calibration methods should avoid using the training data (due to the model scores being overfitted to the training data). The test data should be used for evaluation purposes only. Therefore, we will use `df_campaign_2` to calibrate the model.
+
+Set up the data frames from `df_campaign_2`.
+
+```{python}
+# Get the data ready
+df_campaign_2_subset = df_campaign_2[subset_cols].copy()
+df_campaign_2_subset['last_prod_enq2'] = df_campaign_2_subset['last_prod_enq2'].astype('category')
+
+# Prepare features and true labels
+X_campaign2 = df_campaign_2_subset.drop(columns=[label])
+y_campaign2 = df_campaign_2_subset[label]
+```
+
+Calibrate the model scores using `df_campaign_2` and `CalibratedClassifierCV`.
+
+```{python}
+cal_model = CalibratedClassifierCV(
+    estimator = ag_model,
+    method='isotonic',
+    cv="prefit" # Use the fitted model from ag_model
+)
+
+global_set_seed()
+
+cal_model.fit(X = X_campaign2,
+            y = y_campaign2)
+```
+
+```{python}
+%matplotlib inline
+
+fig, ax = plt.subplots()
+
+for estimator, name, color in [(ag_model, 'Uncalib_CatBoost', 'orange'),
+          (cal_model, 'Calib_CatBoost', 'blue')]:
+
+  CalibrationDisplay.from_estimator(
+      estimator = estimator,
+      X = test_data.drop(columns=[label]),
+      y = test_data[label],
+      n_bins = 20,
+      name = name,
+      color = color,
+      ax = ax
+    )
+    
+ax.set_title("Calibration Plot")
+plt.show()
+```
+
+The calibration plot shows that the uncalibrated model is better than the calibrated model.
+
+This occurred because CatBoost uses the `logloss` objective function when the model fits. The `logloss` function is called a proper scoring rule, which explicitly accounts for the calibration of the predicted probabilities.
+
+In other models, like `RandomForest`, the predicted probabilities are based on the purity of the leaf nodes (i.e., Gini). This is not a proper scoring rule and can lead to poorly calibrated probabilities.
+
+Going forward, we will use `ag_model` for predictions.
+
+# Permutation Feature Importance
 
 Using the best model, rank features from most important to least important.
 
+Permutation feature importance measures how model performance degrades when a feature is randomly shuffled. Using `test_data` avoids overfitting and provides a more reliable estimate of each feature's importance.
+
 ```{python}
-best_feature_importance = predictor_transf.feature_importance(test_data_transf)
+best_feature_importance = (ag_model
+                            .named_steps['autogluon']
+                            .predictor
+                            .feature_importance(
+                                    data = test_data, 
+                                    model = best_model_name,
+                                    subsample_size = None)
+                        )
+```
+
+```{python}
+#| label: tbl-perm-feature-importance
+#| tbl-cap: "Permutation Feature Importance"
+#| tbl-number: true
 
 display(best_feature_importance)
 ```
 
-Use partial dependence plots to describe the relationships between features and predictions.
+# Partial Dependence Plots
+
+Create a function that generates partial dependence plots for all features.
 
 ```{python}
-from sklearn.inspection import PartialDependenceDisplay
-from sklearn.base import BaseEstimator, ClassifierMixin
-import matplotlib.pyplot as plt
+def show_pdp(wrappedAGModel: BaseEstimator,
+            list_features: list,
+            list_categ_features: list,
+            df: pd.DataFrame,
+            xGTzero: bool = False,
+            sampSize: int = 40000) -> None:
 
-# Wrap predictor_transf so that it can be used by scikit-learn's PartialDependenceDisplay
-class AutoGluonWrapper(BaseEstimator, ClassifierMixin):
-  def __init__(self, predictor):
-    self.predictor = predictor
-    self.is_fitted_ = True
+  for feature in list_features:
 
-  @property
-  def classes_(self):
-    # Return the expected binary classification labels
-    return np.array([0, 1])
+    fig = plt.figure(figsize=(8, 4))
+    ax = fig.add_subplot(111)
 
-  def fit(self, X, y=None):
-    # No fitting is needed; assume predictor is already trained.
-    return self
-  def predict(self, X):
-    return self.predictor.predict(X)
-  def predict_proba(self, X):
-    # Generate probability estimates and return the probability estimates as a 2D array
-    proba = self.predictor.predict_proba(X)
-    # Assuming proba is a DataFrame with two columns, convert to numpy array
-    return proba.values
+    plt.rcParams.update({'font.size': 16})
 
-wrapped_model = AutoGluonWrapper(predictor_transf)
+    disp = PartialDependenceDisplay.from_estimator(
+        estimator = wrappedAGModel,
+        X = df.sample(sampSize, random_state=2025),
+        features = [feature],
+        categorical_features = list_categ_features,
+        method = 'brute',
+        kind = "average",
+        percentiles=(0.0001, 0.9999),
+        grid_resolution=100,
+        ax = ax,
+        random_state=2025,
+        n_jobs = -1
+    )
 
-X_train = train_data_transf.copy().drop(columns=['PROSPECTID', label])
+    ax.set_title(f"Partial Dependence for {feature}")
+    
+    # Set y-axis lower limit for all axes in the current figure
+    for a in fig.get_axes():
+      coordy = a.get_ylim()
+      a.set_ylim(bottom=0, top=coordy[1]*1.1)
 
-# Examine the dtypes collect categorical features
-categorical_features = X_train.select_dtypes(include=['object', 'category']).columns.tolist()
-all_features = X_train.columns.tolist()
-
-%matplotlib inline
-for feature in all_features:
-
-  fig = plt.figure(figsize=(12, 6))
-  ax = fig.add_subplot(111)
-
-  plt.rcParams.update({'font.size': 16})
-
-  disp = PartialDependenceDisplay.from_estimator(
-    estimator=wrapped_model,
-    X=X_train.sample(5000, random_state=42),
-    features=[feature],
-    categorical_features=categorical_features,
-    method='brute',
-    kind="average",
-    grid_resolution=5000,
-    percentiles=(0.001,0.999),
-    ax=ax,
-    n_jobs=4,
-    random_state=42,
-  )
-
-  ax.set_title(f"Partial Dependence for {feature}")
-  
-  # Set y-axis lower limit for all axes in the current figure
-  for a in fig.get_axes():
+    if xGTzero:
+      # Set x-axis from 0 to the max
       for a in fig.get_axes():
-          ylim = a.get_ylim()
-          a.set_ylim(bottom=0, top=ylim[1]*1.1)
+        max_val = np.percentile(df[feature].values, 99.99)
+        a.set_xlim(left=0, right=max_val)
 
-  plt.show()
-  plt.close('all')  # Prevent figure overload
+    plt.show()
+    plt.close('all')  # Prevent figure overload
 
+```
+
+```{python}
+# Get all features from ag_model.predictor
+all_features = ag_model.named_steps['autogluon'].predictor.features()
+
+# Get categorical features from ag_model.predictor's feature metadata
+categorical_features = ag_model.named_steps['autogluon'].predictor.feature_metadata.get_features(valid_raw_types=['category'])
+
+# Get numeric features from ag_model.predictor's feature metadata
+numeric_features = ag_model.named_steps['autogluon'].predictor.feature_metadata.get_features(valid_raw_types=['int', 'float', 'int64', 'float64', 'int32', 'float32'])
+```
+
+Use partial dependence plots (PDP) to describe the relationships between features and predictions.
+
+Unlike permutation feature importance, PDPs do not depend on the true labels. Instead, they show how the model's predictions change as the feature values change.
+
+```{python}
+%matplotlib inline
+
+show_pdp(wrappedAGModel = ag_model,
+        list_features = all_features, 
+        list_categ_features = categorical_features, 
+        df = train_data.drop(columns=[label]),
+        )
+```
+
+## Q&A
+
+### Question
+
+::: callout-note
+In `train_data`, what is the maximum value of `CC_utilization`?
+:::
+
+### Question
+
+::: callout-note
+What would happen to the partial dependence plot if `train_data` included prospects with `CC_utilization` values greater than 100%?
+
+The partial dependence curve would likely \_\_\_\_\_.
+
+Check your answer by creating a copy of `train_data` and then adding `0.50` to all `CC_utilization` values. Then create the PDP for `CC_utilization`.
+:::
+
+## More PDP
+
+Zoom-in on the plots where the feature values are greater than or equal to 0.
+
+```{python}
+%matplotlib inline
+
+show_pdp(wrappedAGModel = ag_model,
+        list_features = numeric_features, 
+        list_categ_features = categorical_features, 
+        df = train_data.drop(columns=[label]), 
+        xGTzero = True)
+
+```
+
+# Accumulated Local Effects Plots
+
+```{python}
+def show_ale(wrappedAGModel: BaseEstimator,
+            list_features: list,
+            df: pd.DataFrame,
+            xGTzero: bool = False,
+            sampSize: int = 40000) -> None:
+
+  def do_nothing(data):
+    return data
+
+  for feature in list_features:
+
+    fig = plt.figure(figsize=(8, 4))
+    ax = fig.add_subplot(111)
+
+    plt.rcParams.update({'font.size': 12})
+
+    ale_eff = ale(
+                X = df.sample(sampSize, random_state=2025),
+                model = wrappedAGModel,
+                feature = [feature],
+                include_CI = False,
+                C=0.9999,
+                grid_size=100,
+                encode_fun=do_nothing,
+                predictors=wrappedAGModel.named_steps['autogluon'].predictor.features(),
+                fig=fig,
+                ax=ax
+                )
+    
+    if xGTzero:
+        # Set x-axis from 0 to the max
+        for a in fig.get_axes():
+            max_val = np.percentile(df[feature].values, 99.99)
+            a.set_xlim(left=0, right=max_val)
+
+    plt.show()
+    plt.close('all')  # Prevent figure overload
+
+```
+
+```{python}
+%matplotlib inline
+
+show_ale(wrappedAGModel = ag_model,
+        list_features = all_features, 
+        df = train_data.drop(columns=[label]), 
+        xGTzero = False)
+```
+
+```{python}
+%matplotlib inline
+
+show_ale(wrappedAGModel = ag_model,
+        list_features = numeric_features, 
+        df = train_data.drop(columns=[label]), 
+        xGTzero = True)
+```
+
+# Model Evaluation
+
+Evaluate the model using `df_campaign_2`.
+
+We will bin the predicted probabilities into 5 bins. For each bin, calculate the bin size, number of responses, and response rate. Also calculate the cumulative number of responses and cumulative response rate. Also calculate gain and lift.
+
+```{python}
+y_probas = ag_model.predict_proba(X_campaign2)
+```
+
+```{python}
+
+# Create DataFrame with predictions and actual values
+df_analysis = pd.DataFrame({
+    'score': y_probas[:,1],
+    label: y_campaign2
+})
+
+# Create bins
+df_analysis['bin'] = pd.qcut(df_analysis['score'], q=5, precision=5)
+
+# Group by bin and calculate metrics
+df_metrics = (df_analysis
+            .groupby('bin', observed=True)
+            .agg({
+                'score': ['mean', 'count'],
+                label: ['sum', 'mean']
+            })
+            .sort_values('bin', ascending=False)
+            .reset_index()
+            )
+
+# Rename columns
+df_metrics.columns = ['bin_name','avg_score','prospects', 'responses', 'response_rate']
+
+df_metrics['exp_responses'] = df_metrics['prospects'] * df_metrics['avg_score']
+
+# Calculate cumulative metrics
+df_metrics['cum_prospects'] = df_metrics['prospects'].cumsum()
+df_metrics['cum_responses'] = df_metrics['responses'].cumsum()
+df_metrics['cum_response_rate'] = df_metrics['cum_responses'] / df_metrics['cum_prospects']
+
+# Calculate baseline
+base_rate = np.mean(y_campaign2)
+total_responses = df_metrics['responses'].sum()
+
+# Calculate gain and lift
+df_metrics['gain'] = df_metrics['cum_responses'] / total_responses
+df_metrics['lift'] = df_metrics['cum_response_rate'] / base_rate
+
+# Reorder columns in a more intuitive order
+column_order = ['bin_name', 'avg_score',
+                'prospects', 'exp_responses', 'responses', 'response_rate',
+                'cum_prospects', 'cum_responses', 'cum_response_rate',
+                'gain', 'lift']
+df_metrics = df_metrics[column_order]
+```
+
+```{python}
+#| label: tbl-metrics
+#| tbl-cap: "Gain and Lift Table"
+#| tbl-number: true
+
+display(df_metrics)
+```
+
+## Q&A
+
+### Question
+
+::: callout-note
+In the first bin, how were the `19,197` prospects selected?
+:::
+
+### Question
+
+::: callout-note
+In the first bin, `19,197` prospects were sent direct mail.
+
+In the first bin, we expected \_\_\_\_\_ responses. The actual number of responses was \_\_\_\_\_.
+:::
+
+### Question
+
+::: callout-note
+Instead of using your model to select `19,197` prospects, suppose you randomly selected `19,197` prospects. How many of them would you expect to respond?
+:::
+
+### Question
+
+::: callout-note
+Compare the following two campaign strategies:
+
+(1) Select `19,197` prospects based on the highest model scores. The actual number of responses is `a`.
+
+(2) Randomly select `19,197` prospects. The expected number of responses is `b`.
+
+The ratio $\frac{a}{b}$ is \_\_\_\_\_\_. The value corresponds to the \_\_\_\_\_\_ in the first bin.
+:::
+
+### Question
+
+::: callout-note
+Suppose the average cost of sending direct mail is \$7.00 per prospect and the average revenue from a response is \$100 per client.
+
+The ROI of randomly selecting `19,197` prospects is: \_\_\_\_.
+
+The ROI of selecting `19,197` prospects based on the highest model scores is: \_\_\_\_.
+:::
+
+### Question
+
+::: callout-note
+Compare the following two campaign strategies:
+
+(1) Select `38,225` prospects based on the highest model scores. The actual number of responses is `a`.
+
+(2) Randomly select `38,225` prospects. The expected number of responses is `b`.
+
+The ratio $\frac{a}{b}$ is \_\_\_\_\_. The value corresponds to the \_\_\_\_\_ in the \_\_\_\_\_ bin.
+:::
+
+### Question
+
+::: callout-note
+Suppose the average cost of sending direct mail is \$7.00 per prospect and the average revenue from a response is \$100 per client.
+
+The ROI of randomly selecting `38,225` prospects is: \_\_\_\_.
+
+The ROI of selecting `38,225` prospects based on the highest model scores is: \_\_\_\_.
+:::
+
+## Gain and Lift Plots
+
+```{python}
+plt.figure(figsize=(8, 6))
+plt.plot([0] + list(range(1, len(df_metrics) + 1)), [0] + list(df_metrics['gain']), marker='o', color='orange')
+plt.plot([0, len(df_metrics)], [0, 1], '--', color='gray', alpha=0.5)
+plt.xlabel('Bin (Highest to Lowest Probability)')
+plt.ylabel('Gain')
+plt.title('Gain Chart')
+plt.xticks(range(len(df_metrics) + 1))
+plt.grid(True)
+plt.show()
+```
+
+```{python}
+plt.figure(figsize=(8, 6))
+plt.plot(range(1, len(df_metrics) + 1), df_metrics['lift'], marker='o', color='blue')
+plt.axhline(y=1, color='gray', linestyle='--', alpha=0.5)
+plt.xlabel('Bin (Highest to Lowest Probability)')
+plt.ylabel('Lift')
+plt.title('Lift Chart')
+plt.xticks(range(1, len(df_metrics) + 1))
+plt.grid(True)
+plt.show()
+```
+
+## Gain and Lift Plots (Automated)
+
+```{python}
+# Get probability predictions
+y_probas = ag_model.predict_proba(X_campaign2)
+
+# Create cumulative gain plot
+plt.figure(figsize=(8, 6))
+
+plot_cumulative_gain(y_campaign2, y_probas)
+
+plt.title('Cumulative Gains Plot - Campaign 2')
+plt.grid(True)
+plt.show()
+```
+
+```{python}
+# Create lift curve plot
+plt.figure(figsize=(8, 6))
+
+plot_lift_curve(y_campaign2, y_probas)
+
+plt.title('Lift Curve - Campaign 2')
+plt.grid(True)
+plt.show()
+```
+
+# Pick a Threshold to Maximize F1 Score
+
+In campaign 3, we have a limited campaign budget. We want to maximize the number of responses while minimizing the number of prospects who are sent direct mail.
+
+One approach is to select a threshold that maximizes the F1 score.
+
+First, we check the F1 score for the default threshold of `0.5`.
+
+```{python}
+df_leaders_f1 = (ag_model
+            .named_steps['autogluon']
+            .predictor
+            .leaderboard(
+                test_data, 
+                extra_metrics=['f1', 'precision', 'recall'])
+            )
+
+```
+
+```{python}
+#| label: tbl-ag-leaderboard-f1
+#| tbl-cap: "Autogluon Leaderboard with F1 Score (Threshold = 0.5)"
+#| tbl-number: true
+
+display(df_leaders_f1)
+```
+
+In order to avoid overfitting, we will use `df_campaign_2` to select the threshold that maximizes the F1 score.
+
+```{python}
+best_threshold = (ag_model
+                .named_steps['autogluon']
+                .predictor
+                .calibrate_decision_threshold(
+                data = df_campaign_2,
+                metric = 'f1',
+                decision_thresholds = 100)
+                )
+
+ag_model.named_steps['autogluon'].predictor.set_decision_threshold(best_threshold)
+```
+
+Finally, we check the F1 score for the new threshold.
+
+```{python}
+df_leaders_f1_best = (ag_model
+            .named_steps['autogluon']
+            .predictor
+            .leaderboard(
+                test_data, 
+                extra_metrics=['f1', 'precision', 'recall'])
+            )
+```
+
+```{python}
+#| label: tbl-ag-leaderboard-f1-best
+#| tbl-cap: "Autogluon Leaderboard with F1 Score (Best Threshold)"
+#| tbl-number: true
+
+display(df_leaders_f1_best)
+```
+
+# Select Targets
+
+We randomly select `1,000` prospects as a control group. We will send direct mail to everyone in the control group. The control group gives us a baseline response rate.
+
+```{python}
+# Randomly select 1000 prospects for control group
+df_campaign_3_control_group = df_campaign_3.sample(n=1000, random_state=2025)
+
+df_campaign_3_control_group['group_type'] = 'control'
+df_campaign_3_control_group['direct_mail_flag'] = 'Y'
+```
+
+Create `df_campaign_3_treatment` by removing the control group from `df_campaign_3`.
+
+```{python}
+df_campaign_3_treatment = df_campaign_3.drop(df_campaign_3_control_group.index)
+```
+
+Then, we send direct mail to all the prospects in `df_campaign_3_treatment` that exceed the best threshold. We are assuming that the prospects in `df_campaign_3_treatment` meet the other campaign selection criteria that were determined by the risk, strategy, and legal teams.
+
+```{python}
+X_campaign3 = df_campaign_3_treatment[subset_cols].copy()
+X_campaign3['last_prod_enq2'] = X_campaign3['last_prod_enq2'].astype('category')
+
+preds = ag_model.predict(X_campaign3.drop(columns=[label]))
+
+df_campaign_3_treatment['direct_mail_flag'] = np.where(preds == 1, 'Y', 'N')
+
+# Filter to only keep prospects that will receive direct mail
+df_campaign_3_treatment_mail = df_campaign_3_treatment[df_campaign_3_treatment['direct_mail_flag'] == 'Y'].copy()
+
+df_campaign_3_treatment_mail['group_type'] = 'treatment'
+
+# Append rows from controls and treatment into a single data frame
+keep_cols = ['PROSPECTID', 'campaign_id', 'group_type', 'direct_mail_flag']    
+
+df_campaign_3_selected = (pd.concat([
+        df_campaign_3_control_group[keep_cols], 
+        df_campaign_3_treatment_mail[keep_cols]
+        ],
+    ignore_index=True)
+    .reset_index(drop=True))
+```
+
+# Measure Campaign Effectiveness
+
+The file `campaign_eval.parquet` contains the results of the campaign. We will join the data set with df_campaign_3_selected to measure the effectiveness of the campaign.
+
+```{python}
+df_campaign_eval = duckdb.query("""
+    SELECT SELECTED.*, EVAL.response_flag
+    FROM read_parquet('../Data/cibil/campaign_eval.parquet') AS EVAL
+    INNER JOIN df_campaign_3_selected AS SELECTED
+    ON EVAL.PROSPECTID = SELECTED.PROSPECTID
+    ORDER BY SELECTED.group_type, SELECTED.PROSPECTID
+""").to_df()
+```
+
+```{python}
+#| label: tbl-campaign-top5-eval
+#| tbl-cap: "First 5 rows of df_campaign_eval"
+#| tbl-number: true
+
+df_campaign_eval.head()
+```
+
+Summarize the results.
+
+```{python}
+df_eval_agg = (df_campaign_eval
+    .groupby(['group_type', 'direct_mail_flag'])
+    .agg({
+        'response_flag': ['count', 'sum', 'mean']
+    })
+    .reset_index()
+)
+
+df_eval_agg.columns = ['group_type', 'direct_mail_flag', 'prospects', 'responses', 'response_rate']
+```
+
+```{python}
+#| label: tbl-campaign-agg
+#| tbl-cap: "Campaign Effectiveness"
+#| tbl-number: true
+
+display(df_eval_agg)
+```
+
+# Measure Campaign ROI
+
+The treatment group has a much higher response rate than the control group.
+
+The ROI of the treatment group is also much higher than the ROI of the control group.
+
+```{python}
+def calc_ROI(num_mailed, num_responded, avg_cost, avg_revenue):
+    total_cost = num_mailed * avg_cost
+    total_revenue = num_responded * avg_revenue
+    roi = (total_revenue - total_cost) / total_cost * 100
+    return roi
+```
+
+```{python}
+roi_control = calc_ROI(num_mailed = 1000,
+                        num_responded = 49, 
+                        avg_cost = 7,
+                        avg_revenue = 100)
+
+roi_treatment = calc_ROI(num_mailed = 4338,
+                        num_responded = 1625, 
+                        avg_cost = 7,
+                        avg_revenue = 100)
+
+print(f"Control Group ROI: {roi_control:.2f}%")
+print(f"Treatment Group ROI: {roi_treatment:.2f}%")
+```
+
+# Feature Reduction Methods
+
+Up until now, we used only a very small subset of the features.
+
+```{python}
+display(subset_cols)
+```
+
+We will now widen the data frames to include all features, and explore feature reduction methods.
+
+```{python}
+#| label: tbl-campaign-1-train-full
+#| tbl-cap: "First 5 rows of df_campaign_1_train"
+#| tbl-number: true
+
+
+df_campaign_1_train.head()
+```
+
+```{python}
+#| label: tbl-campaign-1-test-full
+#| tbl-cap: "First 5 rows of df_campaign_1_test"
+#| tbl-number: true
+
+
+df_campaign_1_test.head()
+```
+
+## Filter-based Methods
+
+Filter-based methods select features by evaluating the relationship between each individual feature and the target outcome. The selected features are then fed into a machine learning algorithm like XGBoost. Filter-based methods:
+
+- Rank features using statistical measures (correlation, mutual information, chi-square tests)
+- Select top-ranked features
+- Are computationally efficient
+- Consider each feature independently, potentially missing important feature interactions
+
+The chunk below creates a scikit-learn pipeline that uses `SelectKBest` to select the top 10 features based on mutual information. The top 10 features are then used to train an `autogluon` model.
+
+```{python}
+ag_model_filter_method = Pipeline([
+    ('replace_values', FunctionTransformer(replace_vals)),
+    ('feature_selection', SelectKBest(score_func=mutual_info_classif, k=10)),
+    ('autogluon', AutoGluonSklearnWrapper(label=label,
+                                    predictor_args={'problem_type': 'binary',
+                                                    'eval_metric': 'roc_auc',
+                                                    'path': model_folder},
+                                    fit_args={'holdout_frac': 0.2,
+                                                'excluded_model_types': ['KNN'],
+                                                'presets': 'medium_quality',
+                                                'time_limit': 180}))
+])
+
+global_set_seed()
+
+ag_model_filter_method.fit( X = df_campaign_1_train.drop(columns=[label]),
+            y = df_campaign_1_train[label]
+            )
+```
+
+Check leaderboard using the test set.
+
+```{python}
+df_leaders_filter_method = ag_model_filter_method.named_steps['autogluon'].predictor.leaderboard(df_campaign_1_test)
+
+display(df_leaders_filter_method)
+```
+
+Check permutation feature importance on the test set.
+
+```{python}
+best_feature_importance_filter = (ag_model_filter_method
+                            .named_steps['autogluon']
+                            .predictor
+                            .feature_importance(
+                                    data = df_campaign_1_test, 
+                                    model = best_model_name,
+                                    subsample_size = None)
+                        )
+display(best_feature_importance_filter)
+```
+
+## Embedded Methods
+
+Embedded methods integrate feature selection directly into the model training/fitting process:
+
+- Select features while the model is being trained/fitted
+- Balance feature relevance with model performance
+- Have moderate computational cost
+- Examples: L1 regularization (Lasso), tree-based importance measures
+
+The chunk below creates a scikit-learn pipeline that uses `SelectFromModel` and the lasso to select the top features. The top features are then used to train an `autogluon` model.
+
+```{python}
+ag_model_embedded_method = Pipeline([
+    ('replace_values', FunctionTransformer(replace_vals)),
+    ('feature_selection', SelectFromModel(LogisticRegression(penalty='l1', solver='liblinear'))),
+    ('autogluon', AutoGluonSklearnWrapper(label=label,
+                                    predictor_args={'problem_type': 'binary',
+                                                    'eval_metric': 'roc_auc',
+                                                    'path': model_folder},
+                                    fit_args={'holdout_frac': 0.2,
+                                                'excluded_model_types': ['KNN'],
+                                                'presets': 'medium_quality',
+                                                'time_limit': 180}))
+])
+
+global_set_seed()
+
+ag_model_embedded_method.fit( X = df_campaign_1_train.drop(columns=[label]),
+            y = df_campaign_1_train[label]
+            )
+```
+
+Check leaderboard using the test set.
+
+```{python}
+df_leaders_embedded_method = ag_model_embedded_method.named_steps['autogluon'].predictor.leaderboard(df_campaign_1_test)
+display(df_leaders_embedded_method)
+```
+
+Check permutation feature importance on the test set.
+
+```{python}
+best_feature_importance_embedded = (ag_model_embedded_method
+                            .named_steps['autogluon']
+                            .predictor
+                            .feature_importance(
+                                    data = df_campaign_1_test, 
+                                    model = best_model_name,
+                                    subsample_size = None)
+                        )
+
+display(best_feature_importance_embedded)
+```
+
+## Wrapper Methods
+
+Wrapper methods evaluate subsets of features by training models with different feature combinations using the same machine learning algorithm:
+
+- Use the predictive performance of a model to evaluate feature subsets
+- Can capture feature interactions
+- Are computationally expensive
+- Examples: recursive feature elimination, forward/backward selection
+
+The chunk below creates a scikit-learn pipeline that uses forward selection (`SequentialFeatureSelector`) and autogluon estimator to select the top features. The top features are then used to train an `autogluon` model.
+
+```{python}
+ag_model_wrapper_method = Pipeline([
+    ('replace_values', FunctionTransformer(replace_vals)),
+    ('feature_selection', SequentialFeatureSelector(
+        AutoGluonSklearnWrapper(label=label,
+                            predictor_args={'problem_type': 'binary',
+                                            'eval_metric': 'roc_auc'},
+                            fit_args={'holdout_frac': 0.2,
+                                    'excluded_model_types': ['KNN'],
+                                    'presets': 'medium_quality',
+                                    'time_limit': 60}),
+    n_features_to_select=10,
+    direction='forward',
+    scoring='roc_auc',
+    cv=3,
+    n_jobs=-1
+    )),
+    ('autogluon', AutoGluonSklearnWrapper(label=label,
+                                    predictor_args={'problem_type': 'binary',
+                                                    'eval_metric': 'roc_auc',
+                                                    'path': model_folder},
+                                    fit_args={'holdout_frac': 0.2,
+                                                'excluded_model_types': ['KNN'],
+                                                'presets': 'medium_quality',
+                                                'time_limit': 180}))
+])
+
+global_set_seed()
+
+ag_model_wrapper_method.fit(X = df_campaign_1_train.drop(columns=[label]),
+                          y = df_campaign_1_train[label])
+```
+
+Check leaderboard using the test set.
+
+```{python}
+df_leaders_wrapper_method = ag_model_wrapper_method.named_steps['autogluon'].predictor.leaderboard(df_campaign_1_test)
+display(df_leaders_wrapper_method)
+```
+
+Check permutation feature importance on the test set.
+
+```{python}
+best_feature_importance_wrapper = (ag_model_wrapper_method
+                            .named_steps['autogluon']
+                            .predictor
+                            .feature_importance(
+                                    data = df_campaign_1_test, 
+                                    model = best_model_name,
+                                    subsample_size = None)
+                        )
+display(best_feature_importance_wrapper)
 ```
