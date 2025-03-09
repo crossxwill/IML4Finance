@@ -13,36 +13,37 @@ number-sections: true
 # Import Python Libraries
 
 ```{python}
-# Data manipulation and visualization
-import duckdb
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-
-# Machine learning
-from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
-from sklearn.utils.validation import check_is_fitted
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder
-from sklearn.calibration import calibration_curve, CalibrationDisplay, CalibratedClassifierCV
-from sklearn.feature_selection import SelectKBest, SelectFromModel, SequentialFeatureSelector, mutual_info_classif
-from sklearn.inspection import PartialDependenceDisplay
-from autogluon.tabular import TabularPredictor, TabularDataset
-from ydata_profiling import ProfileReport
-from scikitplot.metrics import plot_cumulative_gain, plot_lift_curve
-from PyALE import ale
-from sklearnex import patch_sklearn
-from sklearn.compose import make_column_transformer, make_column_selector
-from sklearn.preprocessing import OrdinalEncoder
-from sklearn import set_config
-import pandas as pd
-
 # System utilities
 import os
 import shutil
 import random
 import torch
+import numpy as np
+
+# Data manipulation and visualization
+import duckdb
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Machine learning - scikit-learn
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
+from sklearn.utils.validation import check_is_fitted
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder
+from sklearn.calibration import CalibrationDisplay, CalibratedClassifierCV
+from sklearn.feature_selection import SelectKBest, SelectFromModel, SequentialFeatureSelector, mutual_info_classif
+from sklearn.inspection import PartialDependenceDisplay
+from sklearn.compose import make_column_transformer, make_column_selector
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn import set_config
+from sklearnex import patch_sklearn
+
+# Specialized ML libraries
+from autogluon.tabular import TabularPredictor, TabularDataset
+from ydata_profiling import ProfileReport
+from scikitplot.metrics import plot_cumulative_gain, plot_lift_curve
+from PyALE import ale
 ```
 
 # Read Data
@@ -202,8 +203,8 @@ Merge the tables (`tbl_prospects` and `tbl_campaign_history`) to create a new ta
 ```{python}
 tbl_merged = duckdb.query("""
     SELECT c.*, p.*
-    FROM tbl_prospects AS p
-    LEFT JOIN tbl_campaign_history AS c
+    FROM tbl_campaign_history AS c
+    RIGHT JOIN tbl_prospects AS p
     ON p.prospectid = c.prospectid
     ORDER BY c.campaign_id, CAST(p.prospectid AS INT)
 """)
@@ -292,7 +293,7 @@ test_data_profile = ProfileReport(
 
 compare_profile = train_data_profile.compare(test_data_profile)
 
-compare_profile.to_file("eda_report_ydata.html")
+compare_profile.to_file("Lab01_eda_report_ydata.html")
 
 # compare_profile.to_notebook_iframe()
 ```
@@ -329,7 +330,7 @@ test_data_profile_1 = ProfileReport(
 
 compare_profile_1 = train_data_profile_1.compare(test_data_profile_1)
 
-compare_profile_1.to_file("eda_report_ydata_1.html")
+compare_profile_1.to_file("Lab01_eda_report_ydata_1.html")
 
 # compare_profile.to_notebook_iframe()
 ```
@@ -560,8 +561,16 @@ Remove the model folder if it already exists.
 
 ```{python}
 model_folder = 'Lab01_ag_models_NoTransform'
-if os.path.exists(model_folder):
-  shutil.rmtree(model_folder)
+
+def remove_ag_folder(mdl_folder: str) -> None:
+    """
+    Remove the AutoGluon model folder if it exists
+    """
+    if os.path.exists(mdl_folder):
+        shutil.rmtree(mdl_folder)
+
+remove_ag_folder(model_folder)
+
 ```
 
 The code below trains multiple machine learning models using `autogluon` and evaluates them using the ROC AUC metric (on a validation set that is derived from `train_data`).
@@ -1330,6 +1339,10 @@ class IndexPreservingSelectKBest(BaseEstimator, TransformerMixin):
 ```
 
 ```{python}
+# remove ag folder if exists
+filter_model_folder = 'Lab01_ag_models_FilterMethod'
+remove_ag_folder(filter_model_folder)
+
 # ensures that the output after is transformation is a data frame
 set_config(transform_output="pandas")
 
@@ -1342,9 +1355,10 @@ ag_model_filter_method = Pipeline([
     ('feature_selection', IndexPreservingSelectKBest(score_func=mutual_info_classif, k=10)),
     ('autogluon', AutoGluonSklearnWrapper(label=label,
                                     predictor_args={'problem_type': 'binary',
-                                                    'eval_metric': 'roc_auc'},
+                                                    'eval_metric': 'roc_auc',
+                                                    'path': filter_model_folder},
                                     fit_args={'holdout_frac': 0.2,
-                                                'excluded_model_types': ['KNN'],
+                                                'excluded_model_types': ['KNN', 'NN_TORCH'],
                                                 'presets': 'medium_quality',
                                                 'time_limit': 180}))
 ])
@@ -1408,25 +1422,37 @@ Embedded methods integrate feature selection directly into the model training/fi
 - Have moderate computational cost
 - Examples: L1 regularization (Lasso), tree-based importance measures
 
-The chunk below creates a scikit-learn pipeline that uses `SelectFromModel` and the lasso to select the top features. The top features are then used to train an `autogluon` model.
+The chunk below creates a scikit-learn pipeline that uses `SelectFromModel` and the `ExtraTreesClassifier` to select the top features. The top features are then used to train an `autogluon` model.
 
 ```{python}
+# remove ag folder if exists
+embedded_model_folder = 'Lab01_ag_models_EmbeddedMethod'
+remove_ag_folder(embedded_model_folder)
+
 ag_model_embedded_method = Pipeline([
     ('replace_values', FunctionTransformer(replace_vals)),
-    ('prepare_features', FunctionTransformer(prepare_features)),
-    ('feature_selection', SelectFromModel(LogisticRegression(penalty='l1', solver='liblinear'))),
+    ('ordinal_encoder', make_column_transformer(
+        (OrdinalEncoder(), make_column_selector(dtype_include=["object", "category"])),
+        remainder='passthrough'
+    )),
+    ('feature_selection', SelectFromModel(
+        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=-1),
+        threshold=0.01
+    )),
     ('autogluon', AutoGluonSklearnWrapper(label=label,
                                     predictor_args={'problem_type': 'binary',
-                                                    'eval_metric': 'roc_auc'},
+                                                    'eval_metric': 'roc_auc',
+                                                    'path': embedded_model_folder},
                                     fit_args={'holdout_frac': 0.2,
-                                                'excluded_model_types': ['KNN'],
+                                                'excluded_model_types': ['KNN', 'NN_TORCH'],
                                                 'presets': 'medium_quality',
                                                 'time_limit': 180}))
 ])
 
 global_set_seed()
 
-ag_model_embedded_method.fit( X = train_data_wide.drop(columns=[label]),
+ag_model_embedded_method.fit( X = train_data_wide.drop(
+                    columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']),
             y = train_data_wide[label]
             )
 ```
@@ -1434,7 +1460,18 @@ ag_model_embedded_method.fit( X = train_data_wide.drop(columns=[label]),
 Check leaderboard using the test set.
 
 ```{python}
-df_leaders_embedded_method = ag_model_embedded_method.named_steps['autogluon'].predictor.leaderboard(test_data_wide)
+preprocessed_test_data_embedded = ag_model_embedded_method[:-1].transform(test_data_wide.drop(columns=[label]))
+preprocessed_test_data_embedded[label] = test_data_wide[label]
+
+df_leaders_embedded_method = ag_model_embedded_method.named_steps['autogluon'].predictor.leaderboard(preprocessed_test_data_embedded)
+```
+
+```{python}
+#| label: tbl-ag-leaderboard-embedded-method
+#| tbl-cap: "Autogluon Leaderboard (Embedded Method)"
+#| tbl-number: true
+
+
 display(df_leaders_embedded_method)
 ```
 
@@ -1445,10 +1482,17 @@ best_feature_importance_embedded = (ag_model_embedded_method
                             .named_steps['autogluon']
                             .predictor
                             .feature_importance(
-                                    data = test_data_wide, 
+                                    data = preprocessed_test_data_embedded, 
                                     model = best_model_name,
                                     subsample_size = None)
                         )
+```
+
+```{python}
+#| label: tbl-perm-feature-importance-embedded-method
+#| tbl-cap: "Permutation Feature Importance (Embedded Method)"
+#| tbl-number: true
+
 
 display(best_feature_importance_embedded)
 ```
@@ -1462,45 +1506,57 @@ Wrapper methods evaluate subsets of features by training models with different f
 - Are computationally expensive
 - Examples: recursive feature elimination, forward/backward selection
 
-The chunk below creates a scikit-learn pipeline that uses forward selection (`SequentialFeatureSelector`) and autogluon estimator to select the top features. The top features are then used to train an `autogluon` model.
+The chunk below creates a scikit-learn pipeline that uses forward selection (`SequentialFeatureSelector`) and `ExtraTreesClassifier` estimator to select the top features. The top features are then used to train an `autogluon` model.
 
 ```{python}
+# remove ag folder if exists
+wrapper_model_folder = 'Lab01_ag_models_WrapperMethod'
+remove_ag_folder(wrapper_model_folder)
+
 ag_model_wrapper_method = Pipeline([
     ('replace_values', FunctionTransformer(replace_vals)),
-    ('prepare_features', FunctionTransformer(prepare_features)),
+    ('ordinal_encoder', make_column_transformer(
+        (OrdinalEncoder(), make_column_selector(dtype_include=["object", "category"])),
+        remainder='passthrough'
+    )),
     ('feature_selection', SequentialFeatureSelector(
-        AutoGluonSklearnWrapper(label=label,
-                            predictor_args={'problem_type': 'binary',
-                                            'eval_metric': 'roc_auc'},
-                            fit_args={'holdout_frac': 0.2,
-                                    'excluded_model_types': ['KNN'],
-                                    'presets': 'medium_quality',
-                                    'time_limit': 60}),
-    n_features_to_select=10,
+        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=-1),
     direction='forward',
     scoring='roc_auc',
-    cv=3,
+    tol=0.005,
     n_jobs=-1
     )),
     ('autogluon', AutoGluonSklearnWrapper(label=label,
                                     predictor_args={'problem_type': 'binary',
-                                                    'eval_metric': 'roc_auc'},
+                                                    'eval_metric': 'roc_auc',
+                                                    'path': wrapper_model_folder},
                                     fit_args={'holdout_frac': 0.2,
-                                                'excluded_model_types': ['KNN'],
+                                                'excluded_model_types': ['KNN', 'NN_TORCH'],
                                                 'presets': 'medium_quality',
                                                 'time_limit': 180}))
 ])
 
 global_set_seed()
 
-ag_model_wrapper_method.fit(X = train_data_wide.drop(columns=[label]),
+ag_model_wrapper_method.fit(X = train_data_wide.drop(
+                    columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']),
                         y = train_data_wide[label])
 ```
 
 Check leaderboard using the test set.
 
 ```{python}
-df_leaders_wrapper_method = ag_model_wrapper_method.named_steps['autogluon'].predictor.leaderboard(test_data_wide)
+preprocessed_test_data_wrapper = ag_model_wrapper_method[:-1].transform(test_data_wide.drop(columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']))
+preprocessed_test_data_wrapper[label] = test_data_wide[label]
+
+df_leaders_wrapper_method = ag_model_wrapper_method.named_steps['autogluon'].predictor.leaderboard(preprocessed_test_data_wrapper)
+```
+
+```{python}
+#| label: tbl-ag-leaderboard-wrapper-method
+#| tbl-cap: "Autogluon Leaderboard (Wrapper Method)"
+#| tbl-number: true
+
 
 display(df_leaders_wrapper_method)
 ```
@@ -1512,10 +1568,17 @@ best_feature_importance_wrapper = (ag_model_wrapper_method
                             .named_steps['autogluon']
                             .predictor
                             .feature_importance(
-                                    data = test_data_wide, 
+                                    data = preprocessed_test_data_wrapper, 
                                     model = best_model_name,
                                     subsample_size = None)
                         )
+```
+
+```{python}
+#| label: tbl-perm-feature-importance-wrapper-method
+#| tbl-cap: "Permutation Feature Importance (Wrapper Method)"
+#| tbl-number: true
+
 
 display(best_feature_importance_wrapper)
 ```

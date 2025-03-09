@@ -51,10 +51,10 @@ timeline
                                     : Model Retirement
 ```
 
-## 1. Business Context{.smaller}
+## 1. Business Context {.smaller}
 
 |  |  |
-|----|----|
+|------------------------------------|------------------------------------|
 | **Business Problem** | **ML Problem** |
 | Acquire new clients through a direct-mail campaign | Develop a marketing response model and target high-response prospects |
 | Approve or reject loan applications based on risk | Develop a credit scorecard model and approve low-risk applications |
@@ -286,7 +286,7 @@ digraph {
 }
 ```
 
-## Business Problem  {.smaller}
+## Business Problem {.smaller}
 
 -   The marketing team wants to acquire new credit card customers through a direct mail campaign
 -   The campaign features a **zero-interest rate balance transfer promotion** for 12 months
@@ -294,16 +294,16 @@ digraph {
 -   The marketing budget is limited, so the marketing team asks you to identify high-response prospects
 -   Compliance with regulatory requirements (FCRA, ECOA) is necessary
 
-## Business Solution  {.smaller}
+## Business Solution {.smaller}
 
 -   Develop selection criteria for credit bureau prescreening
-    -   Credit Score >= 700
+    -   Credit Score \>= 700
     -   No delinquent loan payments in the last 60 months
     -   At least one active credit card with 60 months of on-time payments
     -   Must live within a list of 20 metropolitan statistical areas (MSA)
 -   In addition to the selection criteria, your model would identify high-response prospects
 
-## Machine Learning Problem  {.smaller}
+## Machine Learning Problem {.smaller}
 
 -   Train a classification model to identify prospects most likely to accept the offer
 -   Requires historical campaign data, response flags, and relevant bureau attributes
@@ -311,12 +311,12 @@ digraph {
 -   Score prospects, select high-scoring individuals for the campaign
 -   Measure the effectiveness of the campaign using a control group
 
-## Features to Consider  {.smaller}
+## Features to Consider {.smaller}
 
-- Credit Utilization: Higher utilization → Higher response rates
-- Revolving Balances: Higher balances → Higher response rates
-- Balance Transfer History: Previous transfers → Higher response rates
-- Recent Inquiries: More inquiries → Higher response rates
+-   Credit Utilization: Higher utilization → Higher response rates
+-   Revolving Balances: Higher balances → Higher response rates
+-   Balance Transfer History: Previous transfers → Higher response rates
+-   Recent Inquiries: More inquiries → Higher response rates
 
 ## Prescreening Compliance Framework {.smaller}
 
@@ -324,7 +324,6 @@ digraph {
     -   Do not prescreen consumers who are on the opt-out list
     -   Applicants who meet the prescreening criteria should be approved for credit
     -   If the application is declined, provide clear reasons
-
 -   Equal Credit Opportunity Act (ECOA)
     -   Prohibits discrimination based on race, color, religion, national origin, sex, marital status, or age
     -   Apply consistent underwriting standards to all applicants
