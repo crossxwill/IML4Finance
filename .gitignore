@@ -7,3 +7,6 @@ Internal*.xlsx
 Unseen*.xlsx
 Performance_All.zip
 Data/home-credit-default-risk
+*ag_models*
+*.vtt
+*.mp4
