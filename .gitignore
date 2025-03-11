@@ -1,7 +1,6 @@
 *.csv
 *.pkl
 *.parquet
-*_files/
 External*.xlsx
 Internal*.xlsx
 Unseen*.xlsx
