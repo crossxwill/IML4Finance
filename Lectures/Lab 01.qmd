@@ -1203,7 +1203,7 @@ The file `campaign_eval.parquet` contains the results of the campaign. We will j
 df_campaign_eval = duckdb.query("""
     SELECT SELECTED.*, EVAL.response_flag
     FROM read_parquet('../Data/cibil/campaign_eval.parquet') AS EVAL
-    INNER JOIN df_campaign_3_selected AS SELECTED
+    LEFT JOIN df_campaign_3_selected AS SELECTED
     ON EVAL.PROSPECTID = SELECTED.PROSPECTID
     ORDER BY SELECTED.group_type, SELECTED.PROSPECTID
 """).to_df()
@@ -1241,13 +1241,25 @@ display(df_eval_agg)
 
 # Measure Campaign ROI
 
-The treatment group has a much higher response rate than the control group.
+The treatment group has a much higher response rate than the control group. The ROI of the treatment group is also much higher than the ROI of the control group.
 
-The ROI of the treatment group is also much higher than the ROI of the control group.
+The ROI calculation is based on the following assumptions:
+
+-   The average cost depends on whether the prospect was sent direct mail:
+    -   Each prospect (regardless of whether they were sent direct mail) costs \$1.00.
+    -   Each prospect that was sent direct mail incurs an *additional* \$6.00 cost.
+-   The average revenue from a response is \$100.00.
+
+In prior campaigns, the average cost was \$7.00 per prospect because *all* prospects were sent direct mail. In this campaign, we are sending direct mail to only a subset of prospects.
 
 ```{python}
-def calc_ROI(num_mailed, num_responded, avg_cost, avg_revenue):
-    total_cost = num_mailed * avg_cost
+def calc_ROI(num_mailed, 
+            num_responded, 
+            avg_mail_cost, 
+            avg_revenue, 
+            num_prospects, 
+            avg_prospect_cost):
+    total_cost = (num_mailed * avg_mail_cost) + (num_prospects * avg_prospect_cost)
     total_revenue = num_responded * avg_revenue
     roi = (total_revenue - total_cost) / total_cost * 100
     return roi
@@ -1256,13 +1268,17 @@ def calc_ROI(num_mailed, num_responded, avg_cost, avg_revenue):
 ```{python}
 roi_control = calc_ROI(num_mailed = 1000,
                         num_responded = 49, 
-                        avg_cost = 7,
-                        avg_revenue = 100)
+                        avg_mail_cost = 6,
+                        avg_revenue = 100,
+                        num_prospects = 1000,
+                        avg_prospect_cost = 1)
 
 roi_treatment = calc_ROI(num_mailed = 4338,
                         num_responded = 1625, 
-                        avg_cost = 7,
-                        avg_revenue = 100)
+                        avg_mail_cost = 6,
+                        avg_revenue = 100,
+                        num_prospects = 95889 - 1000,
+                        avg_prospect_cost = 1)
 
 print(f"Control Group ROI: {roi_control:.2f}%")
 print(f"Treatment Group ROI: {roi_treatment:.2f}%")
@@ -1314,10 +1330,10 @@ test_data_wide.head()
 
 Filter-based methods select features by evaluating the relationship between each individual feature and the target outcome. The selected features are then fed into a machine learning algorithm like XGBoost. Filter-based methods:
 
-- Rank features using statistical measures (correlation, mutual information, chi-square tests)
-- Select top-ranked features
-- Are computationally efficient
-- Consider each feature independently, potentially missing important feature interactions
+-   Rank features using statistical measures (correlation, mutual information, chi-square tests)
+-   Select top-ranked features
+-   Are computationally efficient
+-   Consider each feature independently, potentially missing important feature interactions
 
 The chunk below creates a scikit-learn pipeline that uses `SelectKBest` to select the top 10 features based on mutual information. The top 10 features are then used to train an `autogluon` model.
 
@@ -1417,10 +1433,10 @@ display(best_feature_importance_filter)
 
 Embedded methods integrate feature selection directly into the model training/fitting process:
 
-- Select features while the model is being trained/fitted
-- Balance feature relevance with model performance
-- Have moderate computational cost
-- Examples: L1 regularization (Lasso), tree-based importance measures
+-   Select features while the model is being trained/fitted
+-   Balance feature relevance with model performance
+-   Have moderate computational cost
+-   Examples: L1 regularization (Lasso), tree-based importance measures
 
 The chunk below creates a scikit-learn pipeline that uses `SelectFromModel` and the `ExtraTreesClassifier` to select the top features. The top features are then used to train an `autogluon` model.
 
@@ -1501,10 +1517,10 @@ display(best_feature_importance_embedded)
 
 Wrapper methods evaluate subsets of features by training models with different feature combinations using the same machine learning algorithm:
 
-- Use the predictive performance of a model to evaluate feature subsets
-- Can capture feature interactions
-- Are computationally expensive
-- Examples: recursive feature elimination, forward/backward selection
+-   Use the predictive performance of a model to evaluate feature subsets
+-   Can capture feature interactions
+-   Are computationally expensive
+-   Examples: recursive feature elimination, forward/backward selection
 
 The chunk below creates a scikit-learn pipeline that uses forward selection (`SequentialFeatureSelector`) and `ExtraTreesClassifier` estimator to select the top features. The top features are then used to train an `autogluon` model.
 
