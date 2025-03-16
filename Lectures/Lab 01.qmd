@@ -450,6 +450,7 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
         # Convert to DataFrame with preserved feature names
         train_data = pd.DataFrame(X, columns=self.feature_names_)
         train_data[self.label] = y
+        train_data = TabularDataset(train_data)
         
         # Initialize and fit AutoGluon predictor
         self.predictor = TabularPredictor(
@@ -483,7 +484,11 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
         check_is_fitted(self)
         self._check_feature_names(X)
         self._check_n_features(X)
-        return self.predictor.predict(pd.DataFrame(X, columns=self.feature_names_)).values
+
+        df = pd.DataFrame(X, columns=self.feature_names_)
+        df = TabularDataset(df)
+
+        return self.predictor.predict(df).values
 
     def predict_proba(self, X):
         """
@@ -502,7 +507,11 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
         check_is_fitted(self)
         self._check_feature_names(X)
         self._check_n_features(X)
-        return self.predictor.predict_proba(pd.DataFrame(X, columns=self.feature_names_)).values
+
+        df = pd.DataFrame(X, columns=self.feature_names_)
+        df = TabularDataset(df)
+
+        return self.predictor.predict_proba(df).values
 
     def get_params(self, deep=True):
         """Get parameters for this estimator"""
