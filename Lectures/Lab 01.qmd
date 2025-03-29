@@ -1212,7 +1212,7 @@ The file `campaign_eval.parquet` contains the results of the campaign. We will j
 df_campaign_eval = duckdb.query("""
     SELECT SELECTED.*, EVAL.response_flag
     FROM read_parquet('../Data/cibil/campaign_eval.parquet') AS EVAL
-    LEFT JOIN df_campaign_3_selected AS SELECTED
+    INNER JOIN df_campaign_3_selected AS SELECTED
     ON EVAL.PROSPECTID = SELECTED.PROSPECTID
     ORDER BY SELECTED.group_type, SELECTED.PROSPECTID
 """).to_df()
