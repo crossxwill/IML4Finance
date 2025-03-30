@@ -12,7 +12,7 @@ Syllabus and data sets will be available on the course Canvas.
 
 Students are highly encouraged to purchase the following two books for the course:
 
--   Molnar, Christoph. [*Interpretable Machine Learning: A Guide for Making Black Box Models Explainable*](https://leanpub.com/interpretable-machine-learning/). 2nd ed. https://christophm.github.io/interpretable-ml-book. Accessed on October 25, 2024.
+-   Molnar, Christoph. [*Interpretable Machine Learning: A Guide for Making Black Box Models Explainable*](https://leanpub.com/interpretable-machine-learning/). 3rd ed. https://christophm.github.io/interpretable-ml-book/. Accessed on March 28, 2025.
 
 -   Molnar, Christoph. [*Interpreting Machine Learning Models With SHAP: A Guide With Python Examples and Theory on Shapley Values*](https://christophmolnar.com/books/shap/). Independent publication, 2023.
 
