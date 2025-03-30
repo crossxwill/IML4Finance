@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.6.41">
+<meta name="generator" content="quarto-1.6.42">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -63,7 +63,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="Lab 01_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="Lab 01_files/libs/quarto-html/anchor.min.js"></script>
 <link href="Lab 01_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="Lab 01_files/libs/quarto-html/quarto-syntax-highlighting-48ffa3e5b9d089919c6712c39e5b00f2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="Lab 01_files/libs/quarto-html/quarto-syntax-highlighting-2f5df379a58b258e96c21c0638c20c03.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="Lab 01_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="Lab 01_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="Lab 01_files/libs/bootstrap/bootstrap-2cdb6c447a9b70e5e1f1f0acec0d17a0.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
@@ -196,7 +196,7 @@ window.Quarto = {
 
 <section id="import-python-libraries" class="level1" data-number="1">
 <h1 data-number="1"><span class="header-section-number">1</span> Import Python Libraries</h1>
-<div id="dc81ce04" class="cell" data-execution_count="1">
+<div id="9c37ac71" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1"></a><span class="co"># System utilities</span></span>
@@ -242,7 +242,7 @@ window.Quarto = {
 <li><code>prospects.parquet</code>: Contains data about potential clients.</li>
 <li><code>campaign_history.parquet</code>: Contains data about past prescreening campaigns.</li>
 </ul>
-<div id="d82e46ec" class="cell" data-execution_count="2">
+<div id="0a94baca" class="cell" data-execution_count="2">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1"></a>tbl_prospects <span class="op">=</span> duckdb.query(<span class="st">"""</span></span>
@@ -615,7 +615,7 @@ Note
 <section id="merge-the-tables" class="level1" data-number="4">
 <h1 data-number="4"><span class="header-section-number">4</span> Merge the Tables</h1>
 <p>Merge the tables (<code>tbl_prospects</code> and <code>tbl_campaign_history</code>) to create a new table (<code>tbl_merged</code>) that contains all columns from both tables. Use a left join to keep all rows from <code>tbl_prospects</code>.</p>
-<div id="9834ac0b" class="cell" data-execution_count="8">
+<div id="7363cf3b" class="cell" data-execution_count="8">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb13"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1"></a>tbl_merged <span class="op">=</span> duckdb.query(<span class="st">"""</span></span>
@@ -628,7 +628,7 @@ Note
 </details>
 </div>
 <p>Convert <code>tbl_merged</code> to a Pandas DataFrame and display the first 5 rows.</p>
-<div id="47f37745" class="cell" data-execution_count="9">
+<div id="b2744113" class="cell" data-execution_count="9">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb14"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1"></a>df_merged <span class="op">=</span> tbl_merged.to_df()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -808,14 +808,14 @@ Table&nbsp;6: First 5 rows of df_merged
 </div>
 </div>
 <p>Remove the <code>PROSPECTID_1</code> column from <code>df_merged</code>.</p>
-<div id="db4b137b" class="cell" data-execution_count="11">
+<div id="37417b42" class="cell" data-execution_count="11">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb16"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1"></a>df_merged <span class="op">=</span> df_merged.drop(columns<span class="op">=</span>[<span class="st">'PROSPECTID_1'</span>])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 <p>Check the shapes of each data frame to ensure no rows were lost during the merge.</p>
-<div id="4d0650d3" class="cell" data-execution_count="12">
+<div id="6a11b692" class="cell" data-execution_count="12">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb17"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1"></a>display(tbl_prospects.shape)</span>
@@ -838,7 +838,7 @@ Table&nbsp;6: First 5 rows of df_merged
 <section id="split-the-data" class="level1" data-number="5">
 <h1 data-number="5"><span class="header-section-number">5</span> Split the Data</h1>
 <p>Split the data by <code>campaign_id</code> into three separate DataFrames: <code>df_campaign_1</code>, <code>df_campaign_2</code>, and <code>df_campaign_3</code>.</p>
-<div id="3a41b247" class="cell" data-execution_count="13">
+<div id="d169ce0d" class="cell" data-execution_count="13">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb21"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1"></a>df_campaign_1 <span class="op">=</span> df_merged[df_merged[<span class="st">'campaign_id'</span>] <span class="op">==</span> <span class="st">'1'</span>].copy()</span>
@@ -848,7 +848,7 @@ Table&nbsp;6: First 5 rows of df_merged
 </div>
 <p>We will train the model only on <code>df_campaign_1</code>. We evaluate the model using <code>df_campaign_2</code> and <code>df_campaign_3</code>.</p>
 <p>Split <code>df_campaign_1</code> into <code>df_campaign_1_train</code> and <code>df_campaign_1_test</code> using a 70/30 split.</p>
-<div id="e965da08" class="cell" data-execution_count="14">
+<div id="cfdc430e" class="cell" data-execution_count="14">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb22"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1"></a>df_campaign_1_train, df_campaign_1_test <span class="op">=</span> train_test_split(</span>
@@ -859,7 +859,7 @@ Table&nbsp;6: First 5 rows of df_merged
 <span id="cb22-6"><a href="#cb22-6"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<div id="f8223d1b" class="cell" data-execution_count="15">
+<div id="37d35d89" class="cell" data-execution_count="15">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb23"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1"></a>display(<span class="ss">f"Train data response rate: </span><span class="sc">{</span>df_campaign_1_train[<span class="st">'response_flag'</span>]<span class="sc">.</span>mean()<span class="op">*</span><span class="dv">100</span><span class="sc">:.3f}</span><span class="ss">%"</span>)</span>
@@ -876,7 +876,7 @@ Table&nbsp;6: First 5 rows of df_merged
 <section id="exploratory-data-analysis" class="level1" data-number="6">
 <h1 data-number="6"><span class="header-section-number">6</span> Exploratory Data Analysis</h1>
 <p>Use the <code>ydata_profiling</code> library to compare <code>df_campaign_1_train</code> and <code>df_campaign_1_test</code>.</p>
-<div id="a0f0c66b" class="cell" data-execution_count="16">
+<div id="421abdae" class="cell" data-execution_count="16">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb26"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1"></a>p_frac <span class="op">=</span> <span class="fl">0.1</span></span>
@@ -910,14 +910,14 @@ Table&nbsp;6: First 5 rows of df_merged
 <h1 data-number="7"><span class="header-section-number">7</span> Replace -99999 with -1</h1>
 <p>Replace <code>-99999</code> with <code>-1</code> in the <code>df_campaign_1_train</code> and <code>df_campaign_1_test</code> data frames.</p>
 <p>Leaving the special value untreated would <em>not</em> cause problems for the models, but would make the PDP and ALE plots difficult to interpret.</p>
-<div id="74353faa" class="cell" data-execution_count="17">
+<div id="9c13196d" class="cell" data-execution_count="17">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb27"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1"></a>df_campaign_1_train <span class="op">=</span> df_campaign_1_train.replace(<span class="op">-</span><span class="dv">99999</span>, <span class="op">-</span><span class="dv">1</span>)</span>
 <span id="cb27-2"><a href="#cb27-2"></a>df_campaign_1_test <span class="op">=</span> df_campaign_1_test.replace(<span class="op">-</span><span class="dv">99999</span>, <span class="op">-</span><span class="dv">1</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<div id="dce0f6f8" class="cell" data-execution_count="18">
+<div id="1b7779c5" class="cell" data-execution_count="18">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb28"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1"></a>train_data_profile_1 <span class="op">=</span> ProfileReport(</span>
@@ -947,7 +947,7 @@ Table&nbsp;6: First 5 rows of df_merged
 <section id="subset-the-features" class="level1" data-number="8">
 <h1 data-number="8"><span class="header-section-number">8</span> Subset the features</h1>
 <p>The <code>df_campaign_1_train</code> and <code>df_campaign_1_test</code> data frames are very wide and the columns are highly collinear. We will subset the columns to make the data more manageable.</p>
-<div id="dea89649" class="cell" data-execution_count="19">
+<div id="323aba20" class="cell" data-execution_count="19">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb29"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1"></a>subset_cols <span class="op">=</span> [<span class="st">'CC_utilization'</span>, </span>
@@ -963,7 +963,7 @@ Table&nbsp;6: First 5 rows of df_merged
 </details>
 </div>
 <p>Convert <code>last_prod_enq2</code> to a categorical variable.</p>
-<div id="7ae03958" class="cell" data-execution_count="20">
+<div id="947dbdae" class="cell" data-execution_count="20">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb30"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1"></a>df_campaign_1_train_subset[<span class="st">'last_prod_enq2'</span>] <span class="op">=</span> df_campaign_1_train_subset[<span class="st">'last_prod_enq2'</span>].astype(<span class="st">'category'</span>)</span>
@@ -975,7 +975,7 @@ Table&nbsp;6: First 5 rows of df_merged
 <section id="supervised-learning" class="level1" data-number="9">
 <h1 data-number="9"><span class="header-section-number">9</span> Supervised Learning</h1>
 <p>Create a function that sets random seed values.</p>
-<div id="6f79e784" class="cell" data-execution_count="21">
+<div id="22083cae" class="cell" data-execution_count="21">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb31"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1"></a><span class="kw">def</span> global_set_seed(seed_value<span class="op">=</span><span class="dv">2025</span>):</span>
@@ -985,7 +985,7 @@ Table&nbsp;6: First 5 rows of df_merged
 </details>
 </div>
 <p>Create a scikit-learn compatible wrapper for <code>autogluon</code>.</p>
-<div id="19d3fc71" class="cell" data-execution_count="22">
+<div id="a3ec15fb" class="cell" data-execution_count="22">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb32"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1"></a><span class="kw">class</span> AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):</span>
@@ -1164,7 +1164,7 @@ Table&nbsp;6: First 5 rows of df_merged
 </details>
 </div>
 <p>Use Intel-accelerated <code>sklearnex</code> to speed up the training process.</p>
-<div id="1c245eaf" class="cell" data-execution_count="23">
+<div id="e56a2933" class="cell" data-execution_count="23">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb33"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1"></a>patch_sklearn()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -1174,7 +1174,7 @@ Table&nbsp;6: First 5 rows of df_merged
 </div>
 </div>
 <p>Setup data frames for <code>autogluon</code>.</p>
-<div id="f1d869ad" class="cell" data-execution_count="24">
+<div id="b9342b45" class="cell" data-execution_count="24">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb35"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1"></a>label <span class="op">=</span> <span class="st">'response_flag'</span></span>
@@ -1184,7 +1184,7 @@ Table&nbsp;6: First 5 rows of df_merged
 </details>
 </div>
 <p>Remove the model folder if it already exists.</p>
-<div id="17a3a205" class="cell" data-execution_count="25">
+<div id="15f56bfd" class="cell" data-execution_count="25">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb36"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1"></a>model_folder <span class="op">=</span> <span class="st">'Lab01_ag_models_NoTransform'</span></span>
@@ -1202,7 +1202,7 @@ Table&nbsp;6: First 5 rows of df_merged
 <p>The code below trains multiple machine learning models using <code>autogluon</code> and evaluates them using the ROC AUC metric (on a validation set that is derived from <code>train_data</code>).</p>
 <p>Hyperparameter tuning is set to <code>medium_quality</code> to reduce compute time. The allotted training time is set to <code>180</code> seconds. In real-world situations, you should use a better preset (<code>good_quality</code>) and a longer training time (<code>3600</code>).</p>
 <p>Create a scikit-learn pipeline that replaces <code>-99999</code> with <code>-1</code> and trains <code>autogluon</code> models.</p>
-<div id="303d2e8d" class="cell" data-execution_count="26">
+<div id="4c8e87d6" class="cell" data-execution_count="26">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb37"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb37-1"><a href="#cb37-1"></a><span class="kw">def</span> replace_vals(X: pd.DataFrame) <span class="op">-&gt;</span> pd.DataFrame:</span>
@@ -1235,8 +1235,8 @@ Operating System:   Windows
 Platform Machine:   AMD64
 Platform Version:   10.0.26100
 CPU Count:          20
-Memory Avail:       17.54 GB / 31.75 GB (55.2%)
-Disk Space Avail:   717.49 GB / 951.74 GB (75.4%)
+Memory Avail:       17.66 GB / 31.75 GB (55.6%)
+Disk Space Avail:   710.29 GB / 951.74 GB (74.6%)
 ===================================================
 Presets specified: ['medium_quality']
 Beginning AutoGluon training ... Time limit = 180s
@@ -1249,7 +1249,7 @@ Preprocessing data ...
 Selected class &lt;--&gt; label mapping:  class 1 = 1, class 0 = 0
 Using Feature Generators to preprocess the data ...
 Fitting AutoMLPipelineFeatureGenerator...
-    Available Memory:                    17953.66 MB
+    Available Memory:                    18084.22 MB
     Train Data (Original)  Memory Usage: 8.46 MB (0.0% of available memory)
     Inferring data type of each feature based on column values. Set feature_metadata_in to manually specify special dtypes of the features.
     Stage 1 Generators:
@@ -1275,7 +1275,7 @@ Fitting AutoMLPipelineFeatureGenerator...
     0.2s = Fit runtime
     5 features in original data used to generate 5 features in processed data.
     Train Data (Processed) Memory Usage: 8.46 MB (0.0% of available memory)
-Data preprocessing and feature engineering runtime = 0.22s ...
+Data preprocessing and feature engineering runtime = 0.23s ...
 AutoGluon will gauge predictive performance using evaluation metric: 'roc_auc'
     This metric expects predicted probabilities rather than predicted class labels, so you'll need to use predict_proba() instead of predict()
     To change this, specify the eval_metric parameter of Predictor()
@@ -1293,53 +1293,53 @@ User-specified model hyperparameters to be fit:
 }
 Excluded models: ['KNN'] (Specified by `excluded_model_types`)
 Fitting 11 L1 models, fit_strategy="sequential" ...
-Fitting model: LightGBMXT ... Training model for up to 179.78s of the 179.77s of remaining time.
+Fitting model: LightGBMXT ... Training model for up to 179.77s of the 179.77s of remaining time.
     0.7172   = Validation score   (roc_auc)
-    2.18s    = Training   runtime
+    2.07s    = Training   runtime
     0.07s    = Validation runtime
-Fitting model: LightGBM ... Training model for up to 177.50s of the 177.50s of remaining time.
+Fitting model: LightGBM ... Training model for up to 177.60s of the 177.60s of remaining time.
     0.7184   = Validation score   (roc_auc)
-    0.58s    = Training   runtime
+    0.6s     = Training   runtime
     0.02s    = Validation runtime
-Fitting model: RandomForestGini ... Training model for up to 176.87s of the 176.87s of remaining time.
+Fitting model: RandomForestGini ... Training model for up to 176.96s of the 176.96s of remaining time.
     0.6713   = Validation score   (roc_auc)
     5.56s    = Training   runtime
-    0.15s    = Validation runtime
-Fitting model: RandomForestEntr ... Training model for up to 170.97s of the 170.97s of remaining time.
+    0.16s    = Validation runtime
+Fitting model: RandomForestEntr ... Training model for up to 171.06s of the 171.05s of remaining time.
     0.6712   = Validation score   (roc_auc)
-    5.43s    = Training   runtime
-    0.16s    = Validation runtime
-Fitting model: CatBoost ... Training model for up to 165.20s of the 165.20s of remaining time.
+    5.29s    = Training   runtime
+    0.14s    = Validation runtime
+Fitting model: CatBoost ... Training model for up to 165.42s of the 165.42s of remaining time.
     0.7185   = Validation score   (roc_auc)
-    18.67s   = Training   runtime
+    18.82s   = Training   runtime
     0.01s    = Validation runtime
-Fitting model: ExtraTreesGini ... Training model for up to 146.48s of the 146.48s of remaining time.
+Fitting model: ExtraTreesGini ... Training model for up to 146.56s of the 146.56s of remaining time.
     0.6715   = Validation score   (roc_auc)
-    3.64s    = Training   runtime
-    0.15s    = Validation runtime
-Fitting model: ExtraTreesEntr ... Training model for up to 142.43s of the 142.43s of remaining time.
-    0.6716   = Validation score   (roc_auc)
-    3.6s     = Training   runtime
+    3.7s     = Training   runtime
     0.16s    = Validation runtime
-Fitting model: NeuralNetFastAI ... Training model for up to 138.41s of the 138.41s of remaining time.
+Fitting model: ExtraTreesEntr ... Training model for up to 142.39s of the 142.39s of remaining time.
+    0.6716   = Validation score   (roc_auc)
+    3.76s    = Training   runtime
+    0.16s    = Validation runtime
+Fitting model: NeuralNetFastAI ... Training model for up to 138.18s of the 138.18s of remaining time.
     0.7169   = Validation score   (roc_auc)
-    92.72s   = Training   runtime
+    115.59s  = Training   runtime
     0.23s    = Validation runtime
-Fitting model: XGBoost ... Training model for up to 45.38s of the 45.38s of remaining time.
+Fitting model: XGBoost ... Training model for up to 22.28s of the 22.28s of remaining time.
     0.7178   = Validation score   (roc_auc)
-    3.74s    = Training   runtime
-    0.04s    = Validation runtime
-Fitting model: NeuralNetTorch ... Training model for up to 41.59s of the 41.59s of remaining time.
-    Ran out of time, stopping training early. (Stopping on epoch 15)
-    0.7177   = Validation score   (roc_auc)
-    41.3s    = Training   runtime
+    3.62s    = Training   runtime
+    0.05s    = Validation runtime
+Fitting model: NeuralNetTorch ... Training model for up to 18.59s of the 18.59s of remaining time.
+    Ran out of time, stopping training early. (Stopping on epoch 6)
+    0.7169   = Validation score   (roc_auc)
+    17.85s   = Training   runtime
     0.13s    = Validation runtime
-Fitting model: WeightedEnsemble_L2 ... Training model for up to 179.78s of the 0.14s of remaining time.
-    Ensemble Weights: {'LightGBM': 0.455, 'CatBoost': 0.364, 'NeuralNetFastAI': 0.091, 'NeuralNetTorch': 0.091}
-    0.7195   = Validation score   (roc_auc)
-    0.7s     = Training   runtime
+Fitting model: WeightedEnsemble_L2 ... Training model for up to 179.77s of the 0.59s of remaining time.
+    Ensemble Weights: {'CatBoost': 0.417, 'LightGBM': 0.375, 'NeuralNetTorch': 0.167, 'LightGBMXT': 0.042}
+    0.7196   = Validation score   (roc_auc)
+    0.73s    = Training   runtime
     0.0s     = Validation runtime
-AutoGluon training complete, total runtime = 180.65s ... Best model: WeightedEnsemble_L2 | Estimated inference throughput: 136218.8 rows/s (53763 batch size)
+AutoGluon training complete, total runtime = 180.24s ... Best model: WeightedEnsemble_L2 | Estimated inference throughput: 230360.4 rows/s (53763 batch size)
 TabularPredictor saved. To load, use: predictor = TabularPredictor.load("C:\Users\chiuw\Dropbox\_Teaching\Northwestern MLDS\Interpretable ML for Finance\IML4Finance\Lectures\Lab01_ag_models_NoTransform")</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="26">
@@ -1748,7 +1748,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
   background-color: var(--sklearn-color-fitted-level-3);
 }
 </style><div id="sk-container-id-1" class="sk-top-container"><div class="sk-text-repr-fallback"><pre>Pipeline(steps=[('replace_values',
-                 FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)),
+                 FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)),
                 ('autogluon',
                  AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN'],
                                                    'holdout_frac': 0.2,
@@ -1758,7 +1758,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                          predictor_args={'eval_metric': 'roc_auc',
                                                          'path': 'Lab01_ag_models_NoTransform',
                                                          'problem_type': 'binary'}))])</pre><b>In a Jupyter environment, please rerun this cell to show the HTML representation or trust the notebook. <br>On GitHub, the HTML representation is unable to render, please try loading this page with nbviewer.org.</b></div><div class="sk-container" hidden=""><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-1" type="checkbox"><label for="sk-estimator-id-1" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;&nbsp;Pipeline<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.pipeline.Pipeline.html">?<span>Documentation for Pipeline</span></a><span class="sk-estimator-doc-link fitted">i<span>Fitted</span></span></label><div class="sk-toggleable__content fitted"><pre>Pipeline(steps=[('replace_values',
-                 FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)),
+                 FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)),
                 ('autogluon',
                  AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN'],
                                                    'holdout_frac': 0.2,
@@ -1767,7 +1767,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                          label='response_flag',
                                          predictor_args={'eval_metric': 'roc_auc',
                                                          'path': 'Lab01_ag_models_NoTransform',
-                                                         'problem_type': 'binary'}))])</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-2" type="checkbox"><label for="sk-estimator-id-2" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;FunctionTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.FunctionTransformer.html">?<span>Documentation for FunctionTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)</pre></div> </div></div><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-3" type="checkbox"><label for="sk-estimator-id-3" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">AutoGluonSklearnWrapper</label><div class="sk-toggleable__content fitted"><pre>AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN'],
+                                                         'problem_type': 'binary'}))])</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-2" type="checkbox"><label for="sk-estimator-id-2" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;FunctionTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.FunctionTransformer.html">?<span>Documentation for FunctionTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)</pre></div> </div></div><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-3" type="checkbox"><label for="sk-estimator-id-3" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">AutoGluonSklearnWrapper</label><div class="sk-toggleable__content fitted"><pre>AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN'],
                                   'holdout_frac': 0.2,
                                   'presets': 'medium_quality',
                                   'time_limit': 180},
@@ -1779,7 +1779,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
 </div>
 <p>The attribute <code>ag_model.named_steps['autogluon'].predictor</code> contains the original fit object from <code>autogluon</code>.</p>
 <p>Generate a leaderboard to see the performance of each model on <code>test_data</code>.</p>
-<div id="959d0160" class="cell" data-execution_count="27">
+<div id="e5e0b819" class="cell" data-execution_count="27">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb39"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb39-1"><a href="#cb39-1"></a>df_leaders <span class="op">=</span> ag_model.named_steps[<span class="st">'autogluon'</span>].predictor.leaderboard(test_data)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -1823,15 +1823,15 @@ Table&nbsp;7: Autogluon Leaderboard
 <tr class="odd">
 <td data-quarto-table-cell-role="th">0</td>
 <td>WeightedEnsemble_L2</td>
-<td>0.720396</td>
-<td>0.719543</td>
+<td>0.720446</td>
+<td>0.719589</td>
 <td>roc_auc</td>
-<td>1.006205</td>
-<td>0.394681</td>
-<td>153.973314</td>
-<td>0.004005</td>
-<td>0.003018</td>
-<td>0.697651</td>
+<td>0.595575</td>
+<td>0.233387</td>
+<td>40.059539</td>
+<td>0.003999</td>
+<td>0.001991</td>
+<td>0.725918</td>
 <td>2</td>
 <td>True</td>
 <td>11</td>
@@ -1842,12 +1842,12 @@ Table&nbsp;7: Autogluon Leaderboard
 <td>0.719800</td>
 <td>0.718512</td>
 <td>roc_auc</td>
-<td>0.033049</td>
-<td>0.007004</td>
-<td>18.671227</td>
-<td>0.033049</td>
-<td>0.007004</td>
-<td>18.671227</td>
+<td>0.061108</td>
+<td>0.008041</td>
+<td>18.818336</td>
+<td>0.061108</td>
+<td>0.008041</td>
+<td>18.818336</td>
 <td>1</td>
 <td>True</td>
 <td>5</td>
@@ -1858,47 +1858,47 @@ Table&nbsp;7: Autogluon Leaderboard
 <td>0.719203</td>
 <td>0.718404</td>
 <td>roc_auc</td>
-<td>0.048029</td>
-<td>0.024616</td>
-<td>0.582271</td>
-<td>0.048029</td>
-<td>0.024616</td>
-<td>0.582271</td>
+<td>0.047539</td>
+<td>0.023115</td>
+<td>0.595927</td>
+<td>0.047539</td>
+<td>0.023115</td>
+<td>0.595927</td>
 <td>1</td>
 <td>True</td>
 <td>2</td>
 </tr>
 <tr class="even">
 <td data-quarto-table-cell-role="th">3</td>
-<td>NeuralNetTorch</td>
-<td>0.718521</td>
-<td>0.717749</td>
-<td>roc_auc</td>
-<td>0.329759</td>
-<td>0.134039</td>
-<td>41.302805</td>
-<td>0.329759</td>
-<td>0.134039</td>
-<td>41.302805</td>
-<td>1</td>
-<td>True</td>
-<td>10</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">4</td>
 <td>NeuralNetFastAI</td>
 <td>0.718314</td>
 <td>0.716896</td>
 <td>roc_auc</td>
-<td>0.591363</td>
-<td>0.226004</td>
-<td>92.719360</td>
-<td>0.591363</td>
-<td>0.226004</td>
-<td>92.719360</td>
+<td>0.558774</td>
+<td>0.230370</td>
+<td>115.591418</td>
+<td>0.558774</td>
+<td>0.230370</td>
+<td>115.591418</td>
 <td>1</td>
 <td>True</td>
 <td>8</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">4</td>
+<td>NeuralNetTorch</td>
+<td>0.718059</td>
+<td>0.716879</td>
+<td>roc_auc</td>
+<td>0.336788</td>
+<td>0.129674</td>
+<td>17.853110</td>
+<td>0.336788</td>
+<td>0.129674</td>
+<td>17.853110</td>
+<td>1</td>
+<td>True</td>
+<td>10</td>
 </tr>
 <tr class="even">
 <td data-quarto-table-cell-role="th">5</td>
@@ -1906,12 +1906,12 @@ Table&nbsp;7: Autogluon Leaderboard
 <td>0.717188</td>
 <td>0.717808</td>
 <td>roc_auc</td>
-<td>0.095092</td>
-<td>0.039524</td>
-<td>3.737631</td>
-<td>0.095092</td>
-<td>0.039524</td>
-<td>3.737631</td>
+<td>0.094539</td>
+<td>0.048528</td>
+<td>3.618655</td>
+<td>0.094539</td>
+<td>0.048528</td>
+<td>3.618655</td>
 <td>1</td>
 <td>True</td>
 <td>9</td>
@@ -1922,12 +1922,12 @@ Table&nbsp;7: Autogluon Leaderboard
 <td>0.717089</td>
 <td>0.717234</td>
 <td>roc_auc</td>
-<td>0.145124</td>
-<td>0.071101</td>
-<td>2.178729</td>
-<td>0.145124</td>
-<td>0.071101</td>
-<td>2.178729</td>
+<td>0.146141</td>
+<td>0.070565</td>
+<td>2.066249</td>
+<td>0.146141</td>
+<td>0.070565</td>
+<td>2.066249</td>
 <td>1</td>
 <td>True</td>
 <td>1</td>
@@ -1938,12 +1938,12 @@ Table&nbsp;7: Autogluon Leaderboard
 <td>0.659221</td>
 <td>0.671457</td>
 <td>roc_auc</td>
-<td>0.434914</td>
-<td>0.154068</td>
-<td>3.639974</td>
-<td>0.434914</td>
-<td>0.154068</td>
-<td>3.639974</td>
+<td>0.455957</td>
+<td>0.156752</td>
+<td>3.702057</td>
+<td>0.455957</td>
+<td>0.156752</td>
+<td>3.702057</td>
 <td>1</td>
 <td>True</td>
 <td>6</td>
@@ -1954,12 +1954,12 @@ Table&nbsp;7: Autogluon Leaderboard
 <td>0.659023</td>
 <td>0.671624</td>
 <td>roc_auc</td>
-<td>0.419610</td>
-<td>0.155551</td>
-<td>3.600517</td>
-<td>0.419610</td>
-<td>0.155551</td>
-<td>3.600517</td>
+<td>0.405551</td>
+<td>0.159230</td>
+<td>3.758545</td>
+<td>0.405551</td>
+<td>0.159230</td>
+<td>3.758545</td>
 <td>1</td>
 <td>True</td>
 <td>7</td>
@@ -1970,12 +1970,12 @@ Table&nbsp;7: Autogluon Leaderboard
 <td>0.658832</td>
 <td>0.671214</td>
 <td>roc_auc</td>
-<td>0.404588</td>
-<td>0.155268</td>
-<td>5.431691</td>
-<td>0.404588</td>
-<td>0.155268</td>
-<td>5.431691</td>
+<td>0.469798</td>
+<td>0.141006</td>
+<td>5.289750</td>
+<td>0.469798</td>
+<td>0.141006</td>
+<td>5.289750</td>
 <td>1</td>
 <td>True</td>
 <td>4</td>
@@ -1986,12 +1986,12 @@ Table&nbsp;7: Autogluon Leaderboard
 <td>0.658697</td>
 <td>0.671330</td>
 <td>roc_auc</td>
-<td>0.434110</td>
-<td>0.154717</td>
-<td>5.564403</td>
-<td>0.434110</td>
-<td>0.154717</td>
-<td>5.564403</td>
+<td>0.468727</td>
+<td>0.157002</td>
+<td>5.556425</td>
+<td>0.468727</td>
+<td>0.157002</td>
+<td>5.556425</td>
 <td>1</td>
 <td>True</td>
 <td>3</td>
@@ -2010,7 +2010,7 @@ Table&nbsp;7: Autogluon Leaderboard
 <h1 data-number="10"><span class="header-section-number">10</span> Best Model</h1>
 <p>Although <code>CatBoost</code> may not have the highest roc_auc score, the model generates very fast predictions with a very competitive roc_auc score.</p>
 <p>Set the best model to <code>CatBoost</code>.</p>
-<div id="bf5b2e2c" class="cell" data-execution_count="29">
+<div id="bfc5d193" class="cell" data-execution_count="29">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb41"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb41-1"><a href="#cb41-1"></a>best_model_name <span class="op">=</span> <span class="st">'CatBoost'</span></span>
@@ -2021,7 +2021,7 @@ Table&nbsp;7: Autogluon Leaderboard
 <section id="check-probability-calibration" class="level1" data-number="11">
 <h1 data-number="11"><span class="header-section-number">11</span> Check Probability Calibration</h1>
 <p>Measure how well the model scores align with the observed response rates in <code>test_data</code>.</p>
-<div id="34e88634" class="cell" data-execution_count="30">
+<div id="1e549178" class="cell" data-execution_count="30">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb42"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1"></a><span class="op">%</span>matplotlib inline</span>
@@ -2051,7 +2051,7 @@ Table&nbsp;7: Autogluon Leaderboard
 <p>Calibrate the model scores to the observed response rates in <code>df_campaign_2</code>.</p>
 <p>Calibration methods should avoid using the training data (due to the model scores being overfitted to the training data). The test data should be used for evaluation purposes only. Therefore, we will use <code>df_campaign_2</code> to calibrate the model.</p>
 <p>Set up the data frames from <code>df_campaign_2</code>.</p>
-<div id="39ebb015" class="cell" data-execution_count="31">
+<div id="be67e46c" class="cell" data-execution_count="31">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb44"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1"></a><span class="co"># Get the data ready</span></span>
@@ -2064,7 +2064,7 @@ Table&nbsp;7: Autogluon Leaderboard
 </details>
 </div>
 <p>Calibrate the model scores using <code>df_campaign_2</code> and <code>CalibratedClassifierCV</code>.</p>
-<div id="aa2065c9" class="cell" data-execution_count="32">
+<div id="90f2690a" class="cell" data-execution_count="32">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb45"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb45-1"><a href="#cb45-1"></a>cal_model <span class="op">=</span> CalibratedClassifierCV(</span>
@@ -2485,7 +2485,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
 }
 </style><div id="sk-container-id-2" class="sk-top-container"><div class="sk-text-repr-fallback"><pre>CalibratedClassifierCV(cv='prefit',
                        estimator=Pipeline(steps=[('replace_values',
-                                                  FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)),
+                                                  FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)),
                                                  ('autogluon',
                                                   AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN'],
                                                                                     'holdout_frac': 0.2,
@@ -2497,7 +2497,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                                                                           'problem_type': 'binary'}))]),
                        method='isotonic')</pre><b>In a Jupyter environment, please rerun this cell to show the HTML representation or trust the notebook. <br>On GitHub, the HTML representation is unable to render, please try loading this page with nbviewer.org.</b></div><div class="sk-container" hidden=""><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-4" type="checkbox"><label for="sk-estimator-id-4" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;&nbsp;CalibratedClassifierCV<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.calibration.CalibratedClassifierCV.html">?<span>Documentation for CalibratedClassifierCV</span></a><span class="sk-estimator-doc-link fitted">i<span>Fitted</span></span></label><div class="sk-toggleable__content fitted"><pre>CalibratedClassifierCV(cv='prefit',
                        estimator=Pipeline(steps=[('replace_values',
-                                                  FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)),
+                                                  FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)),
                                                  ('autogluon',
                                                   AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN'],
                                                                                     'holdout_frac': 0.2,
@@ -2508,7 +2508,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                                                                           'path': 'Lab01_ag_models_NoTransform',
                                                                                           'problem_type': 'binary'}))]),
                        method='isotonic')</pre></div> </div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-5" type="checkbox"><label for="sk-estimator-id-5" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">estimator: Pipeline</label><div class="sk-toggleable__content fitted"><pre>Pipeline(steps=[('replace_values',
-                 FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)),
+                 FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)),
                 ('autogluon',
                  AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN'],
                                                    'holdout_frac': 0.2,
@@ -2517,7 +2517,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                          label='response_flag',
                                          predictor_args={'eval_metric': 'roc_auc',
                                                          'path': 'Lab01_ag_models_NoTransform',
-                                                         'problem_type': 'binary'}))])</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-6" type="checkbox"><label for="sk-estimator-id-6" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;FunctionTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.FunctionTransformer.html">?<span>Documentation for FunctionTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)</pre></div> </div></div><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-7" type="checkbox"><label for="sk-estimator-id-7" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">AutoGluonSklearnWrapper</label><div class="sk-toggleable__content fitted"><pre>AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN'],
+                                                         'problem_type': 'binary'}))])</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-6" type="checkbox"><label for="sk-estimator-id-6" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;FunctionTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.FunctionTransformer.html">?<span>Documentation for FunctionTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)</pre></div> </div></div><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-7" type="checkbox"><label for="sk-estimator-id-7" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">AutoGluonSklearnWrapper</label><div class="sk-toggleable__content fitted"><pre>AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN'],
                                   'holdout_frac': 0.2,
                                   'presets': 'medium_quality',
                                   'time_limit': 180},
@@ -2527,7 +2527,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                         'problem_type': 'binary'})</pre></div> </div></div></div></div></div></div></div></div></div></div></div>
 </div>
 </div>
-<div id="d18dba67" class="cell" data-execution_count="33">
+<div id="6d9f0345" class="cell" data-execution_count="33">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb46"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb46-1"><a href="#cb46-1"></a><span class="op">%</span>matplotlib inline</span>
@@ -2567,7 +2567,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
 <h1 data-number="12"><span class="header-section-number">12</span> Permutation Feature Importance</h1>
 <p>Using the best model, rank features from most important to least important.</p>
 <p>Permutation feature importance measures how model performance degrades when a feature is randomly shuffled. Using <code>test_data</code> avoids overfitting and provides a more reliable estimate of each feature’s importance.</p>
-<div id="6631ba45" class="cell" data-execution_count="34">
+<div id="14644655" class="cell" data-execution_count="34">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb47"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb47-1"><a href="#cb47-1"></a>best_feature_importance <span class="op">=</span> (ag_model</span>
@@ -2581,8 +2581,8 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
 </details>
 <div class="cell-output cell-output-stderr">
 <pre><code>Computing feature importance via permutation shuffling for 5 features using 115206 rows with 5 shuffle sets...
-    0.78s   = Expected runtime (0.16s per shuffle set)
-    0.56s   = Actual runtime (Completed 5 of 5 shuffle sets)</code></pre>
+    0.75s   = Expected runtime (0.15s per shuffle set)
+    0.58s   = Actual runtime (Completed 5 of 5 shuffle sets)</code></pre>
 </div>
 </div>
 <div class="cell" data-tbl-number="true" data-execution_count="35">
@@ -2671,7 +2671,7 @@ Table&nbsp;8: Permutation Feature Importance
 <section id="partial-dependence-plots" class="level1" data-number="13">
 <h1 data-number="13"><span class="header-section-number">13</span> Partial Dependence Plots</h1>
 <p>Create a function that generates partial dependence plots for all features.</p>
-<div id="e0a97c21" class="cell" data-execution_count="36">
+<div id="61e191fc" class="cell" data-execution_count="36">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb50"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb50-1"><a href="#cb50-1"></a><span class="kw">def</span> show_pdp(wrappedAGModel: BaseEstimator,</span>
@@ -2719,7 +2719,7 @@ Table&nbsp;8: Permutation Feature Importance
 <span id="cb50-43"><a href="#cb50-43"></a>    plt.close(<span class="st">'all'</span>)  <span class="co"># Prevent figure overload</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<div id="1ade4ce8" class="cell" data-execution_count="37">
+<div id="b2119fa0" class="cell" data-execution_count="37">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb51"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb51-1"><a href="#cb51-1"></a><span class="co"># Get all features from ag_model.predictor</span></span>
@@ -2734,7 +2734,7 @@ Table&nbsp;8: Permutation Feature Importance
 </div>
 <p>Use partial dependence plots (PDP) to describe the relationships between features and predictions.</p>
 <p>Unlike permutation feature importance, PDPs do not depend on the true labels. Instead, they show how the model’s predictions change as the feature values change.</p>
-<div id="f29007d5" class="cell" data-execution_count="38">
+<div id="dedd9b13" class="cell" data-execution_count="38">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb52"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb52-1"><a href="#cb52-1"></a><span class="op">%</span>matplotlib inline</span>
@@ -2821,7 +2821,7 @@ Note
 <section id="more-pdp" class="level2" data-number="13.2">
 <h2 data-number="13.2" class="anchored" data-anchor-id="more-pdp"><span class="header-section-number">13.2</span> More PDP</h2>
 <p>Zoom-in on the plots where the feature values are greater than or equal to 0.</p>
-<div id="35dae992" class="cell" data-execution_count="39">
+<div id="9116ef47" class="cell" data-execution_count="39">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb53"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb53-1"><a href="#cb53-1"></a><span class="op">%</span>matplotlib inline</span>
@@ -2865,7 +2865,7 @@ Note
 </section>
 <section id="accumulated-local-effects-plots" class="level1" data-number="14">
 <h1 data-number="14"><span class="header-section-number">14</span> Accumulated Local Effects Plots</h1>
-<div id="68369d48" class="cell" data-execution_count="40">
+<div id="2022b9fe" class="cell" data-execution_count="40">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb54"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb54-1"><a href="#cb54-1"></a><span class="kw">def</span> show_ale(wrappedAGModel: BaseEstimator,</span>
@@ -2907,7 +2907,7 @@ Note
 <span id="cb54-37"><a href="#cb54-37"></a>    plt.close(<span class="st">'all'</span>)  <span class="co"># Prevent figure overload</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<div id="8a4b9413" class="cell" data-execution_count="41">
+<div id="961628d4" class="cell" data-execution_count="41">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb55"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb55-1"><a href="#cb55-1"></a><span class="op">%</span>matplotlib inline</span>
@@ -2968,7 +2968,7 @@ Note
 </div>
 </div>
 </div>
-<div id="1639cc05" class="cell" data-execution_count="42">
+<div id="54692421" class="cell" data-execution_count="42">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb61"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb61-1"><a href="#cb61-1"></a><span class="op">%</span>matplotlib inline</span>
@@ -3024,13 +3024,13 @@ Note
 <h1 data-number="15"><span class="header-section-number">15</span> Model Evaluation</h1>
 <p>Evaluate the model using <code>df_campaign_2</code>.</p>
 <p>We will bin the predicted probabilities into 5 bins. For each bin, calculate the bin size, number of responses, and response rate. Also calculate the cumulative number of responses and cumulative response rate. Also calculate gain and lift.</p>
-<div id="8a367f36" class="cell" data-execution_count="43">
+<div id="cb1a0e82" class="cell" data-execution_count="43">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb66"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb66-1"><a href="#cb66-1"></a>y_probas <span class="op">=</span> ag_model.predict_proba(X_campaign2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<div id="19be54b7" class="cell" data-execution_count="44">
+<div id="0f6f8ed9" class="cell" data-execution_count="44">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb67"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb67-1"><a href="#cb67-1"></a><span class="co"># Create DataFrame with predictions and actual values</span></span>
@@ -3323,7 +3323,7 @@ Note
 </section>
 <section id="gain-and-lift-plots" class="level2" data-number="15.2">
 <h2 data-number="15.2" class="anchored" data-anchor-id="gain-and-lift-plots"><span class="header-section-number">15.2</span> Gain and Lift Plots</h2>
-<div id="e44dca8e" class="cell" data-execution_count="46">
+<div id="45897275" class="cell" data-execution_count="46">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb69"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb69-1"><a href="#cb69-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">8</span>, <span class="dv">6</span>))</span>
@@ -3344,7 +3344,7 @@ Note
 </div>
 </div>
 </div>
-<div id="2836e5a1" class="cell" data-execution_count="47">
+<div id="b95b252f" class="cell" data-execution_count="47">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb70"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb70-1"><a href="#cb70-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">8</span>, <span class="dv">6</span>))</span>
@@ -3368,7 +3368,7 @@ Note
 </section>
 <section id="gain-and-lift-plots-automated" class="level2" data-number="15.3">
 <h2 data-number="15.3" class="anchored" data-anchor-id="gain-and-lift-plots-automated"><span class="header-section-number">15.3</span> Gain and Lift Plots (Automated)</h2>
-<div id="fd226dfa" class="cell" data-execution_count="48">
+<div id="0809d2b9" class="cell" data-execution_count="48">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb71"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb71-1"><a href="#cb71-1"></a><span class="co"># Get probability predictions</span></span>
@@ -3394,7 +3394,7 @@ Note
 </div>
 </div>
 </div>
-<div id="109a34e9" class="cell" data-execution_count="49">
+<div id="25d04255" class="cell" data-execution_count="49">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb73"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb73-1"><a href="#cb73-1"></a><span class="co"># Create lift curve plot</span></span>
@@ -3424,7 +3424,7 @@ Note
 <p>In campaign 3, we have a limited campaign budget. We want to maximize the number of responses while minimizing the number of prospects who are sent direct mail.</p>
 <p>One approach is to select a threshold that maximizes the F1 score.</p>
 <p>First, we check the F1 score for the default threshold of <code>0.5</code>.</p>
-<div id="5f4acf80" class="cell" data-execution_count="50">
+<div id="3cb24ae1" class="cell" data-execution_count="50">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb75"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb75-1"><a href="#cb75-1"></a>df_leaders_f1 <span class="op">=</span> (ag_model</span>
@@ -3477,18 +3477,18 @@ Table&nbsp;10: Autogluon Leaderboard with F1 Score (Threshold = 0.5)
 <tr class="odd">
 <td data-quarto-table-cell-role="th">0</td>
 <td>WeightedEnsemble_L2</td>
-<td>0.720396</td>
-<td>0.226586</td>
-<td>0.776106</td>
-<td>0.132658</td>
-<td>0.719543</td>
+<td>0.720446</td>
+<td>0.225986</td>
+<td>0.777580</td>
+<td>0.132204</td>
+<td>0.719589</td>
 <td>roc_auc</td>
-<td>0.975780</td>
-<td>0.394681</td>
-<td>153.973314</td>
-<td>0.003994</td>
-<td>0.003018</td>
-<td>0.697651</td>
+<td>0.568174</td>
+<td>0.233387</td>
+<td>40.059539</td>
+<td>0.004014</td>
+<td>0.001991</td>
+<td>0.725918</td>
 <td>2</td>
 <td>True</td>
 <td>11</td>
@@ -3502,12 +3502,12 @@ Table&nbsp;10: Autogluon Leaderboard with F1 Score (Threshold = 0.5)
 <td>0.135683</td>
 <td>0.718512</td>
 <td>roc_auc</td>
-<td>0.034147</td>
-<td>0.007004</td>
-<td>18.671227</td>
-<td>0.034147</td>
-<td>0.007004</td>
-<td>18.671227</td>
+<td>0.037537</td>
+<td>0.008041</td>
+<td>18.818336</td>
+<td>0.037537</td>
+<td>0.008041</td>
+<td>18.818336</td>
 <td>1</td>
 <td>True</td>
 <td>5</td>
@@ -3521,37 +3521,18 @@ Table&nbsp;10: Autogluon Leaderboard with F1 Score (Threshold = 0.5)
 <td>0.139011</td>
 <td>0.718404</td>
 <td>roc_auc</td>
-<td>0.047025</td>
-<td>0.024616</td>
-<td>0.582271</td>
-<td>0.047025</td>
-<td>0.024616</td>
-<td>0.582271</td>
+<td>0.044039</td>
+<td>0.023115</td>
+<td>0.595927</td>
+<td>0.044039</td>
+<td>0.023115</td>
+<td>0.595927</td>
 <td>1</td>
 <td>True</td>
 <td>2</td>
 </tr>
 <tr class="even">
 <td data-quarto-table-cell-role="th">3</td>
-<td>NeuralNetTorch</td>
-<td>0.718521</td>
-<td>0.215962</td>
-<td>0.783349</td>
-<td>0.125246</td>
-<td>0.717749</td>
-<td>roc_auc</td>
-<td>0.320185</td>
-<td>0.134039</td>
-<td>41.302805</td>
-<td>0.320185</td>
-<td>0.134039</td>
-<td>41.302805</td>
-<td>1</td>
-<td>True</td>
-<td>10</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">4</td>
 <td>NeuralNetFastAI</td>
 <td>0.718314</td>
 <td>0.231798</td>
@@ -3559,15 +3540,34 @@ Table&nbsp;10: Autogluon Leaderboard with F1 Score (Threshold = 0.5)
 <td>0.136288</td>
 <td>0.716896</td>
 <td>roc_auc</td>
-<td>0.570427</td>
-<td>0.226004</td>
-<td>92.719360</td>
-<td>0.570427</td>
-<td>0.226004</td>
-<td>92.719360</td>
+<td>0.574551</td>
+<td>0.230370</td>
+<td>115.591418</td>
+<td>0.574551</td>
+<td>0.230370</td>
+<td>115.591418</td>
 <td>1</td>
 <td>True</td>
 <td>8</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">4</td>
+<td>NeuralNetTorch</td>
+<td>0.718059</td>
+<td>0.214444</td>
+<td>0.784895</td>
+<td>0.124187</td>
+<td>0.716879</td>
+<td>roc_auc</td>
+<td>0.337464</td>
+<td>0.129674</td>
+<td>17.853110</td>
+<td>0.337464</td>
+<td>0.129674</td>
+<td>17.853110</td>
+<td>1</td>
+<td>True</td>
+<td>10</td>
 </tr>
 <tr class="even">
 <td data-quarto-table-cell-role="th">5</td>
@@ -3578,12 +3578,12 @@ Table&nbsp;10: Autogluon Leaderboard with F1 Score (Threshold = 0.5)
 <td>0.137801</td>
 <td>0.717808</td>
 <td>roc_auc</td>
-<td>0.300190</td>
-<td>0.039524</td>
-<td>3.737631</td>
-<td>0.300190</td>
-<td>0.039524</td>
-<td>3.737631</td>
+<td>0.304682</td>
+<td>0.048528</td>
+<td>3.618655</td>
+<td>0.304682</td>
+<td>0.048528</td>
+<td>3.618655</td>
 <td>1</td>
 <td>True</td>
 <td>9</td>
@@ -3597,12 +3597,12 @@ Table&nbsp;10: Autogluon Leaderboard with F1 Score (Threshold = 0.5)
 <td>0.142641</td>
 <td>0.717234</td>
 <td>roc_auc</td>
-<td>0.145602</td>
-<td>0.071101</td>
-<td>2.178729</td>
-<td>0.145602</td>
-<td>0.071101</td>
-<td>2.178729</td>
+<td>0.145119</td>
+<td>0.070565</td>
+<td>2.066249</td>
+<td>0.145119</td>
+<td>0.070565</td>
+<td>2.066249</td>
 <td>1</td>
 <td>True</td>
 <td>1</td>
@@ -3616,12 +3616,12 @@ Table&nbsp;10: Autogluon Leaderboard with F1 Score (Threshold = 0.5)
 <td>0.145969</td>
 <td>0.671457</td>
 <td>roc_auc</td>
-<td>0.401239</td>
-<td>0.154068</td>
-<td>3.639974</td>
-<td>0.401239</td>
-<td>0.154068</td>
-<td>3.639974</td>
+<td>0.446425</td>
+<td>0.156752</td>
+<td>3.702057</td>
+<td>0.446425</td>
+<td>0.156752</td>
+<td>3.702057</td>
 <td>1</td>
 <td>True</td>
 <td>6</td>
@@ -3635,12 +3635,12 @@ Table&nbsp;10: Autogluon Leaderboard with F1 Score (Threshold = 0.5)
 <td>0.145364</td>
 <td>0.671624</td>
 <td>roc_auc</td>
-<td>0.405475</td>
-<td>0.155551</td>
-<td>3.600517</td>
-<td>0.405475</td>
-<td>0.155551</td>
-<td>3.600517</td>
+<td>0.393453</td>
+<td>0.159230</td>
+<td>3.758545</td>
+<td>0.393453</td>
+<td>0.159230</td>
+<td>3.758545</td>
 <td>1</td>
 <td>True</td>
 <td>7</td>
@@ -3654,12 +3654,12 @@ Table&nbsp;10: Autogluon Leaderboard with F1 Score (Threshold = 0.5)
 <td>0.145969</td>
 <td>0.671214</td>
 <td>roc_auc</td>
-<td>0.404299</td>
-<td>0.155268</td>
-<td>5.431691</td>
-<td>0.404299</td>
-<td>0.155268</td>
-<td>5.431691</td>
+<td>0.425240</td>
+<td>0.141006</td>
+<td>5.289750</td>
+<td>0.425240</td>
+<td>0.141006</td>
+<td>5.289750</td>
 <td>1</td>
 <td>True</td>
 <td>4</td>
@@ -3673,12 +3673,12 @@ Table&nbsp;10: Autogluon Leaderboard with F1 Score (Threshold = 0.5)
 <td>0.145969</td>
 <td>0.671330</td>
 <td>roc_auc</td>
-<td>0.479923</td>
-<td>0.154717</td>
-<td>5.564403</td>
-<td>0.479923</td>
-<td>0.154717</td>
-<td>5.564403</td>
+<td>0.443097</td>
+<td>0.157002</td>
+<td>5.556425</td>
+<td>0.443097</td>
+<td>0.157002</td>
+<td>5.556425</td>
 <td>1</td>
 <td>True</td>
 <td>3</td>
@@ -3693,7 +3693,7 @@ Table&nbsp;10: Autogluon Leaderboard with F1 Score (Threshold = 0.5)
 </div>
 </div>
 <p>In order to avoid overfitting, we will use <code>df_campaign_2</code> to select the threshold that maximizes the F1 score.</p>
-<div id="a94ea1a7" class="cell" data-execution_count="52">
+<div id="fa0f67ce" class="cell" data-execution_count="52">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb77"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb77-1"><a href="#cb77-1"></a>best_threshold <span class="op">=</span> (ag_model</span>
@@ -3720,7 +3720,7 @@ Updating predictor.decision_threshold from 0.5 -&gt; 0.16749999999999998
 </div>
 </div>
 <p>Finally, we check the F1 score for the new threshold.</p>
-<div id="8e5b25c4" class="cell" data-execution_count="53">
+<div id="f8b36b38" class="cell" data-execution_count="53">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb79"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb79-1"><a href="#cb79-1"></a>df_leaders_f1_best <span class="op">=</span> (ag_model</span>
@@ -3773,18 +3773,18 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <tr class="odd">
 <td data-quarto-table-cell-role="th">0</td>
 <td>WeightedEnsemble_L2</td>
-<td>0.720396</td>
-<td>0.332229</td>
-<td>0.378776</td>
-<td>0.295871</td>
-<td>0.719543</td>
+<td>0.720446</td>
+<td>0.333390</td>
+<td>0.382820</td>
+<td>0.295265</td>
+<td>0.719589</td>
 <td>roc_auc</td>
-<td>0.958168</td>
-<td>0.394681</td>
-<td>153.973314</td>
-<td>0.003515</td>
-<td>0.003018</td>
-<td>0.697651</td>
+<td>0.563375</td>
+<td>0.233387</td>
+<td>40.059539</td>
+<td>0.004521</td>
+<td>0.001991</td>
+<td>0.725918</td>
 <td>2</td>
 <td>True</td>
 <td>11</td>
@@ -3798,12 +3798,12 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <td>0.294812</td>
 <td>0.718512</td>
 <td>roc_auc</td>
-<td>0.047908</td>
-<td>0.007004</td>
-<td>18.671227</td>
-<td>0.047908</td>
-<td>0.007004</td>
-<td>18.671227</td>
+<td>0.037538</td>
+<td>0.008041</td>
+<td>18.818336</td>
+<td>0.037538</td>
+<td>0.008041</td>
+<td>18.818336</td>
 <td>1</td>
 <td>True</td>
 <td>5</td>
@@ -3817,37 +3817,18 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <td>0.295568</td>
 <td>0.718404</td>
 <td>roc_auc</td>
-<td>0.045023</td>
-<td>0.024616</td>
-<td>0.582271</td>
-<td>0.045023</td>
-<td>0.024616</td>
-<td>0.582271</td>
+<td>0.046040</td>
+<td>0.023115</td>
+<td>0.595927</td>
+<td>0.046040</td>
+<td>0.023115</td>
+<td>0.595927</td>
 <td>1</td>
 <td>True</td>
 <td>2</td>
 </tr>
 <tr class="even">
 <td data-quarto-table-cell-role="th">3</td>
-<td>NeuralNetTorch</td>
-<td>0.718521</td>
-<td>0.329859</td>
-<td>0.363935</td>
-<td>0.301619</td>
-<td>0.717749</td>
-<td>roc_auc</td>
-<td>0.327318</td>
-<td>0.134039</td>
-<td>41.302805</td>
-<td>0.327318</td>
-<td>0.134039</td>
-<td>41.302805</td>
-<td>1</td>
-<td>True</td>
-<td>10</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">4</td>
 <td>NeuralNetFastAI</td>
 <td>0.718314</td>
 <td>0.332114</td>
@@ -3855,15 +3836,34 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <td>0.302072</td>
 <td>0.716896</td>
 <td>roc_auc</td>
-<td>0.534403</td>
-<td>0.226004</td>
-<td>92.719360</td>
-<td>0.534403</td>
-<td>0.226004</td>
-<td>92.719360</td>
+<td>0.574717</td>
+<td>0.230370</td>
+<td>115.591418</td>
+<td>0.574717</td>
+<td>0.230370</td>
+<td>115.591418</td>
 <td>1</td>
 <td>True</td>
 <td>8</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">4</td>
+<td>NeuralNetTorch</td>
+<td>0.718059</td>
+<td>0.328725</td>
+<td>0.380215</td>
+<td>0.289517</td>
+<td>0.716879</td>
+<td>roc_auc</td>
+<td>0.328664</td>
+<td>0.129674</td>
+<td>17.853110</td>
+<td>0.328664</td>
+<td>0.129674</td>
+<td>17.853110</td>
+<td>1</td>
+<td>True</td>
+<td>10</td>
 </tr>
 <tr class="even">
 <td data-quarto-table-cell-role="th">5</td>
@@ -3874,12 +3874,12 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <td>0.295568</td>
 <td>0.717808</td>
 <td>roc_auc</td>
-<td>0.094555</td>
-<td>0.039524</td>
-<td>3.737631</td>
-<td>0.094555</td>
-<td>0.039524</td>
-<td>3.737631</td>
+<td>0.081310</td>
+<td>0.048528</td>
+<td>3.618655</td>
+<td>0.081310</td>
+<td>0.048528</td>
+<td>3.618655</td>
 <td>1</td>
 <td>True</td>
 <td>9</td>
@@ -3893,12 +3893,12 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <td>0.293450</td>
 <td>0.717234</td>
 <td>roc_auc</td>
-<td>0.143610</td>
-<td>0.071101</td>
-<td>2.178729</td>
-<td>0.143610</td>
-<td>0.071101</td>
-<td>2.178729</td>
+<td>0.146612</td>
+<td>0.070565</td>
+<td>2.066249</td>
+<td>0.146612</td>
+<td>0.070565</td>
+<td>2.066249</td>
 <td>1</td>
 <td>True</td>
 <td>1</td>
@@ -3912,12 +3912,12 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <td>0.299501</td>
 <td>0.671457</td>
 <td>roc_auc</td>
-<td>0.418081</td>
-<td>0.154068</td>
-<td>3.639974</td>
-<td>0.418081</td>
-<td>0.154068</td>
-<td>3.639974</td>
+<td>0.400813</td>
+<td>0.156752</td>
+<td>3.702057</td>
+<td>0.400813</td>
+<td>0.156752</td>
+<td>3.702057</td>
 <td>1</td>
 <td>True</td>
 <td>6</td>
@@ -3931,12 +3931,12 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <td>0.299198</td>
 <td>0.671624</td>
 <td>roc_auc</td>
-<td>0.404278</td>
-<td>0.155551</td>
-<td>3.600517</td>
-<td>0.404278</td>
-<td>0.155551</td>
-<td>3.600517</td>
+<td>0.388602</td>
+<td>0.159230</td>
+<td>3.758545</td>
+<td>0.388602</td>
+<td>0.159230</td>
+<td>3.758545</td>
 <td>1</td>
 <td>True</td>
 <td>7</td>
@@ -3950,12 +3950,12 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <td>0.299501</td>
 <td>0.671214</td>
 <td>roc_auc</td>
-<td>0.437326</td>
-<td>0.155268</td>
-<td>5.431691</td>
-<td>0.437326</td>
-<td>0.155268</td>
-<td>5.431691</td>
+<td>0.404922</td>
+<td>0.141006</td>
+<td>5.289750</td>
+<td>0.404922</td>
+<td>0.141006</td>
+<td>5.289750</td>
 <td>1</td>
 <td>True</td>
 <td>4</td>
@@ -3969,12 +3969,12 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <td>0.299803</td>
 <td>0.671330</td>
 <td>roc_auc</td>
-<td>0.424153</td>
-<td>0.154717</td>
-<td>5.564403</td>
-<td>0.424153</td>
-<td>0.154717</td>
-<td>5.564403</td>
+<td>0.442755</td>
+<td>0.157002</td>
+<td>5.556425</td>
+<td>0.442755</td>
+<td>0.157002</td>
+<td>5.556425</td>
 <td>1</td>
 <td>True</td>
 <td>3</td>
@@ -3992,7 +3992,7 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <section id="select-targets" class="level1" data-number="17">
 <h1 data-number="17"><span class="header-section-number">17</span> Select Targets</h1>
 <p>We randomly select <code>1,000</code> prospects as a control group. We will send direct mail to everyone in the control group. The control group gives us a baseline response rate.</p>
-<div id="1dd2f923" class="cell" data-execution_count="55">
+<div id="66dd81a7" class="cell" data-execution_count="55">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb81"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb81-1"><a href="#cb81-1"></a><span class="co"># Randomly select 1000 prospects for control group</span></span>
@@ -4003,14 +4003,14 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 </details>
 </div>
 <p>Create <code>df_campaign_3_treatment</code> by removing the control group from <code>df_campaign_3</code>.</p>
-<div id="f4da9bb6" class="cell" data-execution_count="56">
+<div id="4d1f7a6b" class="cell" data-execution_count="56">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb82"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb82-1"><a href="#cb82-1"></a>df_campaign_3_treatment <span class="op">=</span> df_campaign_3.drop(df_campaign_3_control_group.index)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 <p>Then, we send direct mail to all the prospects in <code>df_campaign_3_treatment</code> that exceed the best threshold. We are assuming that the prospects in <code>df_campaign_3_treatment</code> meet the other campaign selection criteria that were determined by the risk, strategy, and legal teams.</p>
-<div id="233c9b50" class="cell" data-execution_count="57">
+<div id="da6af628" class="cell" data-execution_count="57">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb83"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb83-1"><a href="#cb83-1"></a>X_campaign3 <span class="op">=</span> df_campaign_3_treatment[subset_cols].copy()</span>
@@ -4040,13 +4040,13 @@ Table&nbsp;11: Autogluon Leaderboard with F1 Score (Best Threshold)
 <section id="measure-campaign-effectiveness" class="level1" data-number="18">
 <h1 data-number="18"><span class="header-section-number">18</span> Measure Campaign Effectiveness</h1>
 <p>The file <code>campaign_eval.parquet</code> contains the results of the campaign. We will join the data set with df_campaign_3_selected to measure the effectiveness of the campaign.</p>
-<div id="5fda8bf9" class="cell" data-execution_count="58">
+<div id="866514a5" class="cell" data-execution_count="58">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb84"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb84-1"><a href="#cb84-1"></a>df_campaign_eval <span class="op">=</span> duckdb.query(<span class="st">"""</span></span>
 <span id="cb84-2"><a href="#cb84-2"></a><span class="st">    SELECT SELECTED.*, EVAL.response_flag</span></span>
 <span id="cb84-3"><a href="#cb84-3"></a><span class="st">    FROM read_parquet('../Data/cibil/campaign_eval.parquet') AS EVAL</span></span>
-<span id="cb84-4"><a href="#cb84-4"></a><span class="st">    LEFT JOIN df_campaign_3_selected AS SELECTED</span></span>
+<span id="cb84-4"><a href="#cb84-4"></a><span class="st">    INNER JOIN df_campaign_3_selected AS SELECTED</span></span>
 <span id="cb84-5"><a href="#cb84-5"></a><span class="st">    ON EVAL.PROSPECTID = SELECTED.PROSPECTID</span></span>
 <span id="cb84-6"><a href="#cb84-6"></a><span class="st">    ORDER BY SELECTED.group_type, SELECTED.PROSPECTID</span></span>
 <span id="cb84-7"><a href="#cb84-7"></a><span class="st">"""</span>).to_df()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -4129,7 +4129,7 @@ Table&nbsp;12: First 5 rows of df_campaign_eval
 </div>
 </div>
 <p>Summarize the results.</p>
-<div id="6325dc5e" class="cell" data-execution_count="60">
+<div id="30feb016" class="cell" data-execution_count="60">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb86"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb86-1"><a href="#cb86-1"></a>df_eval_agg <span class="op">=</span> (df_campaign_eval</span>
@@ -4209,7 +4209,7 @@ Table&nbsp;13: Campaign Effectiveness
 <li>The average revenue from a response is $100.00.</li>
 </ul>
 <p>In prior campaigns, the average cost was $7.00 per prospect because <em>all</em> prospects were sent direct mail. In this campaign, we are sending direct mail to only a subset of prospects.</p>
-<div id="9cb52094" class="cell" data-execution_count="62">
+<div id="b94c66de" class="cell" data-execution_count="62">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb88"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb88-1"><a href="#cb88-1"></a><span class="kw">def</span> calc_ROI(num_mailed, </span>
@@ -4224,7 +4224,7 @@ Table&nbsp;13: Campaign Effectiveness
 <span id="cb88-10"><a href="#cb88-10"></a>    <span class="cf">return</span> roi</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<div id="5dbde8df" class="cell" data-execution_count="63">
+<div id="49e62ae0" class="cell" data-execution_count="63">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb89"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb89-1"><a href="#cb89-1"></a>roi_control <span class="op">=</span> calc_ROI(num_mailed <span class="op">=</span> <span class="dv">1000</span>,</span>
@@ -4253,7 +4253,7 @@ Treatment Group ROI: 34.39%</code></pre>
 <section id="feature-reduction-methods" class="level1" data-number="20">
 <h1 data-number="20"><span class="header-section-number">20</span> Feature Reduction Methods</h1>
 <p>Up until now, we used only a small subset of the features.</p>
-<div id="730ea84d" class="cell" data-execution_count="64">
+<div id="abe426e6" class="cell" data-execution_count="64">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb91"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb91-1"><a href="#cb91-1"></a>display(subset_cols)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -4269,13 +4269,13 @@ Treatment Group ROI: 34.39%</code></pre>
 </div>
 <p>We will now widen the data frames to include more features, and explore feature reduction methods.</p>
 <p>We need to remove features that are protected by US law.</p>
-<div id="ea4cb0f8" class="cell" data-execution_count="65">
+<div id="20a74763" class="cell" data-execution_count="65">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb93"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb93-1"><a href="#cb93-1"></a>protected_features <span class="op">=</span> [<span class="st">'MARITALSTATUS'</span>, <span class="st">'AGE'</span>, <span class="st">'GENDER'</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<div id="3188c510" class="cell" data-execution_count="66">
+<div id="c2972793" class="cell" data-execution_count="66">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb94"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb94-1"><a href="#cb94-1"></a>train_data_wide <span class="op">=</span> df_campaign_1_train.copy().drop(columns<span class="op">=</span>protected_features)</span>
@@ -4641,7 +4641,7 @@ Table&nbsp;15: First 5 rows of test_data_wide
 <li>Consider each feature independently, potentially missing important feature interactions</li>
 </ul>
 <p>The chunk below creates a scikit-learn pipeline that uses <code>SelectKBest</code> to select the top 10 features based on mutual information. The top 10 features are then used to train an <code>autogluon</code> model.</p>
-<div id="266fc142" class="cell" data-execution_count="69">
+<div id="72cbe548" class="cell" data-execution_count="69">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb97"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb97-1"><a href="#cb97-1"></a><span class="kw">class</span> IndexPreservingSelectKBest(BaseEstimator, TransformerMixin):</span>
@@ -4660,7 +4660,7 @@ Table&nbsp;15: First 5 rows of test_data_wide
 <span id="cb97-14"><a href="#cb97-14"></a>        <span class="cf">return</span> pd.DataFrame(Xt, index<span class="op">=</span>X.index)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<div id="f5fcf8d6" class="cell" data-execution_count="70">
+<div id="1d6e3290" class="cell" data-execution_count="70">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb98"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb98-1"><a href="#cb98-1"></a><span class="co"># remove ag folder if exists</span></span>
@@ -4704,7 +4704,7 @@ Platform Machine:   AMD64
 Platform Version:   10.0.26100
 CPU Count:          20
 Memory Avail:       15.78 GB / 31.75 GB (49.7%)
-Disk Space Avail:   718.40 GB / 951.74 GB (75.5%)
+Disk Space Avail:   711.42 GB / 951.74 GB (74.7%)
 ===================================================
 Presets specified: ['medium_quality']
 Beginning AutoGluon training ... Time limit = 180s
@@ -4717,7 +4717,7 @@ Preprocessing data ...
 Selected class &lt;--&gt; label mapping:  class 1 = 1, class 0 = 0
 Using Feature Generators to preprocess the data ...
 Fitting AutoMLPipelineFeatureGenerator...
-    Available Memory:                    16157.27 MB
+    Available Memory:                    16147.80 MB
     Train Data (Original)  Memory Usage: 20.51 MB (0.1% of available memory)
     Inferring data type of each feature based on column values. Set feature_metadata_in to manually specify special dtypes of the features.
     Stage 1 Generators:
@@ -4759,50 +4759,50 @@ Excluded models: ['KNN', 'NN_TORCH'] (Specified by `excluded_model_types`)
 Fitting 10 L1 models, fit_strategy="sequential" ...
 Fitting model: LightGBMXT ... Training model for up to 179.75s of the 179.75s of remaining time.
     0.7172   = Validation score   (roc_auc)
-    0.96s    = Training   runtime
+    0.98s    = Training   runtime
     0.04s    = Validation runtime
-Fitting model: LightGBM ... Training model for up to 178.72s of the 178.72s of remaining time.
+Fitting model: LightGBM ... Training model for up to 178.70s of the 178.70s of remaining time.
     0.7183   = Validation score   (roc_auc)
-    0.74s    = Training   runtime
+    0.75s    = Training   runtime
     0.03s    = Validation runtime
-Fitting model: RandomForestGini ... Training model for up to 177.93s of the 177.93s of remaining time.
+Fitting model: RandomForestGini ... Training model for up to 177.90s of the 177.90s of remaining time.
     0.6618   = Validation score   (roc_auc)
-    10.84s   = Training   runtime
-    0.25s    = Validation runtime
-Fitting model: RandomForestEntr ... Training model for up to 166.51s of the 166.51s of remaining time.
+    10.96s   = Training   runtime
+    0.26s    = Validation runtime
+Fitting model: RandomForestEntr ... Training model for up to 166.30s of the 166.30s of remaining time.
     0.6624   = Validation score   (roc_auc)
-    10.52s   = Training   runtime
-    0.27s    = Validation runtime
-Fitting model: CatBoost ... Training model for up to 155.32s of the 155.32s of remaining time.
+    10.67s   = Training   runtime
+    0.25s    = Validation runtime
+Fitting model: CatBoost ... Training model for up to 155.01s of the 155.01s of remaining time.
     0.7186   = Validation score   (roc_auc)
-    4.16s    = Training   runtime
+    4.25s    = Training   runtime
     0.01s    = Validation runtime
-Fitting model: ExtraTreesGini ... Training model for up to 151.11s of the 151.10s of remaining time.
+Fitting model: ExtraTreesGini ... Training model for up to 150.71s of the 150.71s of remaining time.
     0.6617   = Validation score   (roc_auc)
-    6.66s    = Training   runtime
-    0.29s    = Validation runtime
-Fitting model: ExtraTreesEntr ... Training model for up to 143.64s of the 143.63s of remaining time.
+    6.68s    = Training   runtime
+    0.3s     = Validation runtime
+Fitting model: ExtraTreesEntr ... Training model for up to 143.24s of the 143.24s of remaining time.
     0.6625   = Validation score   (roc_auc)
-    6.5s     = Training   runtime
-    0.29s    = Validation runtime
-Fitting model: NeuralNetFastAI ... Training model for up to 136.33s of the 136.32s of remaining time.
+    6.59s    = Training   runtime
+    0.3s     = Validation runtime
+Fitting model: NeuralNetFastAI ... Training model for up to 135.85s of the 135.84s of remaining time.
     0.718    = Validation score   (roc_auc)
-    87.75s   = Training   runtime
-    0.21s    = Validation runtime
-Fitting model: XGBoost ... Training model for up to 48.28s of the 48.28s of remaining time.
+    91.06s   = Training   runtime
+    0.22s    = Validation runtime
+Fitting model: XGBoost ... Training model for up to 44.47s of the 44.47s of remaining time.
     0.7158   = Validation score   (roc_auc)
-    0.76s    = Training   runtime
+    0.78s    = Training   runtime
     0.03s    = Validation runtime
-Fitting model: LightGBMLarge ... Training model for up to 47.48s of the 47.48s of remaining time.
+Fitting model: LightGBMLarge ... Training model for up to 43.64s of the 43.64s of remaining time.
     0.7156   = Validation score   (roc_auc)
-    1.11s    = Training   runtime
+    1.2s     = Training   runtime
     0.04s    = Validation runtime
-Fitting model: WeightedEnsemble_L2 ... Training model for up to 179.75s of the 46.29s of remaining time.
+Fitting model: WeightedEnsemble_L2 ... Training model for up to 179.75s of the 42.37s of remaining time.
     Ensemble Weights: {'CatBoost': 0.75, 'LightGBM': 0.15, 'XGBoost': 0.05, 'LightGBMLarge': 0.05}
     0.7187   = Validation score   (roc_auc)
-    1.02s    = Training   runtime
-    0.0s     = Validation runtime
-AutoGluon training complete, total runtime = 134.84s ... Best model: WeightedEnsemble_L2 | Estimated inference throughput: 516698.0 rows/s (53763 batch size)
+    1.05s    = Training   runtime
+    0.01s    = Validation runtime
+AutoGluon training complete, total runtime = 138.79s ... Best model: WeightedEnsemble_L2 | Estimated inference throughput: 479545.0 rows/s (53763 batch size)
 TabularPredictor saved. To load, use: predictor = TabularPredictor.load("C:\Users\chiuw\Dropbox\_Teaching\Northwestern MLDS\Interpretable ML for Finance\IML4Finance\Lectures\Lab01_ag_models_FilterMethod")</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="70">
@@ -5211,12 +5211,12 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
   background-color: var(--sklearn-color-fitted-level-3);
 }
 </style><div id="sk-container-id-3" class="sk-top-container"><div class="sk-text-repr-fallback"><pre>Pipeline(steps=[('replace_values',
-                 FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)),
+                 FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)),
                 ('ordinal_encoder',
                  ColumnTransformer(remainder='passthrough',
                                    transformers=[('ordinalencoder',
                                                   OrdinalEncoder(),
-                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001492933A980&gt;)])),
+                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE17FCB160&gt;)])),
                 ('feature_selection', IndexPreservingSelectKBest()),
                 ('autogluon',
                  AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN',
@@ -5228,12 +5228,12 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                          predictor_args={'eval_metric': 'roc_auc',
                                                          'path': 'Lab01_ag_models_FilterMethod',
                                                          'problem_type': 'binary'}))])</pre><b>In a Jupyter environment, please rerun this cell to show the HTML representation or trust the notebook. <br>On GitHub, the HTML representation is unable to render, please try loading this page with nbviewer.org.</b></div><div class="sk-container" hidden=""><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-8" type="checkbox"><label for="sk-estimator-id-8" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;&nbsp;Pipeline<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.pipeline.Pipeline.html">?<span>Documentation for Pipeline</span></a><span class="sk-estimator-doc-link fitted">i<span>Fitted</span></span></label><div class="sk-toggleable__content fitted"><pre>Pipeline(steps=[('replace_values',
-                 FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)),
+                 FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)),
                 ('ordinal_encoder',
                  ColumnTransformer(remainder='passthrough',
                                    transformers=[('ordinalencoder',
                                                   OrdinalEncoder(),
-                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001492933A980&gt;)])),
+                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE17FCB160&gt;)])),
                 ('feature_selection', IndexPreservingSelectKBest()),
                 ('autogluon',
                  AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN',
@@ -5244,9 +5244,9 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                          label='response_flag',
                                          predictor_args={'eval_metric': 'roc_auc',
                                                          'path': 'Lab01_ag_models_FilterMethod',
-                                                         'problem_type': 'binary'}))])</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-9" type="checkbox"><label for="sk-estimator-id-9" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;FunctionTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.FunctionTransformer.html">?<span>Documentation for FunctionTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)</pre></div> </div></div><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-10" type="checkbox"><label for="sk-estimator-id-10" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;ordinal_encoder: ColumnTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.compose.ColumnTransformer.html">?<span>Documentation for ordinal_encoder: ColumnTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>ColumnTransformer(remainder='passthrough',
+                                                         'problem_type': 'binary'}))])</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-9" type="checkbox"><label for="sk-estimator-id-9" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;FunctionTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.FunctionTransformer.html">?<span>Documentation for FunctionTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)</pre></div> </div></div><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-10" type="checkbox"><label for="sk-estimator-id-10" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;ordinal_encoder: ColumnTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.compose.ColumnTransformer.html">?<span>Documentation for ordinal_encoder: ColumnTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>ColumnTransformer(remainder='passthrough',
                   transformers=[('ordinalencoder', OrdinalEncoder(),
-                                 &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001492933A980&gt;)])</pre></div> </div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-11" type="checkbox"><label for="sk-estimator-id-11" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">ordinalencoder</label><div class="sk-toggleable__content fitted"><pre>&lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001492933A980&gt;</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-12" type="checkbox"><label for="sk-estimator-id-12" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;OrdinalEncoder<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.OrdinalEncoder.html">?<span>Documentation for OrdinalEncoder</span></a></label><div class="sk-toggleable__content fitted"><pre>OrdinalEncoder()</pre></div> </div></div></div></div></div><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-13" type="checkbox"><label for="sk-estimator-id-13" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">remainder</label><div class="sk-toggleable__content fitted"><pre>['time_since_recent_payment', 'time_since_first_deliquency', 'time_since_recent_deliquency', 'num_times_delinquent', 'max_delinquency_level', 'max_recent_level_of_deliq', 'num_deliq_6mts', 'num_deliq_12mts', 'num_deliq_6_12mts', 'max_deliq_6mts', 'max_deliq_12mts', 'num_times_30p_dpd', 'num_times_60p_dpd', 'num_std', 'num_std_6mts', 'num_std_12mts', 'num_sub', 'num_sub_6mts', 'num_sub_12mts', 'num_dbt', 'num_dbt_6mts', 'num_dbt_12mts', 'num_lss', 'num_lss_6mts', 'num_lss_12mts', 'recent_level_of_deliq', 'tot_enq', 'CC_enq', 'CC_enq_L6m', 'CC_enq_L12m', 'PL_enq', 'PL_enq_L6m', 'PL_enq_L12m', 'time_since_recent_enq', 'enq_L12m', 'enq_L6m', 'enq_L3m', 'NETMONTHLYINCOME', 'Time_With_Curr_Empr', 'pct_of_active_TLs_ever', 'pct_opened_TLs_L6m_of_L12m', 'pct_currentBal_all_TL', 'CC_utilization', 'CC_Flag', 'PL_utilization', 'PL_Flag', 'pct_PL_enq_L6m_of_L12m', 'pct_CC_enq_L6m_of_L12m', 'pct_PL_enq_L6m_of_ever', 'pct_CC_enq_L6m_of_ever', 'max_unsec_exposure_inPct', 'HL_Flag', 'GL_Flag', 'Credit_Score', 'Total_TL', 'Tot_Closed_TL', 'Tot_Active_TL', 'Total_TL_opened_L6M', 'Tot_TL_closed_L6M', 'pct_tl_open_L6M', 'pct_tl_closed_L6M', 'pct_active_tl', 'pct_closed_tl', 'Total_TL_opened_L12M', 'Tot_TL_closed_L12M', 'pct_tl_open_L12M', 'pct_tl_closed_L12M', 'Tot_Missed_Pmnt', 'Auto_TL', 'CC_TL', 'Consumer_TL', 'Gold_TL', 'Home_TL', 'PL_TL', 'Secured_TL', 'Unsecured_TL', 'Other_TL', 'Age_Oldest_TL', 'Age_Newest_TL']</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-14" type="checkbox"><label for="sk-estimator-id-14" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">passthrough</label><div class="sk-toggleable__content fitted"><pre>passthrough</pre></div> </div></div></div></div></div></div></div><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-15" type="checkbox"><label for="sk-estimator-id-15" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">IndexPreservingSelectKBest</label><div class="sk-toggleable__content fitted"><pre>IndexPreservingSelectKBest()</pre></div> </div></div><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-16" type="checkbox"><label for="sk-estimator-id-16" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">AutoGluonSklearnWrapper</label><div class="sk-toggleable__content fitted"><pre>AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN', 'NN_TORCH'],
+                                 &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE17FCB160&gt;)])</pre></div> </div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-11" type="checkbox"><label for="sk-estimator-id-11" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">ordinalencoder</label><div class="sk-toggleable__content fitted"><pre>&lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE17FCB160&gt;</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-12" type="checkbox"><label for="sk-estimator-id-12" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;OrdinalEncoder<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.OrdinalEncoder.html">?<span>Documentation for OrdinalEncoder</span></a></label><div class="sk-toggleable__content fitted"><pre>OrdinalEncoder()</pre></div> </div></div></div></div></div><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-13" type="checkbox"><label for="sk-estimator-id-13" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">remainder</label><div class="sk-toggleable__content fitted"><pre>['time_since_recent_payment', 'time_since_first_deliquency', 'time_since_recent_deliquency', 'num_times_delinquent', 'max_delinquency_level', 'max_recent_level_of_deliq', 'num_deliq_6mts', 'num_deliq_12mts', 'num_deliq_6_12mts', 'max_deliq_6mts', 'max_deliq_12mts', 'num_times_30p_dpd', 'num_times_60p_dpd', 'num_std', 'num_std_6mts', 'num_std_12mts', 'num_sub', 'num_sub_6mts', 'num_sub_12mts', 'num_dbt', 'num_dbt_6mts', 'num_dbt_12mts', 'num_lss', 'num_lss_6mts', 'num_lss_12mts', 'recent_level_of_deliq', 'tot_enq', 'CC_enq', 'CC_enq_L6m', 'CC_enq_L12m', 'PL_enq', 'PL_enq_L6m', 'PL_enq_L12m', 'time_since_recent_enq', 'enq_L12m', 'enq_L6m', 'enq_L3m', 'NETMONTHLYINCOME', 'Time_With_Curr_Empr', 'pct_of_active_TLs_ever', 'pct_opened_TLs_L6m_of_L12m', 'pct_currentBal_all_TL', 'CC_utilization', 'CC_Flag', 'PL_utilization', 'PL_Flag', 'pct_PL_enq_L6m_of_L12m', 'pct_CC_enq_L6m_of_L12m', 'pct_PL_enq_L6m_of_ever', 'pct_CC_enq_L6m_of_ever', 'max_unsec_exposure_inPct', 'HL_Flag', 'GL_Flag', 'Credit_Score', 'Total_TL', 'Tot_Closed_TL', 'Tot_Active_TL', 'Total_TL_opened_L6M', 'Tot_TL_closed_L6M', 'pct_tl_open_L6M', 'pct_tl_closed_L6M', 'pct_active_tl', 'pct_closed_tl', 'Total_TL_opened_L12M', 'Tot_TL_closed_L12M', 'pct_tl_open_L12M', 'pct_tl_closed_L12M', 'Tot_Missed_Pmnt', 'Auto_TL', 'CC_TL', 'Consumer_TL', 'Gold_TL', 'Home_TL', 'PL_TL', 'Secured_TL', 'Unsecured_TL', 'Other_TL', 'Age_Oldest_TL', 'Age_Newest_TL']</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-14" type="checkbox"><label for="sk-estimator-id-14" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">passthrough</label><div class="sk-toggleable__content fitted"><pre>passthrough</pre></div> </div></div></div></div></div></div></div><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-15" type="checkbox"><label for="sk-estimator-id-15" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">IndexPreservingSelectKBest</label><div class="sk-toggleable__content fitted"><pre>IndexPreservingSelectKBest()</pre></div> </div></div><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-16" type="checkbox"><label for="sk-estimator-id-16" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">AutoGluonSklearnWrapper</label><div class="sk-toggleable__content fitted"><pre>AutoGluonSklearnWrapper(fit_args={'excluded_model_types': ['KNN', 'NN_TORCH'],
                                   'holdout_frac': 0.2,
                                   'presets': 'medium_quality',
                                   'time_limit': 180},
@@ -5257,7 +5257,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
 </div>
 </div>
 <p>Check leaderboard using the test set.</p>
-<div id="52e76828" class="cell" data-execution_count="71">
+<div id="5043739b" class="cell" data-execution_count="71">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb100"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb100-1"><a href="#cb100-1"></a>preprocessed_test_data <span class="op">=</span> ag_model_filter_method[:<span class="op">-</span><span class="dv">1</span>].transform(test_data_wide)</span>
@@ -5308,12 +5308,12 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <td>0.720230</td>
 <td>0.718564</td>
 <td>roc_auc</td>
-<td>0.038993</td>
-<td>0.006984</td>
-<td>4.163218</td>
-<td>0.038993</td>
-<td>0.006984</td>
-<td>4.163218</td>
+<td>0.041703</td>
+<td>0.006527</td>
+<td>4.252187</td>
+<td>0.041703</td>
+<td>0.006527</td>
+<td>4.252187</td>
 <td>1</td>
 <td>True</td>
 <td>5</td>
@@ -5324,12 +5324,12 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <td>0.719836</td>
 <td>0.717213</td>
 <td>roc_auc</td>
-<td>0.068045</td>
-<td>0.039451</td>
-<td>0.962351</td>
-<td>0.068045</td>
-<td>0.039451</td>
-<td>0.962351</td>
+<td>0.068526</td>
+<td>0.035529</td>
+<td>0.983493</td>
+<td>0.068526</td>
+<td>0.035529</td>
+<td>0.983493</td>
 <td>1</td>
 <td>True</td>
 <td>1</td>
@@ -5340,12 +5340,12 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <td>0.719620</td>
 <td>0.718724</td>
 <td>roc_auc</td>
-<td>0.213670</td>
-<td>0.104051</td>
-<td>7.793194</td>
-<td>0.006510</td>
-<td>0.004000</td>
-<td>1.015535</td>
+<td>0.224832</td>
+<td>0.112113</td>
+<td>8.022699</td>
+<td>0.006000</td>
+<td>0.005014</td>
+<td>1.048325</td>
 <td>2</td>
 <td>True</td>
 <td>11</td>
@@ -5356,12 +5356,12 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <td>0.717953</td>
 <td>0.718038</td>
 <td>roc_auc</td>
-<td>0.527864</td>
-<td>0.211341</td>
-<td>87.748585</td>
-<td>0.527864</td>
-<td>0.211341</td>
-<td>87.748585</td>
+<td>0.634407</td>
+<td>0.223670</td>
+<td>91.064851</td>
+<td>0.634407</td>
+<td>0.223670</td>
+<td>91.064851</td>
 <td>1</td>
 <td>True</td>
 <td>8</td>
@@ -5372,12 +5372,12 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <td>0.716750</td>
 <td>0.718267</td>
 <td>roc_auc</td>
-<td>0.047538</td>
-<td>0.029024</td>
-<td>0.738956</td>
-<td>0.047538</td>
-<td>0.029024</td>
-<td>0.738956</td>
+<td>0.046036</td>
+<td>0.033022</td>
+<td>0.746693</td>
+<td>0.046036</td>
+<td>0.033022</td>
+<td>0.746693</td>
 <td>1</td>
 <td>True</td>
 <td>2</td>
@@ -5388,12 +5388,12 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <td>0.715318</td>
 <td>0.715768</td>
 <td>roc_auc</td>
-<td>0.057091</td>
-<td>0.026020</td>
-<td>0.760501</td>
-<td>0.057091</td>
-<td>0.026020</td>
-<td>0.760501</td>
+<td>0.064025</td>
+<td>0.028524</td>
+<td>0.777828</td>
+<td>0.064025</td>
+<td>0.028524</td>
+<td>0.777828</td>
 <td>1</td>
 <td>True</td>
 <td>9</td>
@@ -5404,12 +5404,12 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <td>0.713290</td>
 <td>0.715587</td>
 <td>roc_auc</td>
-<td>0.063538</td>
-<td>0.038024</td>
-<td>1.114983</td>
-<td>0.063538</td>
-<td>0.038024</td>
-<td>1.114983</td>
+<td>0.067067</td>
+<td>0.039026</td>
+<td>1.197666</td>
+<td>0.067067</td>
+<td>0.039026</td>
+<td>1.197666</td>
 <td>1</td>
 <td>True</td>
 <td>10</td>
@@ -5420,12 +5420,12 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <td>0.645518</td>
 <td>0.662506</td>
 <td>roc_auc</td>
-<td>0.930808</td>
-<td>0.293145</td>
-<td>6.504249</td>
-<td>0.930808</td>
-<td>0.293145</td>
-<td>6.504249</td>
+<td>0.971887</td>
+<td>0.295413</td>
+<td>6.591203</td>
+<td>0.971887</td>
+<td>0.295413</td>
+<td>6.591203</td>
 <td>1</td>
 <td>True</td>
 <td>7</td>
@@ -5436,12 +5436,12 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <td>0.645466</td>
 <td>0.661684</td>
 <td>roc_auc</td>
-<td>0.880269</td>
-<td>0.294198</td>
-<td>6.660646</td>
-<td>0.880269</td>
-<td>0.294198</td>
-<td>6.660646</td>
+<td>0.881112</td>
+<td>0.296953</td>
+<td>6.675095</td>
+<td>0.881112</td>
+<td>0.296953</td>
+<td>6.675095</td>
 <td>1</td>
 <td>True</td>
 <td>6</td>
@@ -5452,12 +5452,12 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <td>0.645197</td>
 <td>0.662392</td>
 <td>roc_auc</td>
-<td>0.728875</td>
-<td>0.266152</td>
-<td>10.520988</td>
-<td>0.728875</td>
-<td>0.266152</td>
-<td>10.520988</td>
+<td>0.732455</td>
+<td>0.250742</td>
+<td>10.666864</td>
+<td>0.732455</td>
+<td>0.250742</td>
+<td>10.666864</td>
 <td>1</td>
 <td>True</td>
 <td>4</td>
@@ -5468,12 +5468,12 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <td>0.644779</td>
 <td>0.661831</td>
 <td>roc_auc</td>
-<td>0.730878</td>
-<td>0.248984</td>
-<td>10.840955</td>
-<td>0.730878</td>
-<td>0.248984</td>
-<td>10.840955</td>
+<td>0.761970</td>
+<td>0.264963</td>
+<td>10.964299</td>
+<td>0.761970</td>
+<td>0.264963</td>
+<td>10.964299</td>
 <td>1</td>
 <td>True</td>
 <td>3</td>
@@ -5488,7 +5488,7 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 </div>
 </div>
 <p>Check permutation feature importance on the test set.</p>
-<div id="81156b79" class="cell" data-execution_count="73">
+<div id="d1ca0a59" class="cell" data-execution_count="73">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb102"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb102-1"><a href="#cb102-1"></a>best_feature_importance_filter <span class="op">=</span> (ag_model_filter_method</span>
@@ -5503,7 +5503,7 @@ Table&nbsp;16: Autogluon Leaderboard (Filter-based Method)
 <div class="cell-output cell-output-stderr">
 <pre><code>Computing feature importance via permutation shuffling for 10 features using 115206 rows with 5 shuffle sets...
     1.35s   = Expected runtime (0.27s per shuffle set)
-    1.07s   = Actual runtime (Completed 5 of 5 shuffle sets)</code></pre>
+    1.17s   = Actual runtime (Completed 5 of 5 shuffle sets)</code></pre>
 </div>
 </div>
 <div class="cell" data-tbl-number="true" data-execution_count="74">
@@ -5644,7 +5644,7 @@ Table&nbsp;17: Permutation Feature Importance (Filter-based Method)
 <li>Examples: L1 regularization (Lasso), tree-based importance measures</li>
 </ul>
 <p>The chunk below creates a scikit-learn pipeline that uses <code>SelectFromModel</code> and the <code>ExtraTreesClassifier</code> to select the top features. The top features are then used to train an <code>autogluon</code> model.</p>
-<div id="b7d1c660" class="cell" data-execution_count="75">
+<div id="db039113" class="cell" data-execution_count="75">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb105"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb105-1"><a href="#cb105-1"></a><span class="co"># remove ag folder if exists</span></span>
@@ -5687,8 +5687,8 @@ Operating System:   Windows
 Platform Machine:   AMD64
 Platform Version:   10.0.26100
 CPU Count:          20
-Memory Avail:       16.02 GB / 31.75 GB (50.4%)
-Disk Space Avail:   717.51 GB / 951.74 GB (75.4%)
+Memory Avail:       16.68 GB / 31.75 GB (52.5%)
+Disk Space Avail:   710.74 GB / 951.74 GB (74.7%)
 ===================================================
 Presets specified: ['medium_quality']
 Beginning AutoGluon training ... Time limit = 180s
@@ -5701,7 +5701,7 @@ Preprocessing data ...
 Selected class &lt;--&gt; label mapping:  class 1 = 1, class 0 = 0
 Using Feature Generators to preprocess the data ...
 Fitting AutoMLPipelineFeatureGenerator...
-    Available Memory:                    16405.92 MB
+    Available Memory:                    17044.26 MB
     Train Data (Original)  Memory Usage: 38.97 MB (0.2% of available memory)
     Inferring data type of each feature based on column values. Set feature_metadata_in to manually specify special dtypes of the features.
     Stage 1 Generators:
@@ -5725,7 +5725,7 @@ Fitting AutoMLPipelineFeatureGenerator...
     0.3s = Fit runtime
     19 features in original data used to generate 19 features in processed data.
     Train Data (Processed) Memory Usage: 35.38 MB (0.2% of available memory)
-Data preprocessing and feature engineering runtime = 0.34s ...
+Data preprocessing and feature engineering runtime = 0.37s ...
 AutoGluon will gauge predictive performance using evaluation metric: 'roc_auc'
     This metric expects predicted probabilities rather than predicted class labels, so you'll need to use predict_proba() instead of predict()
     To change this, specify the eval_metric parameter of Predictor()
@@ -5743,52 +5743,52 @@ User-specified model hyperparameters to be fit:
 }
 Excluded models: ['KNN', 'NN_TORCH'] (Specified by `excluded_model_types`)
 Fitting 10 L1 models, fit_strategy="sequential" ...
-Fitting model: LightGBMXT ... Training model for up to 179.66s of the 179.66s of remaining time.
+Fitting model: LightGBMXT ... Training model for up to 179.63s of the 179.63s of remaining time.
     0.7174   = Validation score   (roc_auc)
+    0.92s    = Training   runtime
+    0.03s    = Validation runtime
+Fitting model: LightGBM ... Training model for up to 178.65s of the 178.65s of remaining time.
+    0.7189   = Validation score   (roc_auc)
     0.86s    = Training   runtime
     0.03s    = Validation runtime
-Fitting model: LightGBM ... Training model for up to 178.75s of the 178.75s of remaining time.
-    0.7189   = Validation score   (roc_auc)
-    0.8s     = Training   runtime
-    0.03s    = Validation runtime
-Fitting model: RandomForestGini ... Training model for up to 177.90s of the 177.90s of remaining time.
+Fitting model: RandomForestGini ... Training model for up to 177.74s of the 177.74s of remaining time.
     0.6581   = Validation score   (roc_auc)
-    11.41s   = Training   runtime
+    11.62s   = Training   runtime
     0.22s    = Validation runtime
-Fitting model: RandomForestEntr ... Training model for up to 165.96s of the 165.95s of remaining time.
+Fitting model: RandomForestEntr ... Training model for up to 165.57s of the 165.56s of remaining time.
     0.6585   = Validation score   (roc_auc)
-    11.25s   = Training   runtime
+    11.2s    = Training   runtime
     0.2s     = Validation runtime
-Fitting model: CatBoost ... Training model for up to 154.20s of the 154.20s of remaining time.
+Fitting model: CatBoost ... Training model for up to 153.80s of the 153.79s of remaining time.
     0.7181   = Validation score   (roc_auc)
-    3.9s     = Training   runtime
+    4.0s     = Training   runtime
     0.01s    = Validation runtime
-Fitting model: ExtraTreesGini ... Training model for up to 150.25s of the 150.25s of remaining time.
+Fitting model: ExtraTreesGini ... Training model for up to 149.76s of the 149.76s of remaining time.
     0.6584   = Validation score   (roc_auc)
-    8.09s    = Training   runtime
+    8.18s    = Training   runtime
     0.23s    = Validation runtime
-Fitting model: ExtraTreesEntr ... Training model for up to 141.56s of the 141.56s of remaining time.
+Fitting model: ExtraTreesEntr ... Training model for up to 140.99s of the 140.99s of remaining time.
     0.6584   = Validation score   (roc_auc)
-    8.14s    = Training   runtime
-    0.23s    = Validation runtime
-Fitting model: NeuralNetFastAI ... Training model for up to 132.85s of the 132.85s of remaining time.
+    8.18s    = Training   runtime
+    0.25s    = Validation runtime
+Fitting model: NeuralNetFastAI ... Training model for up to 132.19s of the 132.19s of remaining time.
     0.7182   = Validation score   (roc_auc)
-    89.79s   = Training   runtime
-    0.22s    = Validation runtime
-Fitting model: XGBoost ... Training model for up to 42.77s of the 42.77s of remaining time.
+    91.9s    = Training   runtime
+    0.23s    = Validation runtime
+Fitting model: XGBoost ... Training model for up to 39.98s of the 39.98s of remaining time.
     0.7176   = Validation score   (roc_auc)
-    6.66s    = Training   runtime
-    0.03s    = Validation runtime
-Fitting model: LightGBMLarge ... Training model for up to 36.05s of the 36.05s of remaining time.
-    0.7153   = Validation score   (roc_auc)
-    1.32s    = Training   runtime
+    6.35s    = Training   runtime
     0.04s    = Validation runtime
-Fitting model: WeightedEnsemble_L2 ... Training model for up to 179.66s of the 34.66s of remaining time.
+Fitting model: LightGBMLarge ... Training model for up to 33.58s of the 33.57s of remaining time.
+    0.7153   = Validation score   (roc_auc)
+    1.35s    = Training   runtime
+    0.04s    = Validation runtime
+Fitting model: WeightedEnsemble_L2 ... Training model for up to 179.63s of the 32.15s of remaining time.
     Ensemble Weights: {'CatBoost': 0.333, 'XGBoost': 0.333, 'LightGBM': 0.25, 'LightGBMLarge': 0.083}
     0.72     = Validation score   (roc_auc)
-    0.95s    = Training   runtime
+    1.0s     = Training   runtime
     0.0s     = Validation runtime
-AutoGluon training complete, total runtime = 146.42s ... Best model: WeightedEnsemble_L2 | Estimated inference throughput: 497358.5 rows/s (53763 batch size)
+AutoGluon training complete, total runtime = 148.99s ... Best model: WeightedEnsemble_L2 | Estimated inference throughput: 465948.1 rows/s (53763 batch size)
 TabularPredictor saved. To load, use: predictor = TabularPredictor.load("C:\Users\chiuw\Dropbox\_Teaching\Northwestern MLDS\Interpretable ML for Finance\IML4Finance\Lectures\Lab01_ag_models_EmbeddedMethod")</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="75">
@@ -6197,12 +6197,12 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
   background-color: var(--sklearn-color-fitted-level-3);
 }
 </style><div id="sk-container-id-4" class="sk-top-container"><div class="sk-text-repr-fallback"><pre>Pipeline(steps=[('replace_values',
-                 FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)),
+                 FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)),
                 ('ordinal_encoder',
                  ColumnTransformer(remainder='passthrough',
                                    transformers=[('ordinalencoder',
                                                   OrdinalEncoder(),
-                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001492C908D60&gt;)])),
+                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE182187C0&gt;)])),
                 ('feature_selection',
                  SelectFromModel(estimator=...entropy',
                                                                 max_depth=3,
@@ -6219,12 +6219,12 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                          predictor_args={'eval_metric': 'roc_auc',
                                                          'path': 'Lab01_ag_models_EmbeddedMethod',
                                                          'problem_type': 'binary'}))])</pre><b>In a Jupyter environment, please rerun this cell to show the HTML representation or trust the notebook. <br>On GitHub, the HTML representation is unable to render, please try loading this page with nbviewer.org.</b></div><div class="sk-container" hidden=""><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-17" type="checkbox"><label for="sk-estimator-id-17" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;&nbsp;Pipeline<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.pipeline.Pipeline.html">?<span>Documentation for Pipeline</span></a><span class="sk-estimator-doc-link fitted">i<span>Fitted</span></span></label><div class="sk-toggleable__content fitted"><pre>Pipeline(steps=[('replace_values',
-                 FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)),
+                 FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)),
                 ('ordinal_encoder',
                  ColumnTransformer(remainder='passthrough',
                                    transformers=[('ordinalencoder',
                                                   OrdinalEncoder(),
-                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001492C908D60&gt;)])),
+                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE182187C0&gt;)])),
                 ('feature_selection',
                  SelectFromModel(estimator=...entropy',
                                                                 max_depth=3,
@@ -6240,9 +6240,9 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                          label='response_flag',
                                          predictor_args={'eval_metric': 'roc_auc',
                                                          'path': 'Lab01_ag_models_EmbeddedMethod',
-                                                         'problem_type': 'binary'}))])</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-18" type="checkbox"><label for="sk-estimator-id-18" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;FunctionTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.FunctionTransformer.html">?<span>Documentation for FunctionTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)</pre></div> </div></div><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-19" type="checkbox"><label for="sk-estimator-id-19" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;ordinal_encoder: ColumnTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.compose.ColumnTransformer.html">?<span>Documentation for ordinal_encoder: ColumnTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>ColumnTransformer(remainder='passthrough',
+                                                         'problem_type': 'binary'}))])</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-18" type="checkbox"><label for="sk-estimator-id-18" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;FunctionTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.FunctionTransformer.html">?<span>Documentation for FunctionTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)</pre></div> </div></div><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-19" type="checkbox"><label for="sk-estimator-id-19" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;ordinal_encoder: ColumnTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.compose.ColumnTransformer.html">?<span>Documentation for ordinal_encoder: ColumnTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>ColumnTransformer(remainder='passthrough',
                   transformers=[('ordinalencoder', OrdinalEncoder(),
-                                 &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001492C908D60&gt;)])</pre></div> </div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-20" type="checkbox"><label for="sk-estimator-id-20" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">ordinalencoder</label><div class="sk-toggleable__content fitted"><pre>&lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001492C908D60&gt;</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-21" type="checkbox"><label for="sk-estimator-id-21" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;OrdinalEncoder<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.OrdinalEncoder.html">?<span>Documentation for OrdinalEncoder</span></a></label><div class="sk-toggleable__content fitted"><pre>OrdinalEncoder()</pre></div> </div></div></div></div></div><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-22" type="checkbox"><label for="sk-estimator-id-22" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">remainder</label><div class="sk-toggleable__content fitted"><pre>['time_since_recent_payment', 'time_since_first_deliquency', 'time_since_recent_deliquency', 'num_times_delinquent', 'max_delinquency_level', 'max_recent_level_of_deliq', 'num_deliq_6mts', 'num_deliq_12mts', 'num_deliq_6_12mts', 'max_deliq_6mts', 'max_deliq_12mts', 'num_times_30p_dpd', 'num_times_60p_dpd', 'num_std', 'num_std_6mts', 'num_std_12mts', 'num_sub', 'num_sub_6mts', 'num_sub_12mts', 'num_dbt', 'num_dbt_6mts', 'num_dbt_12mts', 'num_lss', 'num_lss_6mts', 'num_lss_12mts', 'recent_level_of_deliq', 'tot_enq', 'CC_enq', 'CC_enq_L6m', 'CC_enq_L12m', 'PL_enq', 'PL_enq_L6m', 'PL_enq_L12m', 'time_since_recent_enq', 'enq_L12m', 'enq_L6m', 'enq_L3m', 'NETMONTHLYINCOME', 'Time_With_Curr_Empr', 'pct_of_active_TLs_ever', 'pct_opened_TLs_L6m_of_L12m', 'pct_currentBal_all_TL', 'CC_utilization', 'CC_Flag', 'PL_utilization', 'PL_Flag', 'pct_PL_enq_L6m_of_L12m', 'pct_CC_enq_L6m_of_L12m', 'pct_PL_enq_L6m_of_ever', 'pct_CC_enq_L6m_of_ever', 'max_unsec_exposure_inPct', 'HL_Flag', 'GL_Flag', 'Credit_Score', 'Total_TL', 'Tot_Closed_TL', 'Tot_Active_TL', 'Total_TL_opened_L6M', 'Tot_TL_closed_L6M', 'pct_tl_open_L6M', 'pct_tl_closed_L6M', 'pct_active_tl', 'pct_closed_tl', 'Total_TL_opened_L12M', 'Tot_TL_closed_L12M', 'pct_tl_open_L12M', 'pct_tl_closed_L12M', 'Tot_Missed_Pmnt', 'Auto_TL', 'CC_TL', 'Consumer_TL', 'Gold_TL', 'Home_TL', 'PL_TL', 'Secured_TL', 'Unsecured_TL', 'Other_TL', 'Age_Oldest_TL', 'Age_Newest_TL']</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-23" type="checkbox"><label for="sk-estimator-id-23" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">passthrough</label><div class="sk-toggleable__content fitted"><pre>passthrough</pre></div> </div></div></div></div></div></div></div><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-24" type="checkbox"><label for="sk-estimator-id-24" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;feature_selection: SelectFromModel<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.feature_selection.SelectFromModel.html">?<span>Documentation for feature_selection: SelectFromModel</span></a></label><div class="sk-toggleable__content fitted"><pre>SelectFromModel(estimator=ExtraTreesClassifier(criterion='entropy', max_depth=3,
+                                 &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE182187C0&gt;)])</pre></div> </div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-20" type="checkbox"><label for="sk-estimator-id-20" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">ordinalencoder</label><div class="sk-toggleable__content fitted"><pre>&lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE182187C0&gt;</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-21" type="checkbox"><label for="sk-estimator-id-21" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;OrdinalEncoder<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.OrdinalEncoder.html">?<span>Documentation for OrdinalEncoder</span></a></label><div class="sk-toggleable__content fitted"><pre>OrdinalEncoder()</pre></div> </div></div></div></div></div><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-22" type="checkbox"><label for="sk-estimator-id-22" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">remainder</label><div class="sk-toggleable__content fitted"><pre>['time_since_recent_payment', 'time_since_first_deliquency', 'time_since_recent_deliquency', 'num_times_delinquent', 'max_delinquency_level', 'max_recent_level_of_deliq', 'num_deliq_6mts', 'num_deliq_12mts', 'num_deliq_6_12mts', 'max_deliq_6mts', 'max_deliq_12mts', 'num_times_30p_dpd', 'num_times_60p_dpd', 'num_std', 'num_std_6mts', 'num_std_12mts', 'num_sub', 'num_sub_6mts', 'num_sub_12mts', 'num_dbt', 'num_dbt_6mts', 'num_dbt_12mts', 'num_lss', 'num_lss_6mts', 'num_lss_12mts', 'recent_level_of_deliq', 'tot_enq', 'CC_enq', 'CC_enq_L6m', 'CC_enq_L12m', 'PL_enq', 'PL_enq_L6m', 'PL_enq_L12m', 'time_since_recent_enq', 'enq_L12m', 'enq_L6m', 'enq_L3m', 'NETMONTHLYINCOME', 'Time_With_Curr_Empr', 'pct_of_active_TLs_ever', 'pct_opened_TLs_L6m_of_L12m', 'pct_currentBal_all_TL', 'CC_utilization', 'CC_Flag', 'PL_utilization', 'PL_Flag', 'pct_PL_enq_L6m_of_L12m', 'pct_CC_enq_L6m_of_L12m', 'pct_PL_enq_L6m_of_ever', 'pct_CC_enq_L6m_of_ever', 'max_unsec_exposure_inPct', 'HL_Flag', 'GL_Flag', 'Credit_Score', 'Total_TL', 'Tot_Closed_TL', 'Tot_Active_TL', 'Total_TL_opened_L6M', 'Tot_TL_closed_L6M', 'pct_tl_open_L6M', 'pct_tl_closed_L6M', 'pct_active_tl', 'pct_closed_tl', 'Total_TL_opened_L12M', 'Tot_TL_closed_L12M', 'pct_tl_open_L12M', 'pct_tl_closed_L12M', 'Tot_Missed_Pmnt', 'Auto_TL', 'CC_TL', 'Consumer_TL', 'Gold_TL', 'Home_TL', 'PL_TL', 'Secured_TL', 'Unsecured_TL', 'Other_TL', 'Age_Oldest_TL', 'Age_Newest_TL']</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-23" type="checkbox"><label for="sk-estimator-id-23" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">passthrough</label><div class="sk-toggleable__content fitted"><pre>passthrough</pre></div> </div></div></div></div></div></div></div><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-24" type="checkbox"><label for="sk-estimator-id-24" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;feature_selection: SelectFromModel<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.feature_selection.SelectFromModel.html">?<span>Documentation for feature_selection: SelectFromModel</span></a></label><div class="sk-toggleable__content fitted"><pre>SelectFromModel(estimator=ExtraTreesClassifier(criterion='entropy', max_depth=3,
                                                n_jobs=-1, random_state=2025),
                 threshold=0.01)</pre></div> </div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-25" type="checkbox"><label for="sk-estimator-id-25" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">estimator: ExtraTreesClassifier</label><div class="sk-toggleable__content fitted"><pre>ExtraTreesClassifier(criterion='entropy', max_depth=3, n_jobs=-1,
                      random_state=2025)</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-26" type="checkbox"><label for="sk-estimator-id-26" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;ExtraTreesClassifier<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.ensemble.ExtraTreesClassifier.html">?<span>Documentation for ExtraTreesClassifier</span></a></label><div class="sk-toggleable__content fitted"><pre>ExtraTreesClassifier(criterion='entropy', max_depth=3, n_jobs=-1,
@@ -6257,7 +6257,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
 </div>
 </div>
 <p>Check leaderboard using the test set.</p>
-<div id="65fd51ea" class="cell" data-execution_count="76">
+<div id="12bafb79" class="cell" data-execution_count="76">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb107"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb107-1"><a href="#cb107-1"></a>preprocessed_test_data_embedded <span class="op">=</span> ag_model_embedded_method[:<span class="op">-</span><span class="dv">1</span>].transform(test_data_wide.drop(columns<span class="op">=</span>[label]))</span>
@@ -6307,12 +6307,12 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 <td>0.720119</td>
 <td>0.718053</td>
 <td>roc_auc</td>
-<td>0.053533</td>
-<td>0.008026</td>
-<td>3.901871</td>
-<td>0.053533</td>
-<td>0.008026</td>
-<td>3.901871</td>
+<td>0.054107</td>
+<td>0.007001</td>
+<td>3.995669</td>
+<td>0.054107</td>
+<td>0.007001</td>
+<td>3.995669</td>
 <td>1</td>
 <td>True</td>
 <td>5</td>
@@ -6323,12 +6323,12 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 <td>0.719729</td>
 <td>0.720039</td>
 <td>roc_auc</td>
-<td>0.268702</td>
-<td>0.108097</td>
-<td>13.631428</td>
-<td>0.007000</td>
-<td>0.003998</td>
-<td>0.951145</td>
+<td>0.263759</td>
+<td>0.115384</td>
+<td>13.551174</td>
+<td>0.005514</td>
+<td>0.003999</td>
+<td>0.995867</td>
 <td>2</td>
 <td>True</td>
 <td>11</td>
@@ -6339,12 +6339,12 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 <td>0.719678</td>
 <td>0.718219</td>
 <td>roc_auc</td>
-<td>0.541013</td>
-<td>0.219645</td>
-<td>89.785781</td>
-<td>0.541013</td>
-<td>0.219645</td>
-<td>89.785781</td>
+<td>0.556826</td>
+<td>0.228485</td>
+<td>91.902715</td>
+<td>0.556826</td>
+<td>0.228485</td>
+<td>91.902715</td>
 <td>1</td>
 <td>True</td>
 <td>8</td>
@@ -6355,12 +6355,12 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 <td>0.719608</td>
 <td>0.717409</td>
 <td>roc_auc</td>
-<td>0.053517</td>
-<td>0.030024</td>
-<td>0.858866</td>
-<td>0.053517</td>
-<td>0.030024</td>
-<td>0.858866</td>
+<td>0.054530</td>
+<td>0.032512</td>
+<td>0.924037</td>
+<td>0.054530</td>
+<td>0.032512</td>
+<td>0.924037</td>
 <td>1</td>
 <td>True</td>
 <td>1</td>
@@ -6371,12 +6371,12 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 <td>0.718232</td>
 <td>0.717625</td>
 <td>roc_auc</td>
-<td>0.079068</td>
-<td>0.033019</td>
-<td>6.659677</td>
-<td>0.079068</td>
-<td>0.033019</td>
-<td>6.659677</td>
+<td>0.080047</td>
+<td>0.038030</td>
+<td>6.346134</td>
+<td>0.080047</td>
+<td>0.038030</td>
+<td>6.346134</td>
 <td>1</td>
 <td>True</td>
 <td>9</td>
@@ -6387,12 +6387,12 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 <td>0.717891</td>
 <td>0.718869</td>
 <td>roc_auc</td>
-<td>0.053535</td>
-<td>0.028032</td>
-<td>0.800053</td>
-<td>0.053535</td>
-<td>0.028032</td>
-<td>0.800053</td>
+<td>0.051545</td>
+<td>0.027522</td>
+<td>0.862798</td>
+<td>0.051545</td>
+<td>0.027522</td>
+<td>0.862798</td>
 <td>1</td>
 <td>True</td>
 <td>2</td>
@@ -6403,12 +6403,12 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 <td>0.714684</td>
 <td>0.715336</td>
 <td>roc_auc</td>
-<td>0.075565</td>
-<td>0.035023</td>
-<td>1.318682</td>
-<td>0.075565</td>
-<td>0.035023</td>
-<td>1.318682</td>
+<td>0.072547</td>
+<td>0.038833</td>
+<td>1.350706</td>
+<td>0.072547</td>
+<td>0.038833</td>
+<td>1.350706</td>
 <td>1</td>
 <td>True</td>
 <td>10</td>
@@ -6419,12 +6419,12 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 <td>0.641072</td>
 <td>0.658545</td>
 <td>roc_auc</td>
-<td>0.574176</td>
-<td>0.202447</td>
-<td>11.254904</td>
-<td>0.574176</td>
-<td>0.202447</td>
-<td>11.254904</td>
+<td>0.609610</td>
+<td>0.204343</td>
+<td>11.204147</td>
+<td>0.609610</td>
+<td>0.204343</td>
+<td>11.204147</td>
 <td>1</td>
 <td>True</td>
 <td>4</td>
@@ -6435,12 +6435,12 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 <td>0.640989</td>
 <td>0.658138</td>
 <td>roc_auc</td>
-<td>0.648225</td>
-<td>0.217056</td>
-<td>11.405818</td>
-<td>0.648225</td>
-<td>0.217056</td>
-<td>11.405818</td>
+<td>0.648029</td>
+<td>0.219881</td>
+<td>11.615506</td>
+<td>0.648029</td>
+<td>0.219881</td>
+<td>11.615506</td>
 <td>1</td>
 <td>True</td>
 <td>3</td>
@@ -6451,12 +6451,12 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 <td>0.640861</td>
 <td>0.658432</td>
 <td>roc_auc</td>
-<td>0.697228</td>
-<td>0.234864</td>
-<td>8.137888</td>
-<td>0.697228</td>
-<td>0.234864</td>
-<td>8.137888</td>
+<td>0.705982</td>
+<td>0.250221</td>
+<td>8.182497</td>
+<td>0.705982</td>
+<td>0.250221</td>
+<td>8.182497</td>
 <td>1</td>
 <td>True</td>
 <td>7</td>
@@ -6467,12 +6467,12 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 <td>0.640847</td>
 <td>0.658411</td>
 <td>roc_auc</td>
-<td>0.676806</td>
-<td>0.230850</td>
-<td>8.091860</td>
-<td>0.676806</td>
-<td>0.230850</td>
-<td>8.091860</td>
+<td>0.679874</td>
+<td>0.234811</td>
+<td>8.178181</td>
+<td>0.679874</td>
+<td>0.234811</td>
+<td>8.178181</td>
 <td>1</td>
 <td>True</td>
 <td>6</td>
@@ -6487,7 +6487,7 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 </div>
 </div>
 <p>Check permutation feature importance on the test set.</p>
-<div id="c8d07244" class="cell" data-execution_count="78">
+<div id="30da7a8c" class="cell" data-execution_count="78">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb109"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb109-1"><a href="#cb109-1"></a>best_feature_importance_embedded <span class="op">=</span> (ag_model_embedded_method</span>
@@ -6501,8 +6501,8 @@ Table&nbsp;18: Autogluon Leaderboard (Embedded Method)
 </details>
 <div class="cell-output cell-output-stderr">
 <pre><code>Computing feature importance via permutation shuffling for 19 features using 115206 rows with 5 shuffle sets...
-    2.62s   = Expected runtime (0.52s per shuffle set)
-    2.3s    = Actual runtime (Completed 5 of 5 shuffle sets)</code></pre>
+    2.51s   = Expected runtime (0.5s per shuffle set)
+    2.42s   = Actual runtime (Completed 5 of 5 shuffle sets)</code></pre>
 </div>
 </div>
 <div class="cell" data-tbl-number="true" data-execution_count="79">
@@ -6724,7 +6724,7 @@ Table&nbsp;19: Permutation Feature Importance (Embedded Method)
 <li>Examples: recursive feature elimination, forward/backward selection</li>
 </ul>
 <p>The chunk below creates a scikit-learn pipeline that uses forward selection (<code>SequentialFeatureSelector</code>) and <code>ExtraTreesClassifier</code> estimator to select the top features. The top features are then used to train an <code>autogluon</code> model.</p>
-<div id="d654a4c5" class="cell" data-execution_count="80">
+<div id="1a837dfd" class="cell" data-execution_count="80">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb112"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb112-1"><a href="#cb112-1"></a><span class="co"># remove ag folder if exists</span></span>
@@ -6769,8 +6769,8 @@ Operating System:   Windows
 Platform Machine:   AMD64
 Platform Version:   10.0.26100
 CPU Count:          20
-Memory Avail:       15.03 GB / 31.75 GB (47.3%)
-Disk Space Avail:   716.63 GB / 951.74 GB (75.3%)
+Memory Avail:       16.32 GB / 31.75 GB (51.4%)
+Disk Space Avail:   709.81 GB / 951.74 GB (74.6%)
 ===================================================
 Presets specified: ['medium_quality']
 Beginning AutoGluon training ... Time limit = 180s
@@ -6783,8 +6783,8 @@ Preprocessing data ...
 Selected class &lt;--&gt; label mapping:  class 1 = 1, class 0 = 0
 Using Feature Generators to preprocess the data ...
 Fitting AutoMLPipelineFeatureGenerator...
-    Available Memory:                    15387.86 MB
-    Train Data (Original)  Memory Usage: 8.20 MB (0.1% of available memory)
+    Available Memory:                    16715.29 MB
+    Train Data (Original)  Memory Usage: 8.20 MB (0.0% of available memory)
     Inferring data type of each feature based on column values. Set feature_metadata_in to manually specify special dtypes of the features.
     Stage 1 Generators:
         Fitting AsTypeFeatureGenerator...
@@ -6804,7 +6804,7 @@ Fitting AutoMLPipelineFeatureGenerator...
         ('int', [])   : 2 | ['remainder__CC_enq', 'remainder__PL_enq']
     0.2s = Fit runtime
     4 features in original data used to generate 4 features in processed data.
-    Train Data (Processed) Memory Usage: 8.20 MB (0.1% of available memory)
+    Train Data (Processed) Memory Usage: 8.20 MB (0.0% of available memory)
 Data preprocessing and feature engineering runtime = 0.2s ...
 AutoGluon will gauge predictive performance using evaluation metric: 'roc_auc'
     This metric expects predicted probabilities rather than predicted class labels, so you'll need to use predict_proba() instead of predict()
@@ -6833,50 +6833,50 @@ Fitting model: LightGBMXT ... Training model for up to 179.80s of the 179.80s of
 </div>
 <div class="cell-output cell-output-stderr">
 <pre><code>    0.7147   = Validation score   (roc_auc)
-    14.51s   = Training   runtime
-    1.18s    = Validation runtime
-Fitting model: LightGBM ... Training model for up to 163.82s of the 163.82s of remaining time.
+    15.24s   = Training   runtime
+    1.22s    = Validation runtime
+Fitting model: LightGBM ... Training model for up to 163.02s of the 163.01s of remaining time.
     0.7146   = Validation score   (roc_auc)
-    1.65s    = Training   runtime
-    0.06s    = Validation runtime
-Fitting model: RandomForestGini ... Training model for up to 162.05s of the 162.05s of remaining time.
+    1.74s    = Training   runtime
+    0.07s    = Validation runtime
+Fitting model: RandomForestGini ... Training model for up to 161.15s of the 161.15s of remaining time.
     0.6736   = Validation score   (roc_auc)
-    4.88s    = Training   runtime
-    0.16s    = Validation runtime
-Fitting model: RandomForestEntr ... Training model for up to 156.84s of the 156.84s of remaining time.
+    5.14s    = Training   runtime
+    0.17s    = Validation runtime
+Fitting model: RandomForestEntr ... Training model for up to 155.62s of the 155.62s of remaining time.
     0.6737   = Validation score   (roc_auc)
-    4.81s    = Training   runtime
-    0.16s    = Validation runtime
-Fitting model: CatBoost ... Training model for up to 151.66s of the 151.66s of remaining time.
+    4.97s    = Training   runtime
+    0.17s    = Validation runtime
+Fitting model: CatBoost ... Training model for up to 150.22s of the 150.22s of remaining time.
     0.7136   = Validation score   (roc_auc)
-    33.76s   = Training   runtime
+    32.97s   = Training   runtime
     0.01s    = Validation runtime
-Fitting model: ExtraTreesGini ... Training model for up to 117.86s of the 117.86s of remaining time.
+Fitting model: ExtraTreesGini ... Training model for up to 117.20s of the 117.20s of remaining time.
     0.6737   = Validation score   (roc_auc)
-    3.08s    = Training   runtime
+    3.25s    = Training   runtime
     0.16s    = Validation runtime
-Fitting model: ExtraTreesEntr ... Training model for up to 114.41s of the 114.41s of remaining time.
+Fitting model: ExtraTreesEntr ... Training model for up to 113.55s of the 113.54s of remaining time.
     0.6737   = Validation score   (roc_auc)
-    3.03s    = Training   runtime
+    3.07s    = Training   runtime
     0.16s    = Validation runtime
-Fitting model: NeuralNetFastAI ... Training model for up to 110.99s of the 110.98s of remaining time.
+Fitting model: NeuralNetFastAI ... Training model for up to 110.03s of the 110.03s of remaining time.
     0.7145   = Validation score   (roc_auc)
-    82.2s    = Training   runtime
-    0.21s    = Validation runtime
-Fitting model: XGBoost ... Training model for up to 28.50s of the 28.50s of remaining time.
+    86.68s   = Training   runtime
+    0.24s    = Validation runtime
+Fitting model: XGBoost ... Training model for up to 23.01s of the 23.01s of remaining time.
     0.7136   = Validation score   (roc_auc)
-    2.11s    = Training   runtime
-    0.04s    = Validation runtime
-Fitting model: LightGBMLarge ... Training model for up to 26.32s of the 26.32s of remaining time.
+    2.1s     = Training   runtime
+    0.05s    = Validation runtime
+Fitting model: LightGBMLarge ... Training model for up to 20.84s of the 20.84s of remaining time.
     0.7132   = Validation score   (roc_auc)
-    1.29s    = Training   runtime
+    1.34s    = Training   runtime
     0.03s    = Validation runtime
-Fitting model: WeightedEnsemble_L2 ... Training model for up to 179.80s of the 24.97s of remaining time.
+Fitting model: WeightedEnsemble_L2 ... Training model for up to 179.80s of the 19.42s of remaining time.
     Ensemble Weights: {'LightGBMXT': 0.429, 'NeuralNetFastAI': 0.381, 'CatBoost': 0.095, 'XGBoost': 0.095}
     0.7163   = Validation score   (roc_auc)
-    0.76s    = Training   runtime
+    0.8s     = Training   runtime
     0.0s     = Validation runtime
-AutoGluon training complete, total runtime = 155.89s ... Best model: WeightedEnsemble_L2 | Estimated inference throughput: 37213.3 rows/s (53763 batch size)
+AutoGluon training complete, total runtime = 161.47s ... Best model: WeightedEnsemble_L2 | Estimated inference throughput: 35316.0 rows/s (53763 batch size)
 TabularPredictor saved. To load, use: predictor = TabularPredictor.load("C:\Users\chiuw\Dropbox\_Teaching\Northwestern MLDS\Interpretable ML for Finance\IML4Finance\Lectures\Lab01_ag_models_WrapperMethod")</code></pre>
 </div>
 <div class="cell-output cell-output-display" data-execution_count="80">
@@ -7285,12 +7285,12 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
   background-color: var(--sklearn-color-fitted-level-3);
 }
 </style><div id="sk-container-id-5" class="sk-top-container"><div class="sk-text-repr-fallback"><pre>Pipeline(steps=[('replace_values',
-                 FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)),
+                 FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)),
                 ('ordinal_encoder',
                  ColumnTransformer(remainder='passthrough',
                                    transformers=[('ordinalencoder',
                                                   OrdinalEncoder(),
-                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001490015BC70&gt;)])),
+                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE181B4610&gt;)])),
                 ('feature_selection',
                  SequentialFeatureSelector(...
                                                                           n_jobs=-1,
@@ -7307,12 +7307,12 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                          predictor_args={'eval_metric': 'roc_auc',
                                                          'path': 'Lab01_ag_models_WrapperMethod',
                                                          'problem_type': 'binary'}))])</pre><b>In a Jupyter environment, please rerun this cell to show the HTML representation or trust the notebook. <br>On GitHub, the HTML representation is unable to render, please try loading this page with nbviewer.org.</b></div><div class="sk-container" hidden=""><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-28" type="checkbox"><label for="sk-estimator-id-28" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;&nbsp;Pipeline<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.pipeline.Pipeline.html">?<span>Documentation for Pipeline</span></a><span class="sk-estimator-doc-link fitted">i<span>Fitted</span></span></label><div class="sk-toggleable__content fitted"><pre>Pipeline(steps=[('replace_values',
-                 FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)),
+                 FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)),
                 ('ordinal_encoder',
                  ColumnTransformer(remainder='passthrough',
                                    transformers=[('ordinalencoder',
                                                   OrdinalEncoder(),
-                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001490015BC70&gt;)])),
+                                                  &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE181B4610&gt;)])),
                 ('feature_selection',
                  SequentialFeatureSelector(...
                                                                           n_jobs=-1,
@@ -7328,9 +7328,9 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
                                          label='response_flag',
                                          predictor_args={'eval_metric': 'roc_auc',
                                                          'path': 'Lab01_ag_models_WrapperMethod',
-                                                         'problem_type': 'binary'}))])</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-29" type="checkbox"><label for="sk-estimator-id-29" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;FunctionTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.FunctionTransformer.html">?<span>Documentation for FunctionTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>FunctionTransformer(func=&lt;function replace_vals at 0x00000148D133FD00&gt;)</pre></div> </div></div><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-30" type="checkbox"><label for="sk-estimator-id-30" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;ordinal_encoder: ColumnTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.compose.ColumnTransformer.html">?<span>Documentation for ordinal_encoder: ColumnTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>ColumnTransformer(remainder='passthrough',
+                                                         'problem_type': 'binary'}))])</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-29" type="checkbox"><label for="sk-estimator-id-29" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;FunctionTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.FunctionTransformer.html">?<span>Documentation for FunctionTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>FunctionTransformer(func=&lt;function replace_vals at 0x000002ADE01EE200&gt;)</pre></div> </div></div><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-30" type="checkbox"><label for="sk-estimator-id-30" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;ordinal_encoder: ColumnTransformer<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.compose.ColumnTransformer.html">?<span>Documentation for ordinal_encoder: ColumnTransformer</span></a></label><div class="sk-toggleable__content fitted"><pre>ColumnTransformer(remainder='passthrough',
                   transformers=[('ordinalencoder', OrdinalEncoder(),
-                                 &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001490015BC70&gt;)])</pre></div> </div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-31" type="checkbox"><label for="sk-estimator-id-31" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">ordinalencoder</label><div class="sk-toggleable__content fitted"><pre>&lt;sklearn.compose._column_transformer.make_column_selector object at 0x000001490015BC70&gt;</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-32" type="checkbox"><label for="sk-estimator-id-32" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;OrdinalEncoder<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.OrdinalEncoder.html">?<span>Documentation for OrdinalEncoder</span></a></label><div class="sk-toggleable__content fitted"><pre>OrdinalEncoder()</pre></div> </div></div></div></div></div><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-33" type="checkbox"><label for="sk-estimator-id-33" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">remainder</label><div class="sk-toggleable__content fitted"><pre>['time_since_recent_payment', 'time_since_first_deliquency', 'time_since_recent_deliquency', 'num_times_delinquent', 'max_delinquency_level', 'max_recent_level_of_deliq', 'num_deliq_6mts', 'num_deliq_12mts', 'num_deliq_6_12mts', 'max_deliq_6mts', 'max_deliq_12mts', 'num_times_30p_dpd', 'num_times_60p_dpd', 'num_std', 'num_std_6mts', 'num_std_12mts', 'num_sub', 'num_sub_6mts', 'num_sub_12mts', 'num_dbt', 'num_dbt_6mts', 'num_dbt_12mts', 'num_lss', 'num_lss_6mts', 'num_lss_12mts', 'recent_level_of_deliq', 'tot_enq', 'CC_enq', 'CC_enq_L6m', 'CC_enq_L12m', 'PL_enq', 'PL_enq_L6m', 'PL_enq_L12m', 'time_since_recent_enq', 'enq_L12m', 'enq_L6m', 'enq_L3m', 'NETMONTHLYINCOME', 'Time_With_Curr_Empr', 'pct_of_active_TLs_ever', 'pct_opened_TLs_L6m_of_L12m', 'pct_currentBal_all_TL', 'CC_utilization', 'CC_Flag', 'PL_utilization', 'PL_Flag', 'pct_PL_enq_L6m_of_L12m', 'pct_CC_enq_L6m_of_L12m', 'pct_PL_enq_L6m_of_ever', 'pct_CC_enq_L6m_of_ever', 'max_unsec_exposure_inPct', 'HL_Flag', 'GL_Flag', 'Credit_Score', 'Total_TL', 'Tot_Closed_TL', 'Tot_Active_TL', 'Total_TL_opened_L6M', 'Tot_TL_closed_L6M', 'pct_tl_open_L6M', 'pct_tl_closed_L6M', 'pct_active_tl', 'pct_closed_tl', 'Total_TL_opened_L12M', 'Tot_TL_closed_L12M', 'pct_tl_open_L12M', 'pct_tl_closed_L12M', 'Tot_Missed_Pmnt', 'Auto_TL', 'CC_TL', 'Consumer_TL', 'Gold_TL', 'Home_TL', 'PL_TL', 'Secured_TL', 'Unsecured_TL', 'Other_TL', 'Age_Oldest_TL', 'Age_Newest_TL']</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-34" type="checkbox"><label for="sk-estimator-id-34" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">passthrough</label><div class="sk-toggleable__content fitted"><pre>passthrough</pre></div> </div></div></div></div></div></div></div><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-35" type="checkbox"><label for="sk-estimator-id-35" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;feature_selection: SequentialFeatureSelector<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.feature_selection.SequentialFeatureSelector.html">?<span>Documentation for feature_selection: SequentialFeatureSelector</span></a></label><div class="sk-toggleable__content fitted"><pre>SequentialFeatureSelector(estimator=ExtraTreesClassifier(criterion='entropy',
+                                 &lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE181B4610&gt;)])</pre></div> </div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-31" type="checkbox"><label for="sk-estimator-id-31" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">ordinalencoder</label><div class="sk-toggleable__content fitted"><pre>&lt;sklearn.compose._column_transformer.make_column_selector object at 0x000002AE181B4610&gt;</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-32" type="checkbox"><label for="sk-estimator-id-32" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;OrdinalEncoder<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.OrdinalEncoder.html">?<span>Documentation for OrdinalEncoder</span></a></label><div class="sk-toggleable__content fitted"><pre>OrdinalEncoder()</pre></div> </div></div></div></div></div><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-33" type="checkbox"><label for="sk-estimator-id-33" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">remainder</label><div class="sk-toggleable__content fitted"><pre>['time_since_recent_payment', 'time_since_first_deliquency', 'time_since_recent_deliquency', 'num_times_delinquent', 'max_delinquency_level', 'max_recent_level_of_deliq', 'num_deliq_6mts', 'num_deliq_12mts', 'num_deliq_6_12mts', 'max_deliq_6mts', 'max_deliq_12mts', 'num_times_30p_dpd', 'num_times_60p_dpd', 'num_std', 'num_std_6mts', 'num_std_12mts', 'num_sub', 'num_sub_6mts', 'num_sub_12mts', 'num_dbt', 'num_dbt_6mts', 'num_dbt_12mts', 'num_lss', 'num_lss_6mts', 'num_lss_12mts', 'recent_level_of_deliq', 'tot_enq', 'CC_enq', 'CC_enq_L6m', 'CC_enq_L12m', 'PL_enq', 'PL_enq_L6m', 'PL_enq_L12m', 'time_since_recent_enq', 'enq_L12m', 'enq_L6m', 'enq_L3m', 'NETMONTHLYINCOME', 'Time_With_Curr_Empr', 'pct_of_active_TLs_ever', 'pct_opened_TLs_L6m_of_L12m', 'pct_currentBal_all_TL', 'CC_utilization', 'CC_Flag', 'PL_utilization', 'PL_Flag', 'pct_PL_enq_L6m_of_L12m', 'pct_CC_enq_L6m_of_L12m', 'pct_PL_enq_L6m_of_ever', 'pct_CC_enq_L6m_of_ever', 'max_unsec_exposure_inPct', 'HL_Flag', 'GL_Flag', 'Credit_Score', 'Total_TL', 'Tot_Closed_TL', 'Tot_Active_TL', 'Total_TL_opened_L6M', 'Tot_TL_closed_L6M', 'pct_tl_open_L6M', 'pct_tl_closed_L6M', 'pct_active_tl', 'pct_closed_tl', 'Total_TL_opened_L12M', 'Tot_TL_closed_L12M', 'pct_tl_open_L12M', 'pct_tl_closed_L12M', 'Tot_Missed_Pmnt', 'Auto_TL', 'CC_TL', 'Consumer_TL', 'Gold_TL', 'Home_TL', 'PL_TL', 'Secured_TL', 'Unsecured_TL', 'Other_TL', 'Age_Oldest_TL', 'Age_Newest_TL']</pre></div> </div></div><div class="sk-serial"><div class="sk-item"><div class="sk-estimator fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-34" type="checkbox"><label for="sk-estimator-id-34" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">passthrough</label><div class="sk-toggleable__content fitted"><pre>passthrough</pre></div> </div></div></div></div></div></div></div><div class="sk-item sk-dashed-wrapped"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-35" type="checkbox"><label for="sk-estimator-id-35" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">&nbsp;feature_selection: SequentialFeatureSelector<a class="sk-estimator-doc-link fitted" rel="noreferrer" target="_blank" href="https://scikit-learn.org/1.5/modules/generated/sklearn.feature_selection.SequentialFeatureSelector.html">?<span>Documentation for feature_selection: SequentialFeatureSelector</span></a></label><div class="sk-toggleable__content fitted"><pre>SequentialFeatureSelector(estimator=ExtraTreesClassifier(criterion='entropy',
                                                          max_depth=3, n_jobs=-1,
                                                          random_state=2025),
                           n_jobs=-1, scoring='roc_auc', tol=0.005)</pre></div> </div></div><div class="sk-parallel"><div class="sk-parallel-item"><div class="sk-item"><div class="sk-label-container"><div class="sk-label fitted sk-toggleable"><input class="sk-toggleable__control sk-hidden--visually" id="sk-estimator-id-36" type="checkbox"><label for="sk-estimator-id-36" class="sk-toggleable__label fitted sk-toggleable__label-arrow fitted">estimator: ExtraTreesClassifier</label><div class="sk-toggleable__content fitted"><pre>ExtraTreesClassifier(criterion='entropy', max_depth=3, n_jobs=-1,
@@ -7346,7 +7346,7 @@ div.sk-label-container:hover .sk-estimator-doc-link.fitted:hover,
 </div>
 </div>
 <p>Check leaderboard using the test set.</p>
-<div id="0288e1e2" class="cell" data-execution_count="81">
+<div id="4a8739d2" class="cell" data-execution_count="81">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb116"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb116-1"><a href="#cb116-1"></a>preprocessed_test_data_wrapper <span class="op">=</span> ag_model_wrapper_method[:<span class="op">-</span><span class="dv">1</span>].transform(test_data_wide.drop(columns<span class="op">=</span>[label] <span class="op">+</span> [<span class="st">'PROSPECTID'</span>, <span class="st">'campaign_id'</span>, <span class="st">'direct_mail_flag'</span>]))</span>
@@ -7396,12 +7396,12 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 <td>0.716076</td>
 <td>0.714525</td>
 <td>roc_auc</td>
-<td>0.496710</td>
-<td>0.205387</td>
-<td>82.201304</td>
-<td>0.496710</td>
-<td>0.205387</td>
-<td>82.201304</td>
+<td>0.600063</td>
+<td>0.235870</td>
+<td>86.676332</td>
+<td>0.600063</td>
+<td>0.235870</td>
+<td>86.676332</td>
 <td>1</td>
 <td>True</td>
 <td>8</td>
@@ -7412,12 +7412,12 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 <td>0.716015</td>
 <td>0.716256</td>
 <td>roc_auc</td>
-<td>2.757445</td>
-<td>1.444726</td>
-<td>133.345744</td>
-<td>0.005002</td>
-<td>0.003100</td>
-<td>0.760180</td>
+<td>3.060730</td>
+<td>1.522341</td>
+<td>137.782437</td>
+<td>0.006000</td>
+<td>0.003646</td>
+<td>0.797022</td>
 <td>2</td>
 <td>True</td>
 <td>11</td>
@@ -7428,12 +7428,12 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 <td>0.715426</td>
 <td>0.714604</td>
 <td>roc_auc</td>
-<td>0.130594</td>
-<td>0.062048</td>
-<td>1.652204</td>
-<td>0.130594</td>
-<td>0.062048</td>
-<td>1.652204</td>
+<td>0.141666</td>
+<td>0.067822</td>
+<td>1.742316</td>
+<td>0.141666</td>
+<td>0.067822</td>
+<td>1.742316</td>
 <td>1</td>
 <td>True</td>
 <td>2</td>
@@ -7444,12 +7444,12 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 <td>0.714423</td>
 <td>0.713207</td>
 <td>roc_auc</td>
-<td>0.070043</td>
-<td>0.034036</td>
-<td>1.289413</td>
-<td>0.070043</td>
-<td>0.034036</td>
-<td>1.289413</td>
+<td>0.074070</td>
+<td>0.033534</td>
+<td>1.344653</td>
+<td>0.074070</td>
+<td>0.033534</td>
+<td>1.344653</td>
 <td>1</td>
 <td>True</td>
 <td>10</td>
@@ -7460,12 +7460,12 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 <td>0.713640</td>
 <td>0.714709</td>
 <td>roc_auc</td>
-<td>2.122116</td>
-<td>1.182722</td>
-<td>14.514550</td>
-<td>2.122116</td>
-<td>1.182722</td>
-<td>14.514550</td>
+<td>2.302853</td>
+<td>1.221795</td>
+<td>15.240202</td>
+<td>2.302853</td>
+<td>1.221795</td>
+<td>15.240202</td>
 <td>1</td>
 <td>True</td>
 <td>1</td>
@@ -7476,12 +7476,12 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 <td>0.713377</td>
 <td>0.713649</td>
 <td>roc_auc</td>
-<td>0.045036</td>
-<td>0.010985</td>
-<td>33.760822</td>
-<td>0.045036</td>
-<td>0.010985</td>
-<td>33.760822</td>
+<td>0.051729</td>
+<td>0.010485</td>
+<td>32.973199</td>
+<td>0.051729</td>
+<td>0.010485</td>
+<td>32.973199</td>
 <td>1</td>
 <td>True</td>
 <td>5</td>
@@ -7492,12 +7492,12 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 <td>0.712255</td>
 <td>0.713619</td>
 <td>roc_auc</td>
-<td>0.088581</td>
-<td>0.042531</td>
-<td>2.108887</td>
-<td>0.088581</td>
-<td>0.042531</td>
-<td>2.108887</td>
+<td>0.100085</td>
+<td>0.050546</td>
+<td>2.095681</td>
+<td>0.100085</td>
+<td>0.050546</td>
+<td>2.095681</td>
 <td>1</td>
 <td>True</td>
 <td>9</td>
@@ -7508,12 +7508,12 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 <td>0.665614</td>
 <td>0.673709</td>
 <td>roc_auc</td>
-<td>0.358991</td>
-<td>0.156244</td>
-<td>4.810943</td>
-<td>0.358991</td>
-<td>0.156244</td>
-<td>4.810943</td>
+<td>0.406976</td>
+<td>0.172984</td>
+<td>4.972037</td>
+<td>0.406976</td>
+<td>0.172984</td>
+<td>4.972037</td>
 <td>1</td>
 <td>True</td>
 <td>4</td>
@@ -7524,12 +7524,12 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 <td>0.665580</td>
 <td>0.673681</td>
 <td>roc_auc</td>
-<td>0.343163</td>
-<td>0.155322</td>
-<td>3.083033</td>
-<td>0.343163</td>
-<td>0.155322</td>
-<td>3.083033</td>
+<td>0.386436</td>
+<td>0.157258</td>
+<td>3.253248</td>
+<td>0.386436</td>
+<td>0.157258</td>
+<td>3.253248</td>
 <td>1</td>
 <td>True</td>
 <td>6</td>
@@ -7540,12 +7540,12 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 <td>0.665566</td>
 <td>0.673578</td>
 <td>roc_auc</td>
-<td>0.391364</td>
-<td>0.156680</td>
-<td>4.881119</td>
-<td>0.391364</td>
-<td>0.156680</td>
-<td>4.881119</td>
+<td>0.474429</td>
+<td>0.171816</td>
+<td>5.144041</td>
+<td>0.474429</td>
+<td>0.171816</td>
+<td>5.144041</td>
 <td>1</td>
 <td>True</td>
 <td>3</td>
@@ -7556,12 +7556,12 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 <td>0.665319</td>
 <td>0.673693</td>
 <td>roc_auc</td>
-<td>0.371475</td>
-<td>0.155268</td>
-<td>3.030347</td>
-<td>0.371475</td>
-<td>0.155268</td>
-<td>3.030347</td>
+<td>0.408255</td>
+<td>0.155881</td>
+<td>3.072079</td>
+<td>0.408255</td>
+<td>0.155881</td>
+<td>3.072079</td>
 <td>1</td>
 <td>True</td>
 <td>7</td>
@@ -7576,7 +7576,7 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 </div>
 </div>
 <p>Check permutation feature importance on the test set.</p>
-<div id="590ca797" class="cell" data-execution_count="83">
+<div id="af2a013b" class="cell" data-execution_count="83">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="sourceCode cell-code" id="cb118"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb118-1"><a href="#cb118-1"></a>best_feature_importance_wrapper <span class="op">=</span> (ag_model_wrapper_method</span>
@@ -7590,8 +7590,8 @@ Table&nbsp;20: Autogluon Leaderboard (Wrapper Method)
 </details>
 <div class="cell-output cell-output-stderr">
 <pre><code>Computing feature importance via permutation shuffling for 4 features using 115206 rows with 5 shuffle sets...
-    0.82s   = Expected runtime (0.16s per shuffle set)
-    0.59s   = Actual runtime (Completed 5 of 5 shuffle sets)</code></pre>
+    0.84s   = Expected runtime (0.17s per shuffle set)
+    0.65s   = Actual runtime (Completed 5 of 5 shuffle sets)</code></pre>
 </div>
 </div>
 <div class="cell" data-tbl-number="true" data-execution_count="84">
@@ -9355,7 +9355,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 <span id="cb121-1327"><a href="#cb121-1327"></a>df_campaign_eval <span class="op">=</span> duckdb.query(<span class="st">"""</span></span>
 <span id="cb121-1328"><a href="#cb121-1328"></a><span class="st">    SELECT SELECTED.*, EVAL.response_flag</span></span>
 <span id="cb121-1329"><a href="#cb121-1329"></a><span class="st">    FROM read_parquet('../Data/cibil/campaign_eval.parquet') AS EVAL</span></span>
-<span id="cb121-1330"><a href="#cb121-1330"></a><span class="st">    LEFT JOIN df_campaign_3_selected AS SELECTED</span></span>
+<span id="cb121-1330"><a href="#cb121-1330"></a><span class="st">    INNER JOIN df_campaign_3_selected AS SELECTED</span></span>
 <span id="cb121-1331"><a href="#cb121-1331"></a><span class="st">    ON EVAL.PROSPECTID = SELECTED.PROSPECTID</span></span>
 <span id="cb121-1332"><a href="#cb121-1332"></a><span class="st">    ORDER BY SELECTED.group_type, SELECTED.PROSPECTID</span></span>
 <span id="cb121-1333"><a href="#cb121-1333"></a><span class="st">"""</span>).to_df()</span>
