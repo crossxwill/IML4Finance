@@ -6,8 +6,8 @@
 <script src="Lecture 01_files/libs/quarto-html/tippy.umd.min.js"></script>
 <link href="Lecture 01_files/libs/quarto-html/tippy.css" rel="stylesheet">
 <link href="Lecture 01_files/libs/quarto-html/light-border.css" rel="stylesheet">
-<link href="Lecture 01_files/libs/quarto-html/quarto-syntax-highlighting-e26003cea8cd680ca0c55a263523d882.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
-  <meta name="generator" content="quarto-1.6.39">
+<link href="Lecture 01_files/libs/quarto-html/quarto-syntax-highlighting-2f5df379a58b258e96c21c0638c20c03.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
+  <meta name="generator" content="quarto-1.6.42">
 
   <title>Lecture 1</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -48,7 +48,7 @@
     div.csl-indent {
       margin-left: 2em;
     }  </style>
-  <link rel="stylesheet" href="Lecture 01_files/libs/revealjs/dist/theme/quarto-968a81878ae2fd33ccc4be0ace9d6c4f.css">
+  <link rel="stylesheet" href="Lecture 01_files/libs/revealjs/dist/theme/quarto-034c394c4af08a7d4a6a53426ad1c07f.css">
   <link href="Lecture 01_files/libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
   <link href="Lecture 01_files/libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
   <link href="Lecture 01_files/libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
@@ -167,6 +167,7 @@
 <h2>Instructor</h2>
 <p>William Chiu, FRM</p>
 <ul>
+<li class="fragment">UC Berkeley Econ Alum (Class of 2005)</li>
 <li class="fragment">Financial Risk Manager (FRM) Certified since 2012</li>
 <li class="fragment">Northwestern MLDS Alum (Class of 2013)</li>
 <li class="fragment">Senior Credit Risk Analyst at a credit bureau (2013-2014)</li>
@@ -190,8 +191,8 @@
                     : Exploratory Analysis
     3. Development  : Choosing the Evaluation Metric
                     : Model Training &amp; Selection
-                    : Backtesting
                     : Calibration
+                    : Backtesting
     4. Interpretation   : Feature Importance
                         : Feature Dependence
                         : Explaining Individual Predictions
@@ -231,10 +232,6 @@
 <td>List the differences between an approved application and a rejected application that are otherwise very similar (i.e., a counterfactual)</td>
 </tr>
 <tr class="odd">
-<td>Set aside an allowance for bad loans</td>
-<td>Develop a transition matrix model and calibrate loan default probabilities to observed frequencies</td>
-</tr>
-<tr class="even">
 <td>Block fraudulent transactions</td>
 <td>Develop a cost-sensitive model and block high-risk transactions</td>
 </tr>
@@ -246,7 +243,6 @@
 <ol type="1">
 <li class="fragment"><p>Borrower data from an Indian Bank and Credit Bureau. The instructor modified the data to include <code>campaign_id</code>, <code>control_group</code>, and <code>response_flag</code>. <span class="citation" data-cites="cibil-data">(<a href="#/citations" role="doc-biblioref" onclick="">Azad 2024</a>)</span>.</p></li>
 <li class="fragment"><p>Loan Performance data from LendingClub. Includes both accepted and rejected loan applications. <span class="citation" data-cites="lendingclub-data">(<a href="#/citations" role="doc-biblioref" onclick="">George 2019</a>)</span></p></li>
-<li class="fragment"><p>Single-Family Loan Performance data from Fannie Mae. <span class="citation" data-cites="fanniemae2024">(<a href="#/citations" role="doc-biblioref" onclick="">Fannie Mae 2024</a>)</span></p></li>
 <li class="fragment"><p>Simulated data from the <em>Fraud Detection Handbook</em> . <span class="citation" data-cites="leborgne2022fraud">(<a href="#/citations" role="doc-biblioref" onclick="">Le Borgne et al. 2022</a>)</span></p></li>
 </ol>
 </section>
@@ -283,7 +279,7 @@
 <li class="fragment">Rank features from most to least important
 <ul>
 <li class="fragment">Permutation importance</li>
-<li class="fragment">SHAP importance</li>
+<li class="fragment">Aggregated SHAP importance</li>
 <li class="fragment">Dealing with multicollinear features</li>
 </ul></li>
 <li class="fragment">Describe the dependence between features and predictions
@@ -297,7 +293,7 @@
 <section id="more-interpretable-ml-tools" class="slide level2">
 <h2>4. (More) Interpretable ML tools</h2>
 <ul>
-<li class="fragment">Explain individual predictions
+<li class="fragment">Explain individual predictions (local explanations)
 <ul>
 <li class="fragment">SHAP values</li>
 <li class="fragment">Counterfactuals</li>
@@ -320,17 +316,10 @@
 <section id="assignments-and-grading" class="slide level2 smaller">
 <h2>Assignments and Grading</h2>
 <ol type="1">
-<li class="fragment">Problem Sets (70%)
-<ul>
-<li class="fragment">Weekly conceptual questions and programming exercises based on each week’s topics.</li>
-<li class="fragment">Reinforce understanding of weekly material and practical application of concepts.</li>
-</ul></li>
-<li class="fragment">Kaggle Competition (30%)
-<ul>
-<li class="fragment">Develop a scorecard model for loan underwriting.</li>
-<li class="fragment">Students will be asked why the model rejected a loan application.</li>
-<li class="fragment">Grades will depend on model performance in an unlabeled test set and the quality of the explanation.</li>
-</ul></li>
+<li class="fragment">Problem Set 1 (25%)</li>
+<li class="fragment">Problem Set 2 (25%)</li>
+<li class="fragment">Problem Set 3 (25%)</li>
+<li class="fragment">Problem Set 4 (25%)</li>
 </ol>
 </section></section>
 <section>
@@ -749,20 +738,12 @@
 </ul></li>
 </ul>
 </section></section>
-<section>
-<section id="data-preparation" class="title-slide slide level1 center">
-<h1>Data Preparation</h1>
-
-</section>
-<section id="citations" class="slide level2 smaller scrollable">
-<h2>Citations</h2>
+<section id="citations" class="title-slide slide level1 smaller scrollable">
+<h1>Citations</h1>
 
 <div id="refs" class="references csl-bib-body hanging-indent" data-entry-spacing="0" role="list">
 <div id="ref-cibil-data" class="csl-entry" role="listitem">
 Azad, Rohan. 2024. <span>“Leading Indian Bank &amp; CIBIL Real-World Dataset.”</span> <a href="https://www.kaggle.com/datasets/saurabhbadole/leading-indian-bank-and-cibil-real-world-dataset/data" class="uri">https://www.kaggle.com/datasets/saurabhbadole/leading-indian-bank-and-cibil-real-world-dataset/data</a>.
-</div>
-<div id="ref-fanniemae2024" class="csl-entry" role="listitem">
-Fannie Mae. 2024. <span>“Single-Family Loan Performance Data.”</span> <a href="https://capitalmarkets.fanniemae.com/credit-risk-transfer/single-family-credit-risk-transfer/fannie-mae-single-family-loan-performance-data" class="uri">https://capitalmarkets.fanniemae.com/credit-risk-transfer/single-family-credit-risk-transfer/fannie-mae-single-family-loan-performance-data</a>.
 </div>
 <div id="ref-lendingclub-data" class="csl-entry" role="listitem">
 George, Nate. 2019. <span>“All Lending Club Loan Data.”</span> <a href="https://www.kaggle.com/datasets/wordsforthewise/lending-club" class="uri">https://www.kaggle.com/datasets/wordsforthewise/lending-club</a>.
@@ -771,7 +752,7 @@ George, Nate. 2019. <span>“All Lending Club Loan Data.”</span> <a href="http
 Le Borgne, Yann-Aël, Wissam Siblini, Bertrand Lebichot, and Gianluca Bontempi. 2022. <em>Reproducible Machine Learning for Credit Card Fraud Detection - Practical Handbook</em>. Universit<span>é</span> Libre de Bruxelles. <a href="https://github.com/Fraud-Detection-Handbook/fraud-detection-handbook">https://github.com/Fraud-Detection-Handbook/fraud-detection-handbook</a>.
 </div>
 </div>
-</section></section>
+</section>
     </div>
   <div class="quarto-auto-generated-content" style="display: none;">
 <div class="footer footer-default">

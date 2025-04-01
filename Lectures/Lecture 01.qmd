@@ -22,6 +22,7 @@ bibliography: references.bib
 
 William Chiu, FRM
 
+-   UC Berkeley Econ Alum (Class of 2005)
 -   Financial Risk Manager (FRM) Certified since 2012
 -   Northwestern MLDS Alum (Class of 2013)
 -   Senior Credit Risk Analyst at a credit bureau (2013-2014)
@@ -40,8 +41,8 @@ timeline
                     : Exploratory Analysis
     3. Development  : Choosing the Evaluation Metric
                     : Model Training & Selection
-                    : Backtesting
                     : Calibration
+                    : Backtesting
     4. Interpretation   : Feature Importance
                         : Feature Dependence
                         : Explaining Individual Predictions
@@ -59,7 +60,6 @@ timeline
 | Acquire new clients through a direct-mail campaign | Develop a marketing response model and target high-response prospects |
 | Approve or reject loan applications based on risk | Develop a credit scorecard model and approve low-risk applications |
 | Explain why a loan application was rejected | List the differences between an approved application and a rejected application that are otherwise very similar (i.e., a counterfactual) |
-| Set aside an allowance for bad loans | Develop a transition matrix model and calibrate loan default probabilities to observed frequencies |
 | Block fraudulent transactions | Develop a cost-sensitive model and block high-risk transactions |
 
 ## 2. Data Prep
@@ -68,9 +68,7 @@ timeline
 
 2.  Loan Performance data from LendingClub. Includes both accepted and rejected loan applications. [@lendingclub-data]
 
-3.  Single-Family Loan Performance data from Fannie Mae. [@fanniemae2024]
-
-4.  Simulated data from the *Fraud Detection Handbook* . [@leborgne2022fraud]
+3.  Simulated data from the *Fraud Detection Handbook* . [@leborgne2022fraud]
 
 ## 3. Model Development {.smaller}
 
@@ -91,7 +89,7 @@ timeline
 
 -   Rank features from most to least important
     -   Permutation importance
-    -   SHAP importance
+    -   Aggregated SHAP importance
     -   Dealing with multicollinear features
 -   Describe the dependence between features and predictions
     -   Partial dependence plots (PDP)
@@ -100,7 +98,7 @@ timeline
 
 ## 4. (More) Interpretable ML tools
 
--   Explain individual predictions
+-   Explain individual predictions (local explanations)
     -   SHAP values
     -   Counterfactuals
 
@@ -115,13 +113,10 @@ timeline
 
 ## Assignments and Grading {.smaller}
 
-1.  Problem Sets (70%)
-    -   Weekly conceptual questions and programming exercises based on each week's topics.
-    -   Reinforce understanding of weekly material and practical application of concepts.
-2.  Kaggle Competition (30%)
-    -   Develop a scorecard model for loan underwriting.
-    -   Students will be asked why the model rejected a loan application.
-    -   Grades will depend on model performance in an unlabeled test set and the quality of the explanation.
+1.  Problem Set 1 (25%)
+2.  Problem Set 2 (25%)
+3.  Problem Set 3 (25%)
+4.  Problem Set 4 (25%)
 
 # Introduction to Retail Banking
 
@@ -329,6 +324,5 @@ digraph {
     -   Apply consistent underwriting standards to all applicants
     -   Maintain documentation to demonstrate non-discriminatory practices and facilitate regulatory reviews
 
-# Data Preparation
+# Citations
 
-## Citations
