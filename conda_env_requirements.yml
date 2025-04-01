@@ -393,7 +393,7 @@ dependencies:
   - pyyaml=6.0.2=py310h38315fa_2
   - pyzmq=26.2.1=py310h656833d_0
   - qhull=2020.2=hc790b64_5
-  - quarto=1.6.41=h57928b3_0
+  - quarto=1.6.42=h57928b3_1
   - rav1e=0.6.6=h975169c_2
   - ray-core=2.40.0=py310h0164a98_1
   - ray-default=2.40.0=py310h3aa33fd_1
