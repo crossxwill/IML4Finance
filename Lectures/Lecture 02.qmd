@@ -1,0 +1,1220 @@
+---
+title: "Retail Lending"
+format:
+    revealjs:
+        incremental: true
+        slide-number: true
+        code-overflow: scroll
+        code-copy: true
+        chalkboard:
+            theme: whiteboard
+        mermaid: 
+            theme: default
+execute:
+    echo: false
+    warning: false
+---
+
+# Introduction to Loan Types 
+
+## Loan Types
+
+|   | Term Loans | Lines of Credit (LOC) |
+|------------------|-------------------------|-----------------------------|
+| **Secured** | Mortgage, Auto Loan | HELOC (Home Equity Line of Credit), Margin Loan |
+| **Unsecured** | Personal Loan, Student Loan | Credit Card, Personal Line of Credit |
+
+## Term Loans vs. Lines of Credit {.smaller}
+
+::: {layout="[[50,50]]"}
+### Term Loans
+
+-   Fixed loan amount disbursed upfront
+-   Fixed repayment schedule with a maturity date (specified loan end date)
+-   Interest calculated on the outstanding loan amount
+-   Once repaid, a new loan application is required
+-   Examples: Mortgages, Personal Loans
+
+### Lines of Credit
+
+-   Revolving credit with a maximum limit
+-   May or may not have maturity date
+-   Interest charged only on the amount utilized (borrowed)
+-   Borrow, repay, and re-borrow as needed without reapplying
+-   Examples: Credit cards, HELOCs, Margin Loans
+:::
+
+## Secured vs. Unsecured Loans/LOCs {.smaller}
+
+::: {layout="[[50,50]]"}
+### Secured Loans/LOCs
+
+-   Backed by collateral
+-   Lender can seize and sell collateral if the borrower defaults
+-   Lower interest rates due to reduced lender risk
+-   Examples:
+    -   Mortgages and HELOC (secured by real estate)
+    -   Auto loans (secured by vehicle)
+    -   Margin loans (secured by brokerage account)
+
+### Unsecured Loans/LOCs
+
+-   No collateral
+-   Default may result in negative credit reporting and potential legal actions
+-   Higher interest rates to compensate for increased lender risk
+-   Examples:
+    -   Credit Cards
+    -   Personal Loans
+:::
+
+## Mortgages {.smaller}
+
+-   Term
+    -   15 years
+    -   30 years
+-   Rate Type
+    -   Fixed-rate: Same interest rate ("note rate") for the entire term
+    -   Adjustable-rate: Interest rate changes periodically
+    -   Hybrid: Initial fixed interest rate ("teaser rate"), followed by adjustable rates
+
+## More about mortgages {.smaller}
+
+-   Amortization Type
+    -   Fully-amortizing: Each payment reduces the principal balance
+    -   Interest-only: Small initial payments (IO period), then loan amount amortizes (big payments)
+-   Conforming Type
+    -   Conforming: Mortgage can be sold to Fannie Mae and Freddie Mac
+    -   Non-conforming (jumbo): Mortgage cannot be sold to Fannie Mae and Freddie Mac
+
+## Other Loan Products {.smaller}
+
+-   **Credit Cards**: Unsecured, line of credit, variable rate, **no maturity date**
+-   **Auto Loans**: Secured, term loan, fixed rate
+-   **Personal Loans**: Unsecured, term loan, fixed rate
+-   **Home Equity Products**:
+    -   Home equity loans: Secured, term loan, fixed rate
+    -   HELOCs: Secured, line of credit, variable rate, draw period followed by amortizing period
+-   **Student Loans**: Unsecured, term loan, fixed rate
+
+# Credit Scoring Systems
+
+## History and Role of Credit Scores {.smaller}
+
+1.  **Pre-1950s**: Credit decisions were subjective and often discriminatory
+    -   Relied on personal relationships and judgment
+    -   Loan officers assessed character, capacity, and capital ("3Cs")
+    -   Resulted in inconsistent and biased lending practices
+2.  **1958**: Fair Isaac Company (FICO) introduced the first credit scoring system
+    -   Standardized and objectified lending decisions
+    -   Initially resisted by traditional bankers
+3.  **1970**: Fair Credit Reporting Act regulated the use of credit information
+
+## Modern History of Credit Scores
+
+1.  **1989**: Modern FICO scores adopted by major lenders
+2.  **2006**: VantageScore launched by Equifax, Experian, and TransUnion
+3.  **Today**: Credit scores influence:
+    -   Lending decisions
+    -   Insurance rates
+    -   Employment screenings
+    -   Rental applications
+
+
+
+## Credit Scoring Companies vs. Credit Bureaus {.smaller}
+
+::: {layout="[[50,50]]"}
+### Credit Scoring Companies
+
+-   Develop algorithms to calculate credit scores
+-   Do not collect or own consumer data
+-   License scoring models to credit bureaus
+-   Revenue from algorithm licensing and analytics services
+-   Examples:
+    -   Fair Isaac Corporation (FICO)
+    -   VantageScore (joint venture)
+
+### Credit Bureaus
+
+-   Collect and maintain consumer credit data
+-   Provide credit reports and scores to authorized users
+-   Apply scoring algorithms (e.g., FICO) to generate scores
+-   Revenue from selling credit reports and scores
+-   Equifax, Experian, TransUnion
+
+:::
+
+VantageScore is unique as it was created jointly by the three major credit bureaus to compete with FICO.
+
+## Corporate Relationships {.smaller}
+
+-   **Fair Isaac Corporation (FICO)**:
+    -   Independent company that developed the FICO scoring model
+    -   Licenses algorithms to all three major credit bureaus
+    -   Dominant in credit scoring since the 1980s
+-   **VantageScore**:
+    -   Joint venture by Equifax, Experian, and TransUnion (2006)
+    -   Competes with FICO's scoring models
+    -   Reduces dependency on FICO's proprietary algorithms
+-   **Equifax, Experian, and TransUnion**:
+    -   Compete in data services but collaborate on VantageScore
+    -   Pay licensing fees to FICO for score calculations
+    -   Use slightly different implementations of FICO algorithms
+
+## Points to Double Odds (PDO) {.smaller}
+
+-   **Definition**: PDO represents the number of credit score points required to double the odds of being a "good" borrower (or halve the odds of default).
+-   **Example**:
+    -   Reference Score: Score 680 with 10:1 odds of being "good."
+    -   If PDO = 40:
+        -   Add 40 points → Score 720 → 20:1 odds (doubled).
+        -   Add another 40 points → Score 760 → 40:1 odds (doubled again).
+        -   Add another 40 points → Score 800 → 80:1 odds (doubled again).
+
+## PDO: Mathematical Details - Part 1 {.smaller}
+
+-   **Mathematical relationship**: Let $p$ be the probability of default and define the odds as $\frac{p}{1-p}$; then: $$\text{Score} = A - B \cdot \ln\left(\frac{p}{1-p}\right)$$
+    -   Here, $B$ is defined as $\text{PDO}/\ln(2)$.
+    -   Note: This scaling ensures that an increase of PDO points in the score exactly doubles the odds of being a "good" borrower.
+    -   $A$ is a scaling constant (reference score) to position the score in the desired range.
+-   **Ambiguity in odds definition**: The "odds of being a good borrower" $\frac{1-p}{p}$ is the inverse of the "odds of default" $\frac{p}{1-p}$. In the formula above, as the score increases by PDO points, the odds of default are halved, which is equivalent to saying the odds of being a good borrower are doubled.
+
+## PDO: Mathematical Details - Part 2 {.smaller}
+
+-   For PDO = 40:
+    1.  Calculate $B$: $B = 40 / \ln(2) \approx 40 / 0.693 \approx 57.7$.
+    2.  If a 650 score corresponds to a 5% default probability ($p=0.05$):
+        -   Compute the odds: $\frac{0.05}{1-0.05} = \frac{0.05}{0.95} \approx 0.0526$ and $\ln(0.0526) \approx -2.944$.
+        -   Then, $650 = A - 57.7 \cdot (-2.944) = A + 169.7$.
+        -   Solve for $A$: $A \approx 650 - 169.7 \approx 480.3$.
+    3.  Final formula: $$\text{Score} = 480.3 - 57.7 \cdot \ln\left(\frac{p}{1-p}\right)$$
+
+## Industry Standards
+
+-   $A$ is typically set to align scores with industry standards (e.g., score range of 300-850).
+-   $A$ could range from 600–650 depending on the scoring model.
+-   **FICO** and **VantageScore** do not disclose exact PDO values.
+-   **Typical PDO values**: Range from 20 to 40 points.
+-   Credit scoring systems may change PDO when they publish new versions of their models (e.g., FICO 8, FICO 9).
+-   A low PDO (like 20) indicates a more sensitive scoring model, while a high PDO (like 40) indicates a less sensitive model.
+
+## Credit Scores as Risk Rankings {.smaller}
+
+-   **Ordinal Measure**: A 720 score indicates lower risk than 680 but does **not** directly equate to a fixed default probability. Credit scores are best understood as ranking borrowers rather than quantifying exact default rates.
+-   Credit scores **do not** directly represent default probabilities.
+    -   Example: A 680 score does not mean a 6.8% chance of default.
+    -   Default rates vary with economic conditions.
+    -   During recessions, default rates for a 720 score may rise, but should have lower default rates than a 680 score
+-   **Score Recalibration**: Models are periodically adjusted to maintain consistent risk rankings.
+    -   Recalibration ensures that scores remain predictive as economic conditions and consumer behavior evolve.
+
+# Underwriting and Selection Bias
+
+## Credit Application Process
+
+![](/Images/gpt4o-applicant-process.png){fig-align="center"}
+
+## Through-the-Door (TTD) Population {.smaller}
+
+-   **Definition**: The complete set of all consumers who apply for credit.
+-   **Characteristics**:
+    -   Represents the full spectrum of credit risk in the applicant pool.
+    -   Contains both high-quality and high-risk applicants.
+-   **Importance in modeling**:
+    -   The TTD population contains the complete risk profile.
+    -   Models should ideally predict risk across the entire TTD population.
+    -   TTD data serves as the starting point for underwriting decisions.
+-   **Challenges**:
+    -   Complete TTD data rarely available for model development.
+    -   Selection bias introduced during the underwriting process.
+    -   Difficult to know true risk for rejected applicants.
+
+## Underwriting Process - Part 1 {.smaller}
+
+Underwriting transforms the TTD population into accepted and rejected segments:
+
+1.  **Application receipt**: Gather applicant information and credit reports.
+    -   Personal identification.
+    -   Income and employment verification.
+    -   Credit bureau data retrieval.
+    -   Fraud detection checks (e.g., identity theft screening).
+2.  **Initial screening**: Apply basic eligibility requirements.
+    -   Minimum age requirements.
+    -   Identity verification.
+    -   Geographic restrictions.
+    -   Compliance with anti-money laundering (AML) and know-your-customer (KYC) regulations.
+
+## Underwriting Process - Part 2 {.smaller}
+
+3.  **Credit evaluation**: Apply credit risk assessment.
+    -   Credit score thresholds.
+    -   Debt-to-income ratio analysis.
+    -   Payment history review.
+    -   Employment stability assessment.
+    -   Collateral valuation (for secured loans).
+    -   Behavioral data analysis (e.g., transaction patterns, if available).
+
+## Underwriting Process - Part 3 {.smaller}
+
+4.  **Decision**: Approve, conditionally approve, or reject.
+    -   Approve: Meets all lending criteria.
+    -   Conditional: Requires additional documentation or guarantor.
+    -   Reject: Fails to meet minimum lending standards.
+    -   Note: Some lenders may use "refer" status for borderline cases requiring manual review.
+5.  **Pricing and terms**: For approved applicants.
+    -   Interest rate determination.
+    -   Loan amount calculation.
+    -   Term length assignment.
+    -   Risk-based pricing adjustments (e.g., higher rates for higher-risk applicants).
+
+
+## Known Good Bad (KGB) Population {.smaller}
+
+-   **Definition**: The subset of applicants who were approved for credit.
+-   **Key characteristics**:
+    -   Only represents a portion of the TTD population.
+    -   Typically includes high-quality applicants.
+    -   Has complete performance data (repayment history).
+    -   Contains both "good" (non-default) and "bad" (default) loans.
+    -   Truncated feature distribution compared to the full TTD population.
+
+## More about KGB Population {.smaller}
+
+-   **Terminology**:
+    -   "Good": Accounts that perform as expected (make payments on time).
+    -   "Bad": Accounts that default or become seriously delinquent.
+    -   "Known": Performance outcome is observed.
+-   **Modeling implication**:
+    -   Models developed only on KGB data suffer from selection bias.
+    -   Risk assessments based only on KGB data tend to underestimate true risk.
+
+## Selection Bias Problem {.smaller}
+
+When models are trained only on the KGB population, they encounter a fundamental selection bias:
+
+-   **Truncated sample**: Rejected applicants (typically higher risk) are missing from the training data.
+-   **Risk underestimation**: Models cannot learn patterns from the high-risk rejected population.
+-   **Extrapolation error**: When applied to the full TTD population, models make poor predictions for segments they never observed.
+-   **Mathematical perspective**: The model learns $P(\text{default} | \text{approved})$ instead of the desired $P(\text{default} | \text{applied})$.
+-   **Visual illustration**: In the risk curve below, KGB data only includes the green portion, missing the critical red portion:
+
+## Selection Bias Visualization {.smaller}
+
+```{python}
+#| fig-width: 12
+#| fig-height: 6
+
+# Simplified and optimized code for lecture slides
+# Added comments and improved readability
+
+# Import necessary libraries
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Define the default probability function
+def default_prob(score):
+    """
+    Calculate the probability of default based on credit score.
+    """
+    return 1 / (1 + np.exp((score - 480.3) / 57.7))
+
+# Generate credit scores (500 to 850)
+scores = np.arange(500, 851, 1)
+
+# Calculate default probabilities
+probs = default_prob(scores)
+
+# Plot default probabilities
+plt.figure(figsize=(12, 6))
+plt.plot(scores, probs, 'b-', linewidth=3, label='True PD')
+
+# Add approval threshold line
+plt.axvline(x=680, color='black', linestyle='--', linewidth=2, label='Approval Threshold (680)')
+
+# Highlight KGB and rejected populations
+plt.fill_between(scores[scores >= 680], probs[scores >= 680], color='green', alpha=0.3, label='KGB Population')
+plt.fill_between(scores[scores < 680], probs[scores < 680], color='red', alpha=0.3, label='Rejected Population')
+
+# Add labels, title, and legend
+plt.xlabel('Credit Score', fontsize=20)
+plt.ylabel('Probability of Default', fontsize=20)
+plt.title('PD by Credit Score', fontsize=20)
+plt.legend(fontsize=14)
+plt.xticks(fontsize=20)
+plt.yticks(fontsize=20)
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+```
+
+# Selection Bias and Reject Inference
+
+## Simulating the Selection Bias Problem {.smaller}
+
+Let's create a simulation to demonstrate how selection bias affects model performance:
+
+-   Simulate 300,000 credit applicants (TTD population).
+-   Default rates decrease exponentially as credit scores increase.
+-   Reject all applicants with scores below 680.
+-   Train a model on KGB population and examine its predictions.
+
+## Simulation Results {.smaller}
+
+```{python}
+#| code-fold: true
+
+# System utilities
+import os
+import shutil
+import random
+import torch
+import numpy as np
+
+# Data manipulation and visualization
+import duckdb
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Machine learning - scikit-learn
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
+from sklearn.utils.validation import check_is_fitted
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder
+from sklearn.calibration import CalibrationDisplay, CalibratedClassifierCV
+from sklearn.feature_selection import SelectKBest, SelectFromModel, SequentialFeatureSelector, mutual_info_classif
+from sklearn.inspection import PartialDependenceDisplay
+from sklearn.compose import make_column_transformer, make_column_selector
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn import set_config
+from sklearnex import patch_sklearn
+
+# Specialized ML libraries
+from autogluon.tabular import TabularPredictor, TabularDataset
+from ydata_profiling import ProfileReport
+from scikitplot.metrics import plot_cumulative_gain, plot_lift_curve
+from PyALE import ale
+
+patch_sklearn()
+
+class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
+    """
+    Scikit-learn compatible wrapper for AutoGluon TabularPredictor
+    
+    Inherits from scikit-learn's BaseEstimator and ClassifierMixin to provide
+    full compatibility with scikit-learn tools like PartialDependenceDisplay().
+    
+    Parameters
+    ----------
+    label : str
+        Name of the target column
+
+    **predictor_args : dict
+        Additional arguments passed to TabularPredictor()
+        (e.g., problem_type, eval_metric, path)
+
+    **fit_args : dict
+        Additional arguments passed to TabularPredictor.fit() method
+        (e.g., holdout_frac, presets, time_limit, excluded_model_types)
+
+
+    Attributes
+    ----------
+    predictor : TabularPredictor
+        The trained AutoGluon predictor
+
+    classes_ : ndarray
+        Class labels (for classification tasks)
+
+    n_features_in_ : int
+        Number of features seen during fit
+
+    feature_names_ : list
+        Feature names inferred during fitting
+
+    is_fitted_ : bool
+        Whether the estimator has been fitted
+    """
+    
+    def __init__(self, label, predictor_args=None, fit_args=None):
+        self.label = label
+        self.predictor_args = predictor_args if predictor_args else {}
+        self.fit_args = fit_args if fit_args else {}
+        self.predictor = None
+        self.classes_ = None
+        self.n_features_in_ = None
+        self.feature_names_ = None
+        self.is_fitted_ = False
+
+    def __sklearn_is_fitted__(self):
+        """Official scikit-learn API for checking fitted status"""
+        return self.is_fitted_
+
+    def fit(self, X, y):
+        """
+        Fit AutoGluon model using scikit-learn interface
+        
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Training data
+        y : array-like of shape (n_samples,)
+            Target values
+            
+        Returns
+        -------
+        self : object
+            Fitted estimator
+        """
+        self._check_feature_names(X, reset=True)
+        self._check_n_features(X, reset=True)
+        
+        # Convert to DataFrame with preserved feature names
+        train_data = pd.DataFrame(X, columns=self.feature_names_)
+        train_data[self.label] = y
+        train_data = TabularDataset(train_data)
+        
+        # Initialize and fit AutoGluon predictor
+        self.predictor = TabularPredictor(
+            label=self.label, 
+            **self.predictor_args
+        ).fit(train_data, **self.fit_args)
+        
+        # Store sklearn-specific attributes
+        if self.predictor.problem_type in ['binary', 'multiclass']:
+            # Convert class labels to a NumPy array
+            self.classes_ = np.array(self.predictor.class_labels)
+            
+        self.is_fitted_ = True
+
+        return self
+
+    def predict(self, X):
+        """
+        Make class predictions
+        
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Input data
+            
+        Returns
+        -------
+        y_pred : ndarray of shape (n_samples,)
+            Predicted class labels
+        """
+        check_is_fitted(self)
+        self._check_feature_names(X)
+        self._check_n_features(X)
+
+        df = pd.DataFrame(X, columns=self.feature_names_)
+        df = TabularDataset(df)
+
+        return self.predictor.predict(df).values
+
+    def predict_proba(self, X):
+        """
+        Predict class probabilities
+        
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Input data
+            
+        Returns
+        -------
+        proba : ndarray of shape (n_samples, n_classes)
+            Class probabilities
+        """
+        check_is_fitted(self)
+        self._check_feature_names(X)
+        self._check_n_features(X)
+
+        df = pd.DataFrame(X, columns=self.feature_names_)
+        df = TabularDataset(df)
+
+        return self.predictor.predict_proba(df).values
+
+    def get_params(self, deep=True):
+        """Get parameters for this estimator"""
+        return {
+            'label': self.label,
+            'predictor_args': self.predictor_args,
+            'fit_args': self.fit_args
+        }
+
+    def set_params(self, **params):
+        """Set parameters for this estimator"""
+        for param, value in params.items():
+            if param == 'label':
+                self.label = value
+            else:
+                self.predictor_args[param] = value
+        return self
+
+    def _check_n_features(self, X, reset=False):
+        """Validate number of features"""
+        n_features = X.shape[1]
+        if reset:
+            self.n_features_in_ = n_features
+        elif n_features != self.n_features_in_:
+            raise ValueError(f"Expected {self.n_features_in_} features, got {n_features}")
+
+    def _check_feature_names(self, X, reset=False):
+        """Validate feature names (AutoGluon requirement)"""
+        if reset:
+            if isinstance(X, np.ndarray):
+                self.feature_names_ = [f'feat_{i}' for i in range(X.shape[1])]
+            else:
+                self.feature_names_ = X.columns.tolist()
+        elif hasattr(X, 'columns'):
+            if list(X.columns) != self.feature_names_:
+                raise ValueError("Feature names mismatch between fit and predict")
+
+def remove_ag_folder(mdl_folder: str) -> None:
+    """
+    Remove the AutoGluon model folder if it exists
+    """
+    if os.path.exists(mdl_folder):
+        shutil.rmtree(mdl_folder)
+
+def show_pdp(wrappedAGModel: BaseEstimator,
+            list_features: list,
+            list_categ_features: list,
+            df: pd.DataFrame,
+            xGTzero: bool = False,
+            sampSize: int = 40000) -> None:
+
+  for feature in list_features:
+
+    fig = plt.figure(figsize=(8, 4))
+    ax = fig.add_subplot(111)
+
+    plt.rcParams.update({'font.size': 16})
+
+    # Pass None if list_categ_features is empty, otherwise pass the list
+    cat_features_arg = list_categ_features if list_categ_features else None
+
+    disp = PartialDependenceDisplay.from_estimator(
+        estimator = wrappedAGModel,
+        X = df.sample(sampSize, random_state=2025),
+        features = [feature],
+        categorical_features = cat_features_arg,
+        method = 'brute',
+        kind = "average",
+        percentiles=(0.0001, 0.9999),
+        grid_resolution=100,
+        ax = ax,
+        random_state=2025,
+        n_jobs = -1
+    )
+
+    ax.set_title(f"Partial Dependence for {feature}")
+    
+    # Set y-axis lower limit for all axes in the current figure
+    for a in fig.get_axes():
+      coordy = a.get_ylim()
+      a.set_ylim(bottom=0, top=coordy[1]*1.1)
+
+    if xGTzero:
+      # Set x-axis from 0 to the max
+      for a in fig.get_axes():
+        max_val = np.percentile(df[feature].values, 99.99)
+        a.set_xlim(left=0, right=max_val)
+
+    plt.show()
+    plt.close('all')  # Prevent figure overload
+
+def show_ale(wrappedAGModel: BaseEstimator,
+            list_features: list,
+            df: pd.DataFrame,
+            xGTzero: bool = False,
+            sampSize: int = 40000) -> None:
+
+  def do_nothing(data):
+    return data
+
+  for feature in list_features:
+
+    fig = plt.figure(figsize=(8, 4))
+    ax = fig.add_subplot(111)
+
+    plt.rcParams.update({'font.size': 12})
+
+    ale_eff = ale(
+                X = df.sample(sampSize, random_state=2025),
+                model = wrappedAGModel,
+                feature = [feature],
+                include_CI = False,
+                C=0.9999,
+                grid_size=100,
+                encode_fun=do_nothing,
+                predictors=wrappedAGModel.named_steps['autogluon'].predictor.features(),
+                fig=fig,
+                ax=ax
+                )
+    
+    if xGTzero:
+        # Set x-axis from 0 to the max
+        for a in fig.get_axes():
+            max_val = np.percentile(df[feature].values, 99.99)
+            a.set_xlim(left=0, right=max_val)
+
+    plt.show()
+    plt.close('all')  # Prevent figure overload
+
+
+```
+
+
+```{python}
+#| tbl-cap: "Summary Statistics"
+#| tbl-number: true
+
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# Generate credit scores for 300,000 applicants (TTD population size)
+# Normal distribution with mean 650, std 100, clipped to 300-850 range
+n_samples = 300000
+credit_scores = np.clip(np.random.normal(650, 100, n_samples), 300, 850).astype(int)
+
+# Calculate true default probability for each applicant
+true_probs = default_prob(credit_scores)
+
+# Simulate actual defaults based on the true probability
+defaults = np.random.binomial(1, true_probs)
+
+# Create TTD (Through-the-Door) population dataframe
+ttd_df = pd.DataFrame({
+    'credit_score': credit_scores,
+    'true_default_prob': true_probs,
+    'default': defaults
+})
+
+# Apply underwriting criteria - reject applicants with scores below 680
+# This threshold aligns with the plots shown later
+approval_threshold = 680
+ttd_df['approved'] = ttd_df['credit_score'] >= approval_threshold
+
+# Create KGB (Known Good Bad) population - only includes approved applicants
+kgb_df = ttd_df[ttd_df['approved']].copy()
+
+# Calculate metrics
+ttd_size = len(ttd_df)
+kgb_size = len(kgb_df)
+rejection_rate = 1 - kgb_size / ttd_size
+ttd_default_rate = ttd_df['default'].mean()
+kgb_default_rate = kgb_df['default'].mean()
+
+# Create a DataFrame for summary statistics
+summary_data = {
+    'Metric': [
+        'TTD population size',
+        'KGB population size',
+        'Rejection rate',
+        'Overall default rate in TTD',
+        'Default rate in KGB'
+    ],
+    'Value': [
+        f"{ttd_size:,}",
+        f"{kgb_size:,}",
+        f"{rejection_rate:.1%}",
+        f"{ttd_default_rate:.1%}",
+        f"{kgb_default_rate:.1%}"
+    ]
+}
+summary_df = pd.DataFrame(summary_data)
+
+
+display(summary_df)
+```
+
+
+## Training the KGB Model {.smaller}
+
+```{python}
+# | code-fold: true
+
+# Static save path for the model
+save_path = 'kgb_model'
+
+# Remove the folder if it exists
+remove_ag_folder(save_path)
+
+# Split data into training and test sets for TTD population
+X_ttd_train, X_ttd_test, y_ttd_train, y_ttd_test = train_test_split(
+    ttd_df.drop(columns=['default', 'true_default_prob']),
+    ttd_df['default'],
+    test_size=0.2,
+    random_state=42
+)
+
+# Create KGB training data - only approved applications
+X_kgb_train = X_ttd_train[X_ttd_train['approved']].drop(columns=['approved'])
+y_kgb_train = y_ttd_train[X_ttd_train['approved']]
+
+# We'll use the full TTD test set for evaluation
+X_ttd_test_features = X_ttd_test.drop(columns=['approved'])
+
+# Train a model using only the KGB population
+kgb_predictor = AutoGluonSklearnWrapper(
+    label='default', 
+    predictor_args={'problem_type': 'binary',
+                    'eval_metric': 'roc_auc',
+                    'path': save_path}, 
+    fit_args={'holdout_frac': 0.2,
+                'excluded_model_types': ['KNN', 'NN_TORCH'],
+                'presets': 'medium_quality',
+                'time_limit': 180})
+
+kgb_predictor.fit(X_kgb_train, y_kgb_train)
+
+# Set the best model to CatBoost
+
+best_model_name = 'CatBoost'
+
+kgb_predictor.predictor.set_model_best(best_model_name)
+
+# Get predictions on the entire TTD test population
+ttd_predictions = kgb_predictor.predict_proba(X_ttd_test_features)
+
+ttd_predictions_df = pd.DataFrame({
+    'credit_score': X_ttd_test['credit_score'],
+    'true_default_prob': X_ttd_test['credit_score'].map(lambda x: default_prob(x)),
+    'predicted_default_prob': ttd_predictions[:, 1], # Select probability for class 1 (default)
+    'approved': X_ttd_test['approved']
+})
+```
+
+## Underestimating Risk for Rejected Applicants {.smaller}
+```{python}
+#| code-fold: false
+#| label: risk-by-population-table
+#| tbl-cap: "True vs. Predicted PD"
+#| tbl-number: true
+
+# Group by approved and calculate mean probabilities
+approved_grouped = (ttd_predictions_df
+    .groupby('approved')
+    .agg({
+        'credit_score': 'size',  # Count loans in each group
+        'predicted_default_prob': 'mean',
+        'true_default_prob': 'mean',
+    }).reset_index()
+    .rename(columns={'credit_score': 'num_loans'})) # Rename the count column
+
+display(approved_grouped)
+```
+
+## Average PDs by Credit Score {.smaller}
+
+```{python}
+# Group by credit score and calculate mean probabilities
+
+score_grouped = ttd_predictions_df.groupby('credit_score').agg({
+    'true_default_prob': 'mean',
+    'predicted_default_prob': 'mean',
+}).reset_index()
+```
+
+
+```{python}
+#| fig-width: 14
+#| fig-height: 8
+#| label: fig-pd-comparison
+#| fig-cap: "Average True PD vs. Predicted PD (KGB Model)"
+#| fig-alt: "Line chart comparing true default probability and predicted default probability by credit score. The predicted probability underestimates the true probability for scores below the 680 approval threshold."
+
+# Plotting
+plt.figure(figsize=(14, 8))
+
+# Plot true default probability (solid line)
+plt.plot(score_grouped['credit_score'], score_grouped['true_default_prob'],
+         'b-', linewidth=3, label='Avg True PD') 
+
+# Plot predicted default probability (dashed line)
+plt.plot(score_grouped['credit_score'], score_grouped['predicted_default_prob'],
+         'r--', linewidth=2, label='Avg Predicted PD (KGB Model)')
+
+# Add rejection threshold line
+plt.axvline(x=680, color='black', linestyle='--', linewidth=2, label='Approval Threshold (680)')
+
+# Additional styling
+plt.xlabel('Credit Score', fontsize=20)
+plt.ylabel('Average PD', fontsize=20)
+plt.title('True vs. Predicted PD by Credit Score (KGB Model)', fontsize=20)
+plt.grid(True, alpha=0.3)
+plt.legend(fontsize=14)
+plt.xticks(fontsize=20)
+plt.yticks(fontsize=20)
+
+# Set x-axis limits
+plt.xlim(left=500) # Set minimum x-axis value to 500
+
+# Set y-axis limits
+plt.ylim(top=0.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+## Reducing Bias: Naive Augmentation {.smaller}
+
+-   Augmentation is the process of including rejected applicants in the training data
+-   Naive Augmentation: Assume all rejected applicants would default
+-   Using the "all-bad assumption" for rejected applicants is a huge oversimplification.
+-   The approach is not data-driven and not commonly used.
+
+```{python}
+#| code-fold: true
+#| warning: false
+#| message: false
+
+# Static save path for augmented model (all-bad assumption)
+save_path = 'augmented_all_bad_model'
+
+# Remove the folder if it exists
+remove_ag_folder(save_path)
+
+# Create augmented training data with "reject inference"
+# Assume all rejected applicants would default
+X_augmented_train = X_ttd_train.drop(columns=['approved'])
+y_augmented_train = y_ttd_train.copy()
+
+# Find indices of rejected applicants
+rejected_indices = X_ttd_train[~X_ttd_train['approved']].index
+
+# Set all rejected applicants as defaults
+y_augmented_train.loc[rejected_indices] = 1
+
+# Train a model using the augmented data
+augmented_predictor = AutoGluonSklearnWrapper(
+    label='default', 
+    predictor_args={'problem_type': 'binary',
+                    'eval_metric': 'roc_auc',
+                    'path': save_path}, 
+    fit_args={'holdout_frac': 0.2,
+                'excluded_model_types': ['KNN', 'NN_TORCH'],
+                'presets': 'medium_quality',
+                'time_limit': 180})
+
+augmented_predictor.fit(X_augmented_train, y_augmented_train)
+
+# Get predictions on the test population
+augmented_predictions = augmented_predictor.predict_proba(X_ttd_test_features)
+augmented_pred_df = pd.DataFrame({
+    'credit_score': X_ttd_test['credit_score'],
+    'true_default_prob': X_ttd_test['credit_score'].map(lambda x: default_prob(x)),
+    'predicted_default_prob': augmented_predictions[:, 1],  # Select class 1 (default) probability
+    'approved': X_ttd_test['approved']
+})
+
+# Define aug_score_grouped by grouping augmented_pred_df by 'credit_score' and calculating mean probabilities
+aug_score_grouped = augmented_pred_df.groupby('credit_score').agg({
+    'true_default_prob': 'mean',
+    'predicted_default_prob': 'mean',
+}).reset_index()
+```
+
+## Naive Augmentation: Results Comparison {.smaller}
+
+```{python}
+#| code-fold: false
+#| fig-width: 14
+#| fig-height: 8
+#| label: fig-pd-comparison-naive
+#| fig-cap: "Model Comparison: KGB vs Augmented (Naive)"
+#| fig-alt: "Line chart comparing true default probability, KGB model predicted probability, and Naive Augmented model predicted probability by credit score. The Naive Augmented model overestimates risk for lower scores."
+
+# Plotting comparison
+plt.figure(figsize=(14, 8))
+
+# Plot true default probability
+plt.plot(score_grouped['credit_score'], score_grouped['true_default_prob'], 
+         'b-', linewidth=2, label='True PD') 
+
+# Plot original model predicted probability
+plt.plot(score_grouped['credit_score'], score_grouped['predicted_default_prob'], 
+         'r--', linewidth=2, label='KGB Model')
+
+# Plot augmented model predicted probability
+plt.plot(aug_score_grouped['credit_score'], aug_score_grouped['predicted_default_prob'], 
+         'g-.', linewidth=2, label='Augmented Model (Naive)')
+
+# Add rejection threshold line
+plt.axvline(x=680, color='black', linestyle='--', label='Approval Threshold (680)')
+
+# Additional styling
+plt.xlabel('Credit Score', fontsize=20)
+plt.ylabel('PD', fontsize=20)
+plt.title('Model Comparison: KGB vs Augmented (Naive)', fontsize=20)
+plt.grid(True, alpha=0.3)
+plt.legend(fontsize=14)
+plt.xticks(fontsize=20)
+plt.yticks(fontsize=20)
+plt.tight_layout()
+plt.show()
+```
+
+# Impact of Augmentation on Model Performance {.smaller}
+
+```{python}
+#| tbl-cap: "Mean Absolute Error (MAE) Comparison"
+#| tbl-number: true
+#| label: tbl-mae-comparison
+
+# Calculate error metrics for augmented model
+aug_error_low_scores = np.abs(
+    aug_score_grouped[aug_score_grouped['credit_score'] < 680]['true_default_prob'] - 
+    aug_score_grouped[aug_score_grouped['credit_score'] < 680]['predicted_default_prob']
+).mean()
+
+aug_error_high_scores = np.abs(
+    aug_score_grouped[aug_score_grouped['credit_score'] >= 680]['true_default_prob'] - 
+    aug_score_grouped[aug_score_grouped['credit_score'] >= 680]['predicted_default_prob']
+).mean()
+
+# Calculate error metrics for the KGB model
+error_low_scores = np.abs(
+    score_grouped[score_grouped['credit_score'] < 680]['true_default_prob'] - 
+    score_grouped[score_grouped['credit_score'] < 680]['predicted_default_prob']
+).mean()
+
+error_high_scores = np.abs(
+    score_grouped[score_grouped['credit_score'] >= 680]['true_default_prob'] - 
+    score_grouped[score_grouped['credit_score'] >= 680]['predicted_default_prob']
+).mean()
+
+# Create a DataFrame for error metrics
+error_data = {
+    'Model': ['Augmented (Naive)', 'Augmented (Naive)', 'KGB', 'KGB'],
+    'Score Range': ['Rejected (< 680)', 'Approved (>= 680)', 'Rejected (< 680)', 'Approved (>= 680)'],
+    'MAE': [aug_error_low_scores, aug_error_high_scores, error_low_scores, error_high_scores]
+}
+error_df = pd.DataFrame(error_data)
+
+# Format MAE as percentage
+error_df['MAE'] = error_df['MAE'].map('{:.1%}'.format)
+
+# Display the DataFrame
+display(error_df)
+```
+
+## Reducing Bias: Bureau Proxy Augmentation {.smaller}
+
+-   Bureau Proxy Augmentation: Send the list of rejected applicants to a credit bureau and append the default indicator from each rejected applicant **who were granted credit in the past**
+-   Include the rejected applicants who were granted credit in the past in the training data
+-   The major drawback is that only a subset of rejected applicants would be included in the training data
+
+## Bureau Proxy
+
+```{python}
+#| tbl-cap: "Bureau Proxy Statistics"
+#| tbl-number: true
+
+
+# Static save path for augmented model (bureau proxy)
+save_path = 'augmented_bureau_proxy_model'
+
+# Remove the folder if it exists
+remove_ag_folder(save_path)
+
+# Simulation of Bureau Proxy process:
+# Step 1: We identify rejected applicants
+rejected_indices = X_ttd_train[~X_ttd_train['approved']].index
+# print(f"Total rejected applicants: {len(rejected_indices)}")
+
+# Step 2: In reality, we would send these rejected applicants to a credit bureau
+# to see if they received credit elsewhere and their performance outcomes
+# Here we simulate this process
+
+# Function to simulate probability that a rejected applicant received credit elsewhere
+def credit_bureau_match_probability(credit_score, threshold=680, max_prob=0.10):
+    """
+    Simulates the probability that a credit bureau has data on a rejected applicant
+    Higher credit scores are more likely to have received credit elsewhere
+    """
+    # Normalize score relative to threshold, higher scores have higher probability of match
+    relative_score = (credit_score - (threshold - 200)) / 200
+    
+    # Apply logistic function to create S-curve probability
+    probability = max_prob / (1 + np.exp(-10 * (relative_score - 0.5)))
+    
+    return np.clip(probability, 0, max_prob)
+
+# Calculate match probabilities for each rejected applicant using pandas map
+scores_rejected = X_ttd_train.loc[rejected_indices, 'credit_score']
+bureau_match_probabilities = scores_rejected.map(credit_bureau_match_probability)
+
+# Simulate which rejected applicants the bureau would have data for
+np.random.seed(42)
+has_bureau_data = np.random.binomial(1, bureau_match_probabilities)
+bureau_match_rate = sum(has_bureau_data) / len(has_bureau_data)
+
+# Prepare augmented training data
+X_bureau_proxy_train = X_ttd_train.drop(columns=['approved'])
+y_bureau_proxy_train = y_ttd_train.copy()
+
+# Step 3: Vectorized approach to update default status for rejected applicants
+# Create boolean masks for rejected applicants based on bureau data availability
+bureau_match_series = pd.Series(has_bureau_data, index=rejected_indices).astype(bool)
+bureau_match_indices = bureau_match_series[bureau_match_series].index
+no_bureau_match_indices = bureau_match_series[~bureau_match_series].index
+
+# Set default status to NaN for rejected applicants without bureau data
+y_bureau_proxy_train.loc[no_bureau_match_indices] = np.nan
+
+# For rejected applicants with bureau data, simulate default based on true probability
+if not bureau_match_indices.empty:
+    matched_scores = X_ttd_train.loc[bureau_match_indices, 'credit_score']
+    matched_true_probs = matched_scores.map(default_prob)
+    # Ensure reproducibility for the simulation within this step
+    np.random.seed(43) # Use a different seed or manage state if needed elsewhere
+    simulated_defaults = np.random.binomial(1, matched_true_probs)
+    y_bureau_proxy_train.loc[bureau_match_indices] = simulated_defaults
+
+# Step 4: Remove applicants with missing default status
+valid_indices = y_bureau_proxy_train.dropna().index
+X_bureau_proxy_train = X_bureau_proxy_train.loc[valid_indices]
+y_bureau_proxy_train = y_bureau_proxy_train.loc[valid_indices]
+
+# Print statistics to highlight the key drawback - incomplete data
+# Create a dictionary for summary statistics
+bureau_proxy_stats_data = {
+    'Metric': [
+        'Original training set size',
+        'Bureau proxy training set size',
+        'Rejected applicants with bureau data',
+        'Rejected applicants without bureau data (excluded)'
+    ],
+    'Value': [
+        f"{len(X_ttd_train):,}",
+        f"{len(X_bureau_proxy_train):,}",
+        f"{sum(has_bureau_data):,} of {len(has_bureau_data):,} ({bureau_match_rate:.1%})",
+        f"{len(has_bureau_data) - sum(has_bureau_data):,}"
+    ]
+}
+
+
+# Create and display the DataFrame
+bureau_proxy_stats_df = pd.DataFrame(bureau_proxy_stats_data)
+display(bureau_proxy_stats_df)
+```
+
+```{python}
+# Train model using bureau proxy augmented data
+bureau_proxy_predictor = AutoGluonSklearnWrapper(
+    label='default',
+    predictor_args={'problem_type': 'binary',
+                    'eval_metric': 'roc_auc',
+                    'path': save_path},
+    fit_args={'holdout_frac': 0.2,
+              'excluded_model_types': ['KNN', 'NN_TORCH'],
+              'presets': 'medium_quality',
+              'time_limit': 180}
+)
+
+bureau_proxy_predictor.fit(X_bureau_proxy_train, y_bureau_proxy_train)
+
+# Set the best model to CatBoost
+best_model = 'CatBoost'  # Specify the best model
+bureau_proxy_predictor.predictor.set_model_best(best_model)
+
+# Get predictions
+bureau_proxy_predictions = bureau_proxy_predictor.predict_proba(X_ttd_test_features)
+bureau_proxy_pred_df = pd.DataFrame({
+    'credit_score': X_ttd_test['credit_score'],
+    'true_default_prob': X_ttd_test['credit_score'].map(lambda x: default_prob(x)),
+    'predicted_default_prob': bureau_proxy_predictions[:, 1],
+    'approved': X_ttd_test['approved']
+})
+```
+
+## Bureau Proxy Augmentation: Results Comparison {.smaller}
+
+```{python}
+#| code-fold: false
+#| fig-width: 12
+#| fig-height: 6
+
+# Group by credit score
+bureau_proxy_score_grouped = bureau_proxy_pred_df.groupby('credit_score').agg({
+    'true_default_prob': 'mean',
+    'predicted_default_prob': 'mean',
+}).reset_index()
+
+# Calculate error metrics
+bureau_proxy_error_low_scores = np.abs(
+    bureau_proxy_score_grouped[bureau_proxy_score_grouped['credit_score'] < 680]['true_default_prob'] - 
+    bureau_proxy_score_grouped[bureau_proxy_score_grouped['credit_score'] < 680]['predicted_default_prob']
+).mean()
+
+bureau_proxy_error_high_scores = np.abs(
+    bureau_proxy_score_grouped[bureau_proxy_score_grouped['credit_score'] >= 680]['true_default_prob'] - 
+    bureau_proxy_score_grouped[bureau_proxy_score_grouped['credit_score'] >= 680]['predicted_default_prob']
+).mean()
+
+# Plotting final comparison
+plt.figure(figsize=(12, 6))
+
+# Plot true default probability
+plt.plot(score_grouped['credit_score'], score_grouped['true_default_prob'], 
+         '#444444', linewidth=3, label='True PD')  
+
+# Plot all three model predictions
+plt.plot(score_grouped['credit_score'], score_grouped['predicted_default_prob'], 
+         'r--', linewidth=2, label='KGB Model')
+plt.plot(aug_score_grouped['credit_score'], aug_score_grouped['predicted_default_prob'], 
+         'g-.', linewidth=2, label='Augmented (All-Bad)')
+plt.plot(bureau_proxy_score_grouped['credit_score'], bureau_proxy_score_grouped['predicted_default_prob'], 
+         'b:', linewidth=2, label='Augmented (Bureau Proxy)')
+
+# Add rejection threshold line
+plt.axvline(x=680, color='black', linestyle='-.', label='Approval Threshold (680)')
+
+# Additional styling
+plt.xlabel('Credit Score', fontsize=20)
+plt.ylabel('PD', fontsize=20)
+plt.title('Model Comparison: All Approaches', fontsize=20)
+plt.grid(True, alpha=0.3)
+plt.xticks(fontsize=20)
+plt.yticks(fontsize=20)
+plt.legend(fontsize=14)
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: bureau-proxy-error-metrics
+#| tbl-cap: "Bureau Proxy Error Metrics"
+#| tbl-number: true
+
+# Create a DataFrame for bureau proxy error metrics
+bureau_proxy_error_data = {
+    'Model': ['Bureau Proxy', 'Bureau Proxy'],
+    'Score Range': ['Rejected (< 680)', 'Approved (>= 680)'],
+    'MAE': [bureau_proxy_error_low_scores, bureau_proxy_error_high_scores]
+}
+bureau_proxy_error_df = pd.DataFrame(bureau_proxy_error_data)
+
+# Format MAE as percentage
+bureau_proxy_error_df['MAE'] = bureau_proxy_error_df['MAE'].map('{:.1%}'.format)
+
+# Display the DataFrame
+display(bureau_proxy_error_df)
+```
+
+# Key Takeaways {.smaller}
+
+-   **Selection Bias**:
+    -   Significantly impacts credit risk models when using only KGB data.
+    -   Leads to underestimation of risk for lower credit scores.
+    -   Creates a discontinuity in the risk curve at the approval threshold.
+    -   Largest risk assessment gap occurs near the approval threshold.
+
+-   **Reject Inference Techniques**:
+    -   Substantially improve model accuracy.
+    -   **Naive Augmentation**: Simple but overestimates risk.
+    -   **Bureau Augmentation**: More accurate but may exclude most rejected applicants.
