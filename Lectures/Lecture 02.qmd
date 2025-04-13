@@ -98,27 +98,27 @@ execute:
 
 # Credit Scoring Systems
 
-## History and Role of Credit Scores {.smaller}
+## History of Credit Scores {.smaller}
 
-1.  **Pre-1950s**: Credit decisions were subjective and often discriminatory
-    -   Relied on personal relationships and judgment
-    -   Loan officers assessed character, capacity, and capital ("3Cs")
-    -   Resulted in inconsistent and biased lending practices
-2.  **1958**: Fair Isaac Company (FICO) introduced the first credit scoring system
-    -   Standardized and objectified lending decisions
-    -   Initially resisted by traditional bankers
-3.  **1970**: Fair Credit Reporting Act regulated the use of credit information
+-   **Pre-1950s**: Credit decisions were highly subjective.
+    -   Based on personal relationships, lender judgment, and the "3 Cs" (Character, Capacity, Capital).
+    -   Prone to inconsistency and discriminatory practices.
+-   **1956**: Fair Isaac Corporation began developing *custom* credit scoring models for individual lenders using their internal data. These early systems aimed to provide objective risk assessment but faced initial resistance.
+-   **1970s**: Regulatory changes pushed for fairer lending.
+    -   **Fair Credit Reporting Act (FCRA, 1970)**: Gave consumers rights regarding their credit information.
+    -   **Equal Credit Opportunity Act (ECOA, 1974)**: Prohibited credit discrimination.
+    -   These acts encouraged lenders to adopt more objective methods like credit scoring to ensure compliance and reduce bias.
 
-## Modern History of Credit Scores
+## Modern History of Credit Scores {.smaller}
 
-1.  **1989**: Modern FICO scores adopted by major lenders
-2.  **2006**: VantageScore launched by Equifax, Experian, and TransUnion
-3.  **Today**: Credit scores influence:
-    -   Lending decisions
-    -   Insurance rates
-    -   Employment screenings
-    -   Rental applications
-
+-   **1989**: FICO launched the first *general-purpose* FICO Score, calculated using data from credit bureaus. This made standardized scores widely available to lenders.
+-   **1995**: Fannie Mae and Freddie Mac began requiring FICO Scores for mortgage purchases, cementing their importance in the largest consumer lending market.
+-   **2006**: The three major credit bureaus (Equifax, Experian, TransUnion) jointly launched VantageScore as a competitor to FICO.
+-   **Today**: Credit scores are integral to the financial system, influencing:
+    -   Loan approvals and interest rates (mortgages, auto loans, credit cards, etc.)
+    -   Insurance premiums
+    -   Rental application decisions
+    -   Sometimes, employment screenings (where permissible)
 
 
 ## Credit Scoring Companies vs. Credit Bureaus {.smaller}
@@ -132,7 +132,7 @@ execute:
 -   Revenue from algorithm licensing and analytics services
 -   Examples:
     -   Fair Isaac Corporation (FICO)
-    -   VantageScore (joint venture)
+    -   VantageScore (joint venture but independently operated)
 
 ### Credit Bureaus
 
@@ -301,6 +301,10 @@ When models are trained only on the KGB population, they encounter a fundamental
 ## Selection Bias Visualization {.smaller}
 
 ```{python}
+#| label: fig-selection-bias
+#| fig-cap: "Selection Bias Visualization"
+#| fig-alt: "Line chart showing true probability of default vs credit score, highlighting the KGB (approved) and rejected populations based on a 680 score threshold."
+#| code-fold: true
 #| fig-width: 12
 #| fig-height: 6
 
@@ -361,6 +365,7 @@ Let's create a simulation to demonstrate how selection bias affects model perfor
 ## Simulation Results {.smaller}
 
 ```{python}
+#| label: chunk-setup-imports-funcs
 #| code-fold: true
 
 # System utilities
@@ -662,12 +667,10 @@ def show_ale(wrappedAGModel: BaseEstimator,
 
     plt.show()
     plt.close('all')  # Prevent figure overload
-
-
 ```
 
-
 ```{python}
+#| label: tbl-simulation-summary
 #| tbl-cap: "Summary Statistics"
 #| tbl-number: true
 
@@ -731,11 +734,13 @@ summary_df = pd.DataFrame(summary_data)
 display(summary_df)
 ```
 
-
 ## Training the KGB Model {.smaller}
 
 ```{python}
-# | code-fold: true
+#| label: chunk-train-kgb-model
+#| code-fold: true
+#| warning: false
+#| message: false
 
 # Static save path for the model
 save_path = 'kgb_model'
@@ -790,8 +795,7 @@ ttd_predictions_df = pd.DataFrame({
 
 ## Underestimating Risk for Rejected Applicants {.smaller}
 ```{python}
-#| code-fold: false
-#| label: risk-by-population-table
+#| label: tbl-risk-by-population
 #| tbl-cap: "True vs. Predicted PD"
 #| tbl-number: true
 
@@ -811,6 +815,10 @@ display(approved_grouped)
 ## Average PDs by Credit Score {.smaller}
 
 ```{python}
+#| label: chunk-calc-avg-pd-kgb
+#| code-fold: true
+
+
 # Group by credit score and calculate mean probabilities
 
 score_grouped = ttd_predictions_df.groupby('credit_score').agg({
@@ -819,13 +827,14 @@ score_grouped = ttd_predictions_df.groupby('credit_score').agg({
 }).reset_index()
 ```
 
-
 ```{python}
-#| fig-width: 14
-#| fig-height: 8
-#| label: fig-pd-comparison
+#| label: fig-pd-comparison-kgb
 #| fig-cap: "Average True PD vs. Predicted PD (KGB Model)"
 #| fig-alt: "Line chart comparing true default probability and predicted default probability by credit score. The predicted probability underestimates the true probability for scores below the 680 approval threshold."
+#| fig-width: 14
+#| fig-height: 8
+#| code-fold: true
+
 
 # Plotting
 plt.figure(figsize=(14, 8))
@@ -868,9 +877,9 @@ plt.show()
 -   The approach is not data-driven and not commonly used.
 
 ```{python}
+#| label: chunk-train-naive-aug-model
 #| code-fold: true
-#| warning: false
-#| message: false
+
 
 # Static save path for augmented model (all-bad assumption)
 save_path = 'augmented_all_bad_model'
@@ -921,12 +930,14 @@ aug_score_grouped = augmented_pred_df.groupby('credit_score').agg({
 ## Naive Augmentation: Results Comparison {.smaller}
 
 ```{python}
-#| code-fold: false
-#| fig-width: 14
-#| fig-height: 8
 #| label: fig-pd-comparison-naive
 #| fig-cap: "Model Comparison: KGB vs Augmented (Naive)"
 #| fig-alt: "Line chart comparing true default probability, KGB model predicted probability, and Naive Augmented model predicted probability by credit score. The Naive Augmented model overestimates risk for lower scores."
+#| fig-width: 14
+#| fig-height: 8
+#| code-fold: true
+#| warning: false
+#| message: false
 
 # Plotting comparison
 plt.figure(figsize=(14, 8))
@@ -961,9 +972,12 @@ plt.show()
 # Impact of Augmentation on Model Performance {.smaller}
 
 ```{python}
+#| label: tbl-mae-comparison
 #| tbl-cap: "Mean Absolute Error (MAE) Comparison"
 #| tbl-number: true
-#| label: tbl-mae-comparison
+#| code-fold: true
+#| warning: false
+#| message: false
 
 # Calculate error metrics for augmented model
 aug_error_low_scores = np.abs(
@@ -1011,6 +1025,7 @@ display(error_df)
 ## Bureau Proxy
 
 ```{python}
+#| label: tbl-bureau-proxy-stats
 #| tbl-cap: "Bureau Proxy Statistics"
 #| tbl-number: true
 
@@ -1097,13 +1112,16 @@ bureau_proxy_stats_data = {
     ]
 }
 
-
 # Create and display the DataFrame
 bureau_proxy_stats_df = pd.DataFrame(bureau_proxy_stats_data)
 display(bureau_proxy_stats_df)
 ```
 
 ```{python}
+#| label: chunk-train-bureau-proxy-model
+#| code-fold: true
+
+
 # Train model using bureau proxy augmented data
 bureau_proxy_predictor = AutoGluonSklearnWrapper(
     label='default',
@@ -1135,9 +1153,14 @@ bureau_proxy_pred_df = pd.DataFrame({
 ## Bureau Proxy Augmentation: Results Comparison {.smaller}
 
 ```{python}
-#| code-fold: false
+#| label: fig-bureau-proxy-comparison
+#| fig-cap: "Model Comparison: All Approaches"
+#| fig-alt: "Line chart comparing true PD, KGB model PD, Naive Augmented PD, and Bureau Proxy PD by credit score."
 #| fig-width: 12
 #| fig-height: 6
+#| code-fold: true
+#| warning: false
+#| message: false
 
 # Group by credit score
 bureau_proxy_score_grouped = bureau_proxy_pred_df.groupby('credit_score').agg({
@@ -1187,7 +1210,7 @@ plt.show()
 ```
 
 ```{python}
-#| label: bureau-proxy-error-metrics
+#| label: tbl-bureau-proxy-mae
 #| tbl-cap: "Bureau Proxy Error Metrics"
 #| tbl-number: true
 
