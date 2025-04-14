@@ -15,7 +15,7 @@ execute:
     warning: false
 ---
 
-# Introduction to Loan Types 
+# Introduction to Loan Types
 
 ## Loan Types
 
@@ -120,7 +120,6 @@ execute:
     -   Rental application decisions
     -   Sometimes, employment screenings (where permissible)
 
-
 ## Credit Scoring Companies vs. Credit Bureaus {.smaller}
 
 ::: {layout="[[50,50]]"}
@@ -141,10 +140,7 @@ execute:
 -   Apply scoring algorithms (e.g., FICO) to generate scores
 -   Revenue from selling credit reports and scores
 -   Equifax, Experian, TransUnion
-
 :::
-
-VantageScore is unique as it was created jointly by the three major credit bureaus to compete with FICO.
 
 ## Corporate Relationships {.smaller}
 
@@ -163,40 +159,40 @@ VantageScore is unique as it was created jointly by the three major credit burea
 
 ## Points to Double Odds (PDO) {.smaller}
 
--   **Definition**: PDO represents the number of credit score points required to double the odds of being a "good" borrower (or halve the odds of default).
+-   **Definition**: PDO is the number of credit score points required to double the odds of being a "good" borrower (or halve the odds of default)
 -   **Example**:
-    -   Reference Score: Score 680 with 10:1 odds of being "good."
+    -   Suppose that Score 680 has 10:1 odds of being "good"
     -   If PDO = 40:
-        -   Add 40 points → Score 720 → 20:1 odds (doubled).
-        -   Add another 40 points → Score 760 → 40:1 odds (doubled again).
-        -   Add another 40 points → Score 800 → 80:1 odds (doubled again).
+        -   Add 40 points → Score 720 → 20:1 odds (doubled)
+        -   Add another 40 points → Score 760 → 40:1 odds (doubled again)
+        -   Add another 40 points → Score 800 → 80:1 odds (doubled again)
 
 ## PDO: Mathematical Details - Part 1 {.smaller}
 
 -   **Mathematical relationship**: Let $p$ be the probability of default and define the odds as $\frac{p}{1-p}$; then: $$\text{Score} = A - B \cdot \ln\left(\frac{p}{1-p}\right)$$
     -   Here, $B$ is defined as $\text{PDO}/\ln(2)$.
-    -   Note: This scaling ensures that an increase of PDO points in the score exactly doubles the odds of being a "good" borrower.
+    -   The scaling factor ($1 / \ln(2)$) ensures that an increase of PDO points in the score exactly doubles the odds of being a "good" borrower.
     -   $A$ is a scaling constant (reference score) to position the score in the desired range.
 -   **Ambiguity in odds definition**: The "odds of being a good borrower" $\frac{1-p}{p}$ is the inverse of the "odds of default" $\frac{p}{1-p}$. In the formula above, as the score increases by PDO points, the odds of default are halved, which is equivalent to saying the odds of being a good borrower are doubled.
 
 ## PDO: Mathematical Details - Part 2 {.smaller}
 
 -   For PDO = 40:
-    1.  Calculate $B$: $B = 40 / \ln(2) \approx 40 / 0.693 \approx 57.7$.
+    1.  Calculate $B = 40 / \ln(2) \approx 40 / 0.693 \approx 57.7$.
     2.  If a 650 score corresponds to a 5% default probability ($p=0.05$):
         -   Compute the odds: $\frac{0.05}{1-0.05} = \frac{0.05}{0.95} \approx 0.0526$ and $\ln(0.0526) \approx -2.944$.
         -   Then, $650 = A - 57.7 \cdot (-2.944) = A + 169.7$.
-        -   Solve for $A$: $A \approx 650 - 169.7 \approx 480.3$.
+        -   Solve for $A \approx 650 - 169.7 \approx 480.3$.
     3.  Final formula: $$\text{Score} = 480.3 - 57.7 \cdot \ln\left(\frac{p}{1-p}\right)$$
 
 ## Industry Standards
 
--   $A$ is typically set to align scores with industry standards (e.g., score range of 300-850).
--   $A$ could range from 600–650 depending on the scoring model.
--   **FICO** and **VantageScore** do not disclose exact PDO values.
--   **Typical PDO values**: Range from 20 to 40 points.
--   Credit scoring systems may change PDO when they publish new versions of their models (e.g., FICO 8, FICO 9).
--   A low PDO (like 20) indicates a more sensitive scoring model, while a high PDO (like 40) indicates a less sensitive model.
+-   $A$ is typically set to align scores with the standard score range (300-850)
+-   $A$ could range from 600–650 depending on the scoring model
+-   **FICO** and **VantageScore** do not disclose exact PDO values
+-   **Typical PDO values**: Range from 20 to 40 points
+-   Credit scoring systems may change PDO when they publish new versions of their models (e.g., FICO 8, FICO 9)
+-   A low PDO (like 20) indicates a more sensitive scoring model, while a high PDO (like 40) indicates a less sensitive model
 
 ## Credit Scores as Risk Rankings {.smaller}
 
@@ -205,8 +201,7 @@ VantageScore is unique as it was created jointly by the three major credit burea
     -   Example: A 680 score does not mean a 6.8% chance of default.
     -   Default rates vary with economic conditions.
     -   During recessions, default rates for a 720 score may rise, but should have lower default rates than a 680 score
--   **Score Recalibration**: Models are periodically adjusted to maintain consistent risk rankings.
-    -   Recalibration ensures that scores remain predictive as economic conditions and consumer behavior evolve.
+
 
 # Underwriting and Selection Bias
 
@@ -216,7 +211,7 @@ VantageScore is unique as it was created jointly by the three major credit burea
 
 ## Through-the-Door (TTD) Population {.smaller}
 
--   **Definition**: The complete set of all consumers who apply for credit.
+-   **Definition**: The set of all consumers who apply for credit.
 -   **Characteristics**:
     -   Represents the full spectrum of credit risk in the applicant pool.
     -   Contains both high-quality and high-risk applicants.
@@ -231,7 +226,7 @@ VantageScore is unique as it was created jointly by the three major credit burea
 
 ## Underwriting Process - Part 1 {.smaller}
 
-Underwriting transforms the TTD population into accepted and rejected segments:
+Underwriting segments the TTD population into accepted and rejected populations:
 
 1.  **Application receipt**: Gather applicant information and credit reports.
     -   Personal identification.
@@ -258,15 +253,13 @@ Underwriting transforms the TTD population into accepted and rejected segments:
 
 4.  **Decision**: Approve, conditionally approve, or reject.
     -   Approve: Meets all lending criteria.
-    -   Conditional: Requires additional documentation or guarantor.
+    -   Conditional: Requires additional documentation or guarantor or manual review.
     -   Reject: Fails to meet minimum lending standards.
-    -   Note: Some lenders may use "refer" status for borderline cases requiring manual review.
 5.  **Pricing and terms**: For approved applicants.
     -   Interest rate determination.
     -   Loan amount calculation.
     -   Term length assignment.
     -   Risk-based pricing adjustments (e.g., higher rates for higher-risk applicants).
-
 
 ## Known Good Bad (KGB) Population {.smaller}
 
@@ -283,7 +276,7 @@ Underwriting transforms the TTD population into accepted and rejected segments:
 -   **Terminology**:
     -   "Good": Accounts that perform as expected (make payments on time).
     -   "Bad": Accounts that default or become seriously delinquent.
-    -   "Known": Performance outcome is observed.
+    -   "Known": Performance outcome (default indicator) is observed.
 -   **Modeling implication**:
     -   Models developed only on KGB data suffer from selection bias.
     -   Risk assessments based only on KGB data tend to underestimate true risk.
@@ -296,7 +289,7 @@ When models are trained only on the KGB population, they encounter a fundamental
 -   **Risk underestimation**: Models cannot learn patterns from the high-risk rejected population.
 -   **Extrapolation error**: When applied to the full TTD population, models make poor predictions for segments they never observed.
 -   **Mathematical perspective**: The model learns $P(\text{default} | \text{approved})$ instead of the desired $P(\text{default} | \text{applied})$.
--   **Visual illustration**: In the risk curve below, KGB data only includes the green portion, missing the critical red portion:
+-   **Visual illustration**: In the figure (next slide), KGB data only includes the green portion, missing the critical red portion:
 
 ## Selection Bias Visualization {.smaller}
 
@@ -731,10 +724,14 @@ summary_data = {
 summary_df = pd.DataFrame(summary_data)
 
 
-display(summary_df)
+display(summary_df.style.hide(axis='index'))
 ```
 
 ## Training the KGB Model {.smaller}
+
+- Train an AutoGluon model using only the KGB population
+- Set the best model to CatBoost
+- Evaluate the model's performance on the entire TTD population
 
 ```{python}
 #| label: chunk-train-kgb-model
@@ -794,6 +791,7 @@ ttd_predictions_df = pd.DataFrame({
 ```
 
 ## Underestimating Risk for Rejected Applicants {.smaller}
+
 ```{python}
 #| label: tbl-risk-by-population
 #| tbl-cap: "True vs. Predicted PD"
@@ -809,13 +807,18 @@ approved_grouped = (ttd_predictions_df
     }).reset_index()
     .rename(columns={'credit_score': 'num_loans'})) # Rename the count column
 
-display(approved_grouped)
+display(approved_grouped.style.hide(axis='index'))
+
 ```
 
 ## Average PDs by Credit Score {.smaller}
 
 ```{python}
-#| label: chunk-calc-avg-pd-kgb
+#| label: fig-pd-comparison-kgb
+#| fig-cap: "Average True PD vs. Predicted PD (KGB Model)"
+#| fig-alt: "Line chart comparing true default probability and predicted default probability by credit score. The predicted probability underestimates the true probability for scores below the 680 approval threshold."
+#| fig-width: 12
+#| fig-height: 6
 #| code-fold: true
 
 
@@ -825,19 +828,10 @@ score_grouped = ttd_predictions_df.groupby('credit_score').agg({
     'true_default_prob': 'mean',
     'predicted_default_prob': 'mean',
 }).reset_index()
-```
-
-```{python}
-#| label: fig-pd-comparison-kgb
-#| fig-cap: "Average True PD vs. Predicted PD (KGB Model)"
-#| fig-alt: "Line chart comparing true default probability and predicted default probability by credit score. The predicted probability underestimates the true probability for scores below the 680 approval threshold."
-#| fig-width: 14
-#| fig-height: 8
-#| code-fold: true
 
 
 # Plotting
-plt.figure(figsize=(14, 8))
+plt.figure(figsize=(12, 6))
 
 # Plot true default probability (solid line)
 plt.plot(score_grouped['credit_score'], score_grouped['true_default_prob'],
@@ -873,13 +867,17 @@ plt.show()
 
 -   Augmentation is the process of including rejected applicants in the training data
 -   Naive Augmentation: Assume all rejected applicants would default
--   Using the "all-bad assumption" for rejected applicants is a huge oversimplification.
+-   Using the "all-bad assumption" for rejected applicants is a huge oversimplification
 -   The approach is not data-driven and not commonly used.
 
 ```{python}
 #| label: chunk-train-naive-aug-model
 #| code-fold: true
-
+#| echo: false
+#| warning: false
+#| message: false
+#| results: hide
+#| output: false 
 
 # Static save path for augmented model (all-bad assumption)
 save_path = 'augmented_all_bad_model'
@@ -927,20 +925,20 @@ aug_score_grouped = augmented_pred_df.groupby('credit_score').agg({
 }).reset_index()
 ```
 
-## Naive Augmentation: Results Comparison {.smaller}
+## Naive Augmentation: Results {.smaller}
 
 ```{python}
 #| label: fig-pd-comparison-naive
 #| fig-cap: "Model Comparison: KGB vs Augmented (Naive)"
 #| fig-alt: "Line chart comparing true default probability, KGB model predicted probability, and Naive Augmented model predicted probability by credit score. The Naive Augmented model overestimates risk for lower scores."
-#| fig-width: 14
-#| fig-height: 8
+#| fig-width: 12
+#| fig-height: 6
 #| code-fold: true
 #| warning: false
 #| message: false
 
 # Plotting comparison
-plt.figure(figsize=(14, 8))
+plt.figure(figsize=(12, 6))
 
 # Plot true default probability
 plt.plot(score_grouped['credit_score'], score_grouped['true_default_prob'], 
@@ -969,7 +967,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-# Impact of Augmentation on Model Performance {.smaller}
+## Impact of Naive Augmentation {.smaller}
 
 ```{python}
 #| label: tbl-mae-comparison
@@ -1013,16 +1011,18 @@ error_df = pd.DataFrame(error_data)
 error_df['MAE'] = error_df['MAE'].map('{:.1%}'.format)
 
 # Display the DataFrame
-display(error_df)
+display(error_df.style.hide(axis='index'))
+
+
 ```
 
-## Reducing Bias: Bureau Proxy Augmentation {.smaller}
+## Reducing Bias: Bureau Augmentation {.smaller}
 
 -   Bureau Proxy Augmentation: Send the list of rejected applicants to a credit bureau and append the default indicator from each rejected applicant **who were granted credit in the past**
 -   Include the rejected applicants who were granted credit in the past in the training data
 -   The major drawback is that only a subset of rejected applicants would be included in the training data
 
-## Bureau Proxy
+## Bureau Proxy Metrics {.smaller}
 
 ```{python}
 #| label: tbl-bureau-proxy-stats
@@ -1063,7 +1063,7 @@ def credit_bureau_match_probability(credit_score, threshold=680, max_prob=0.10):
 scores_rejected = X_ttd_train.loc[rejected_indices, 'credit_score']
 bureau_match_probabilities = scores_rejected.map(credit_bureau_match_probability)
 
-# Simulate which rejected applicants the bureau would have data for
+# Simulate which rejected applicants received credit elsewhere
 np.random.seed(42)
 has_bureau_data = np.random.binomial(1, bureau_match_probabilities)
 bureau_match_rate = sum(has_bureau_data) / len(has_bureau_data)
@@ -1099,22 +1099,29 @@ y_bureau_proxy_train = y_bureau_proxy_train.loc[valid_indices]
 # Create a dictionary for summary statistics
 bureau_proxy_stats_data = {
     'Metric': [
-        'Original training set size',
-        'Bureau proxy training set size',
-        'Rejected applicants with bureau data',
-        'Rejected applicants without bureau data (excluded)'
+        'TTD Applicants',
+        'KGB Applicants',
+        'Rejected Applicants',
+        'Rejected Applicants with proxies',
+        'Rejected Applicants without proxies (excluded)',
+        'KGB + Bureau Proxy Applicants'
+
     ],
     'Value': [
         f"{len(X_ttd_train):,}",
-        f"{len(X_bureau_proxy_train):,}",
+        f"{len(X_kgb_train):,}",
+        f"{len(rejected_indices):,}",
         f"{sum(has_bureau_data):,} of {len(has_bureau_data):,} ({bureau_match_rate:.1%})",
-        f"{len(has_bureau_data) - sum(has_bureau_data):,}"
+        f"{len(has_bureau_data) - sum(has_bureau_data):,}",
+        f"{len(X_bureau_proxy_train):,}"
     ]
 }
 
 # Create and display the DataFrame
 bureau_proxy_stats_df = pd.DataFrame(bureau_proxy_stats_data)
-display(bureau_proxy_stats_df)
+display(bureau_proxy_stats_df.style.hide(axis='index'))
+
+
 ```
 
 ```{python}
@@ -1150,7 +1157,7 @@ bureau_proxy_pred_df = pd.DataFrame({
 })
 ```
 
-## Bureau Proxy Augmentation: Results Comparison {.smaller}
+## Bureau Augmentation: Results {.smaller}
 
 ```{python}
 #| label: fig-bureau-proxy-comparison
@@ -1184,19 +1191,18 @@ plt.figure(figsize=(12, 6))
 
 # Plot true default probability
 plt.plot(score_grouped['credit_score'], score_grouped['true_default_prob'], 
-         '#444444', linewidth=3, label='True PD')  
+         'b-', linewidth=3, label='True PD')  
 
 # Plot all three model predictions
 plt.plot(score_grouped['credit_score'], score_grouped['predicted_default_prob'], 
          'r--', linewidth=2, label='KGB Model')
 plt.plot(aug_score_grouped['credit_score'], aug_score_grouped['predicted_default_prob'], 
-         'g-.', linewidth=2, label='Augmented (All-Bad)')
-plt.plot(bureau_proxy_score_grouped['credit_score'], bureau_proxy_score_grouped['predicted_default_prob'], 
-         'b:', linewidth=2, label='Augmented (Bureau Proxy)')
+         'g-.', linewidth=2, label='Augmented (Naive)')
+plt.plot(bureau_proxy_score_grouped['credit_score'], bureau_proxy_score_grouped['predicted_default_prob'],
+         ':', color='purple', linewidth=2, label='Augmented (Bureau)')
 
 # Add rejection threshold line
-plt.axvline(x=680, color='black', linestyle='-.', label='Approval Threshold (680)')
-
+plt.axvline(x=680, color='black', linestyle='--', linewidth=2, label='Approval Threshold (680)')
 # Additional styling
 plt.xlabel('Credit Score', fontsize=20)
 plt.ylabel('PD', fontsize=20)
@@ -1209,34 +1215,37 @@ plt.tight_layout()
 plt.show()
 ```
 
+## Impact of Bureau Augmentation {.smaller}
+
 ```{python}
 #| label: tbl-bureau-proxy-mae
 #| tbl-cap: "Bureau Proxy Error Metrics"
 #| tbl-number: true
 
-# Create a DataFrame for bureau proxy error metrics
-bureau_proxy_error_data = {
-    'Model': ['Bureau Proxy', 'Bureau Proxy'],
-    'Score Range': ['Rejected (< 680)', 'Approved (>= 680)'],
-    'MAE': [bureau_proxy_error_low_scores, bureau_proxy_error_high_scores]
+# Combine error metrics for all models into a single DataFrame
+combined_error_data = {
+    'Model': ['Augmented (Naive)', 'Augmented (Naive)', 'KGB', 'KGB', 'Augmented (Bureau)', 'Augmented (Bureau)'],
+    'Score Range': ['Rejected (< 680)', 'Approved (>= 680)', 'Rejected (< 680)', 'Approved (>= 680)', 'Rejected (< 680)', 'Approved (>= 680)'],
+    'MAE': [aug_error_low_scores, aug_error_high_scores, error_low_scores, error_high_scores, bureau_proxy_error_low_scores, bureau_proxy_error_high_scores]
 }
-bureau_proxy_error_df = pd.DataFrame(bureau_proxy_error_data)
+combined_error_df = pd.DataFrame(combined_error_data)
 
 # Format MAE as percentage
-bureau_proxy_error_df['MAE'] = bureau_proxy_error_df['MAE'].map('{:.1%}'.format)
+combined_error_df['MAE'] = combined_error_df['MAE'].map('{:.1%}'.format)
 
 # Display the DataFrame
-display(bureau_proxy_error_df)
+display(combined_error_df.style.hide(axis='index'))
+
+
 ```
 
-# Key Takeaways {.smaller}
+## Key Takeaways {.smaller}
 
 -   **Selection Bias**:
     -   Significantly impacts credit risk models when using only KGB data.
     -   Leads to underestimation of risk for lower credit scores.
     -   Creates a discontinuity in the risk curve at the approval threshold.
     -   Largest risk assessment gap occurs near the approval threshold.
-
 -   **Reject Inference Techniques**:
     -   Substantially improve model accuracy.
     -   **Naive Augmentation**: Simple but overestimates risk.
