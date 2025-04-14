@@ -1242,11 +1242,10 @@ display(combined_error_df.style.hide(axis='index'))
 ## Key Takeaways {.smaller}
 
 -   **Selection Bias**:
-    -   Significantly impacts credit risk models when using only KGB data.
-    -   Leads to underestimation of risk for lower credit scores.
-    -   Creates a discontinuity in the risk curve at the approval threshold.
-    -   Largest risk assessment gap occurs near the approval threshold.
+    -   KGB population is a non-random sample (bias sample) of the TTD population.
+    -   Models trained only on KGB data may underestimate risk for rejected applicants.
+    -   Tree-based models (like **CatBoost**) can amplify selection bias through poor extrapolation.
 -   **Reject Inference Techniques**:
-    -   Substantially improve model accuracy.
-    -   **Naive Augmentation**: Simple but overestimates risk.
+    -   Augmentation incorporates rejected applicants into the training data.
+    -   **Naive Augmentation**: Simple but substantially overestimates risk. Do not use.
     -   **Bureau Augmentation**: More accurate but may exclude most rejected applicants.
