@@ -192,7 +192,7 @@ execute:
 -   **FICO** and **VantageScore** do not disclose exact PDO values
 -   **Typical PDO values**: Range from 20 to 40 points
 -   Credit scoring systems may change PDO when they publish new versions of their models (e.g., FICO 8, FICO 9)
--   A low PDO (like 20) indicates a more sensitive scoring model, while a high PDO (like 40) indicates a less sensitive model
+-   A low PDO (like 20) indicates a less sensitive scoring model, while a high PDO (like 40) indicates a more sensitive model
 
 ## Credit Scores as Risk Rankings {.smaller}
 
