@@ -1,0 +1,1644 @@
+---
+title: "Lab 02: Credit Scorecard Development"
+format: 
+    html:
+        toc: true
+        code-fold: true
+        code-tools: true
+        code-line-numbers: true
+        page-layout: full
+number-sections: true
+execute:
+    warning: false
+    error: false
+---
+
+# Introduction
+
+The lab provides a hands-on guide to building and evaluating a credit scorecard using loan-level (accepts) and applicant-level (rejects) data. The purpose is to develop a 3-digit score that ranks Through-the-Door (TTD) applicants from most to least risky.
+
+We will cover data preparation, data visualization, reject inference, model diagnostics using ICE and partial dependence plots,  monotonic constraints, evaluating model performance, selecting decision thresholds, generating adverse action reasons using counterfactual explanations, and interpreting model predictions locally and globally using SHAP. This lab builds upon the concepts introduced in Lecture 02.
+
+**Learning Objectives:**
+
+-   Load and prepare lending data, including handling accepted and rejected applications.
+-   Measure monotonicity using binned probability plots and spearman correlation
+-   Implement reject inference using fuzzy augmentation to create a Through-the-Door (TTD) dataset.
+-   Train an machine learning model on the TTD dataset using AutoGluon, incorporating sample weights.
+-   Diagnose model behavior using Individual Conditional Expectation (ICE) and Partial Dependence Plots (PDP).
+-   Apply monotonic constraints to ensure model predictions align with business intuition.
+-   Evaluate the scorecard using metrics like KS statistic.
+-   Select an optimal decision threshold based on business objectives.
+-   Generate counterfactual explanations for adverse action codes.
+-   Generate SHAP values for local and global model interpretability.
+
+# Import Python Libraries
+
+```{python}
+#| label: setup-imports
+#| message: false
+#| code-summary: "Import necessary Python libraries for data manipulation, visualization, and machine learning."
+
+# System utilities
+import os
+import shutil
+import random
+import warnings
+import time
+
+# Data manipulation and visualization
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from IPython.display import display # Explicit import for display
+from scipy import stats, special
+from sklearn.feature_selection import mutual_info_classif
+
+# Machine learning - scikit-learn
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score, f1_score, confusion_matrix, classification_report
+from sklearn.preprocessing import LabelEncoder, StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.inspection import PartialDependenceDisplay
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
+from sklearn import set_config
+# from sklearnex import patch_sklearn # Removed as not in conda env
+
+# Specialized ML libraries
+from autogluon.tabular import TabularPredictor, TabularDataset
+from autogluon.common.features.feature_metadata import FeatureMetadata # For monotonic constraints
+import shap
+
+# Counterfactual Explanations (optional, install if needed: pip install dice-ml)
+try:
+    import dice_ml
+    from dice_ml.utils import helpers # Helper functions for DICE
+except ImportError:
+    print("dice-ml not found. Skipping counterfactual explanation section.")
+    dice_ml = None
+
+# Settings
+pd.set_option('display.max_columns', 50)
+pd.set_option('display.max_rows', 100)
+warnings.filterwarnings('ignore', category=FutureWarning) # Suppress specific FutureWarnings
+set_config(transform_output="pandas") # Set sklearn output to pandas
+# patch_sklearn() # Removed as not in conda env
+
+print("Libraries imported successfully.")
+```
+
+# Helper Functions and Classes
+
+We reuse the `AutoGluonSklearnWrapper` from Lab 01 for compatibility with scikit-learn tools and add helper functions for scoring and evaluation.
+
+```{python}
+#| label: helper-funcs-classes
+#| code-summary: "Define helper functions and the AutoGluon wrapper class."
+
+
+def binned_prob_plot(
+    data,
+    feature,
+    target_binary,
+    cont_feat_flag=None,
+    transform_log_odds=False,
+    num_bins=20,
+    show_plot=True
+):
+    """
+    Plots the average binary target against either bins of a feature or categories of the feature.
+    If show_plot=False, skips plotting and only returns Spearman correlation (for continuous).
+    
+    Parameters:
+        data (DataFrame): The DataFrame containing the data.
+        feature (str): The name of the feature to be binned or used as is if categorical.
+        target_binary (str): The name of the binary target variable.
+        cont_feat_flag (bool): True if the feature is continuous, False if it's categorical.
+        transform_log_odds (bool): If True, transforms probabilities into log odds.
+        num_bins (int): Number of bins for discretization if the feature is continuous.
+        show_plot (bool): If True, plot the figure.
+    
+    Returns:
+        dict: {
+            'feature': feature,
+            'measure_name': string ("spearman_corr if continuous; mutual_info if categorical"),
+            "measure_value": float,
+            'p_value': float (or None)
+        }
+    """
+    # Work on a copy to avoid modifying original
+    df = data.copy()
+    # Infer cont_feat_flag if not provided: sample up to 100 obs, if >90 unique values => continuous
+    if cont_feat_flag is None:
+        tmp = df[feature].dropna()
+        tmp = tmp.sample(min(100, len(tmp)), random_state=2025)
+        cont_feat_flag = tmp.nunique() > 90
+        print(f"Feature {feature} is inferred as {'continuous' if cont_feat_flag else 'categorical'}.")
+    
+    # Bin or categorize
+    if cont_feat_flag:
+        df['bin_label'] = pd.qcut(df[feature], q=num_bins, duplicates='drop',
+                                  labels=[str(i) for i in range(1, num_bins + 1)])
+    else:
+        df['bin_label'] = df[feature].astype(str)
+    
+    # Group and compute mean & count
+    grouped = df.groupby('bin_label').agg(
+        **{
+            'average_' + target_binary: (target_binary, 'mean'),
+            'count': (target_binary, 'count')
+        }
+    )
+    
+    # Log-odds transform if requested
+    if transform_log_odds:
+        eps = 1e-6
+        grouped['transform_avg_prob'] = special.logit(
+            np.clip(grouped['average_' + target_binary], eps, 1 - eps)
+        )
+    
+    # Compute Spearman only for continuous
+    spearman_corr = None
+    p_value = None
+    if cont_feat_flag:
+        y = 'transform_avg_prob' if transform_log_odds else 'average_' + target_binary
+        spearman_corr, p_value = stats.spearmanr(range(len(grouped)), grouped[y])
+    else:
+        # Compute mutual information for categorical feature
+        # Convert categorical feature to numeric codes before computing MI
+        df_feat = df[[feature]].astype('category').apply(lambda col: col.cat.codes)
+        mi_score = mutual_info_classif(
+            df_feat, df[target_binary]
+        )[0]
+
+    # Plotting
+    if show_plot:
+        y_col = 'transform_avg_prob' if transform_log_odds else 'average_' + target_binary
+        
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.plot(
+            range(len(grouped)),
+            grouped[y_col],
+            marker='o',
+            linestyle='-',
+            label="Log Odds" if transform_log_odds else "Probability"
+        )
+        ax.set_xlabel(feature, fontsize=14)
+        ax.set_ylabel(
+            "Log Odds" if transform_log_odds else "Probability",
+            fontsize=14
+        )
+        if not transform_log_odds:
+            ax.set_ylim(0, 1)
+        ax.tick_params(axis='both', labelsize=12)
+        
+        ax2 = ax.twinx()
+        ax2.bar(
+            range(len(grouped)),
+            grouped['count'],
+            alpha=0.25,
+            color='gray',
+            align='center',
+            label='Counts'
+        )
+        ax2.set_ylabel('Counts', fontsize=14)
+        ax2.tick_params(axis='y', labelsize=12)
+        # Adjust secondary axis limits to 0 and 10× its current maximum
+        y_max = ax2.get_ylim()[1]
+        ax2.set_ylim(0, y_max * 10)
+        
+        ax.set_xticks(range(len(grouped)))
+        ax.set_xticklabels(grouped.index, rotation=45, fontsize=12)
+        
+        # Legend
+        h1, l1 = ax.get_legend_handles_labels()
+        h2, l2 = ax2.get_legend_handles_labels()
+        ax.legend(h1 + h2, l1 + l2, loc='upper right', fontsize=12)
+        
+        ax.set_title(f'Binned Probability Plot for {feature}', fontsize=16)
+        ax.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+    
+    return {
+        'feature': feature,
+        'measure_name': "spearman_corr" if cont_feat_flag==True else "mutual_info",
+        'meaure_value': spearman_corr if cont_feat_flag==True else mi_score,
+        'p_value': p_value if cont_feat_flag==True else None,
+        'log_odds': transform_log_odds
+    }
+
+
+# Example usage:
+# Generate sample data for demonstration
+n_samples = 500
+# x1: Continuous, positively correlated with target probability
+x1 = np.random.randn(n_samples) * 2 # Increase variance for better spread
+# Calculate probability based on x1 using sigmoid function
+# Scale x1 to control the steepness and center the probability around 0.5 when x1 is near mean
+prob_target = 1 / (1 + np.exp(-1.0 * x1)) # Increase coefficient for stronger relationship
+# Generate binary target based on the probability
+binary_target = (np.random.rand(n_samples) < prob_target).astype(int)
+
+# x2: Categorical, no relationship with target
+x2 = np.random.choice(['Category A', 'Category B', 'Category C', 'Category D'], size=n_samples)
+
+# x3: Continuous, no relationship with target
+x3 = np.random.randn(n_samples)
+
+data = pd.DataFrame({
+    'x1': x1,
+    'x2': x2,
+    'x3': x3,
+    'binary_target': binary_target
+})
+
+output = binned_prob_plot(data=data, feature='x1', target_binary='binary_target')
+
+print(output)
+
+def global_set_seed(seed_value=2025):
+    """Sets random seeds for reproducibility."""
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    # Note: AutoGluon handles its own seeding internally during fit
+
+def remove_ag_folder(mdl_folder: str) -> None:
+    """Removes the AutoGluon model folder if it exists."""
+    if os.path.exists(mdl_folder):
+        shutil.rmtree(mdl_folder)
+        print(f"Removed existing AutoGluon folder: {mdl_folder}")
+
+class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
+    """
+    Scikit-learn compatible wrapper for AutoGluon TabularPredictor.
+    Modified to accept feature_metadata for constraints.
+    """
+    def __init__(self, label, predictor_args=None, fit_args=None):
+        self.label = label
+        self.predictor_args = predictor_args if predictor_args else {}
+        self.fit_args = fit_args if fit_args else {}
+        self.predictor = None
+        self.classes_ = None
+        self.n_features_in_ = None
+        self.feature_names_in_ = None # Use feature_names_in_ for sklearn >= 1.0
+        self.is_fitted_ = False
+        self._estimator_type = "classifier" # Needed for sklearn compatibility
+
+    def __sklearn_is_fitted__(self):
+        """Official scikit-learn API for checking fitted status."""
+        return self.is_fitted_
+
+    def fit(self, X, y, sample_weight=None):
+        """
+        Fit AutoGluon model using scikit-learn interface.
+        Accepts sample_weight.
+        """
+        X_, y_ = check_X_y(X, y, accept_sparse=False) # Basic validation
+
+        # Store feature names
+        if isinstance(X_, pd.DataFrame):
+            self.feature_names_in_ = X_.columns.to_list()
+        else:
+            self.feature_names_in_ = [f'feature_{i}' for i in range(X_.shape[1])]
+            X_ = pd.DataFrame(X_, columns=self.feature_names_in_) # Convert to DataFrame if numpy
+
+        self.n_features_in_ = len(self.feature_names_in_)
+
+        # Combine X and y for AutoGluon, include sample_weight if provided
+        train_data_pd = X_.copy()
+        train_data_pd[self.label] = y_
+        if sample_weight is not None:
+             # Ensure sample_weight aligns with X_'s index if X_ is pandas
+            if isinstance(sample_weight, pd.Series):
+                sample_weight = sample_weight.reindex(X_.index)
+            train_data_pd['sample_weight'] = sample_weight
+            fit_args = {**self.fit_args, 'sample_weight': 'sample_weight'} # Tell AG the weight column
+        else:
+            fit_args = self.fit_args
+
+        train_data = TabularDataset(train_data_pd)
+
+        # Initialize and fit AutoGluon predictor
+        # Pass predictor_args during initialization
+        self.predictor = TabularPredictor(
+            label=self.label,
+            **self.predictor_args
+        )
+        
+        # Pass fit_args during fitting
+        self.predictor.fit(train_data, **fit_args)
+
+        # Store sklearn-specific attributes
+        if self.predictor.problem_type in ['binary', 'multiclass']:
+            self.classes_ = np.array(self.predictor.class_labels)
+        else:
+             # Handle regression or other types if necessary
+             self.classes_ = None # Or derive appropriately
+
+        self.is_fitted_ = True
+        return self
+
+    def predict(self, X):
+        """Make class predictions."""
+        check_is_fitted(self)
+        X_ = check_array(X, accept_sparse=False, force_all_finite=False) # Allow NaN for AG
+
+        # Ensure input has same features as training data
+        if isinstance(X_, np.ndarray):
+             X_ = pd.DataFrame(X_, columns=self.feature_names_in_)
+        else: # Assume pandas DataFrame
+             X_ = X_[self.feature_names_in_] # Reorder/select columns
+
+        test_data = TabularDataset(X_)
+        return self.predictor.predict(test_data).values
+
+    def predict_proba(self, X):
+        """Predict class probabilities."""
+        check_is_fitted(self)
+        X_ = check_array(X, accept_sparse=False, force_all_finite=False) # Allow NaN for AG
+
+        # Ensure input has same features as training data
+        if isinstance(X_, np.ndarray):
+             X_ = pd.DataFrame(X_, columns=self.feature_names_in_)
+        else: # Assume pandas DataFrame
+             X_ = X_[self.feature_names_in_] # Reorder/select columns
+
+        test_data = TabularDataset(X_)
+        # Ensure predict_proba returns probabilities for all classes in self.classes_ order
+        proba = self.predictor.predict_proba(test_data, as_pandas=True)
+        # Align columns with self.classes_
+        proba = proba[self.classes_] 
+        return proba.values
+
+    # Add _check_n_features and _check_feature_names if needed for older sklearn versions
+    # For newer versions, feature_names_in_ and n_features_in_ are standard
+
+def calculate_score(prob_default, pdo=40, base_score=600, base_odds=50):
+    """Converts probability of default to a 3-digit score."""
+    odds = (1 - prob_default) / prob_default
+    factor = pdo / np.log(2)
+    score = base_score + factor * np.log(odds / base_odds)
+    # Clip score to a reasonable range, e.g., 300-850
+    return np.clip(score, 300, 850).astype(int)
+
+# Add parse_emp_length helper globally for reuse
+
+def parse_emp_length(x):
+    """Convert employment length string to numeric years."""
+    if pd.isna(x) or x == 'n/a':
+        return -1
+    if '< 1 year' in x:
+        return 0
+    if '10+ years' in x:
+        return 10
+    try:
+        return int(str(x).split()[0])
+    except:
+        return -1
+
+def ks_table(y_true, y_prob, n_bins=10):
+    """Generates a KS table."""
+    df = pd.DataFrame({'y_true': y_true, 'y_prob': y_prob})
+    df['bin'] = pd.qcut(df['y_prob'], q=n_bins, duplicates='drop', labels=False)
+    
+    ks_df = df.groupby('bin').agg(
+        min_prob=('y_prob', 'min'),
+        max_prob=('y_prob', 'max'),
+        count=('y_true', 'count'),
+        bads=('y_true', 'sum')
+    ).reset_index().sort_values('bin', ascending=False) # Higher prob bins first
+    
+    ks_df['goods'] = ks_df['count'] - ks_df['bads']
+    ks_df['bad_rate'] = ks_df['bads'] / ks_df['count']
+    
+    total_bads = ks_df['bads'].sum()
+    total_goods = ks_df['goods'].sum()
+    
+    ks_df['cum_bads_pct'] = (ks_df['bads'].cumsum() / total_bads) * 100
+    ks_df['cum_goods_pct'] = (ks_df['goods'].cumsum() / total_goods) * 100
+    ks_df['ks'] = np.abs(ks_df['cum_bads_pct'] - ks_df['cum_goods_pct'])
+    
+    return ks_df[['min_prob', 'max_prob', 'count', 'bads', 'goods', 'bad_rate', 'cum_bads_pct', 'cum_goods_pct', 'ks']]
+
+print("Helper functions and classes defined.")
+```
+
+# 1. Data Loading & Preparation
+
+**Goal:** Load the LendingClub accepted and rejected loan datasets, define the target variable (`default_flag`), and identify common features suitable for modeling.
+
+```{python}
+#| label: data-load
+#| code-summary: "Load accepted and rejected loan data from parquet files."
+
+# Define file paths relative to the current script location
+accepted_path = '../Data/lendingclub/accepted_2007_to_2018Q4.parquet'
+rejected_path = '../Data/lendingclub/rejected_2007_to_2018Q4.parquet'
+
+# Load data using pandas
+try:
+    df_accepted = pd.read_parquet(accepted_path)
+    df_rejected = pd.read_parquet(rejected_path)
+    print("Data loaded successfully.")
+    print(f"Accepted data shape: {df_accepted.shape}")
+    print(f"Rejected data shape: {df_rejected.shape}")
+except FileNotFoundError:
+    print("Error: Parquet files not found. Make sure the paths are correct and the data generation scripts have been run.")
+    # Stop execution or handle error appropriately
+    df_accepted, df_rejected = None, None # Set to None to avoid errors later
+```
+
+## Define Target Variable
+
+**Goal:** Create the binary `default_flag` based on the `loan_status` column in the accepted dataset. Loans marked as 'Charged Off' are considered defaults (1), others are non-defaults (0).
+
+```{python}
+#| label: define-target
+#| code-summary: "Create the 'default_flag' target variable for accepted loans."
+
+if df_accepted is not None:
+    # Define default status based on 'loan_status'
+    default_statuses = ['Charged Off'] 
+    df_accepted['default_flag'] = df_accepted['loan_status'].apply(lambda x: 1 if x in default_statuses else 0)
+    
+    print("Target variable 'default_flag' created.")
+    print(df_accepted['default_flag'].value_counts(normalize=True))
+    
+    # Display loan status counts for context
+    print("\nLoan Status Distribution (Accepted):")
+    print(df_accepted['loan_status'].value_counts())
+```
+
+## Identify Common Features
+
+**Goal:** Find the features present in *both* the accepted and rejected datasets. These common features form the basis for building a model applicable to all applicants (Through-the-Door).
+
+```{python}
+#| label: common-features
+#| code-summary: "Identify and select features common to both accepted and rejected datasets."
+
+if df_accepted is not None and df_rejected is not None:
+    # Get column names
+    accepted_cols = set(df_accepted.columns)
+    rejected_cols = set(df_rejected.columns)
+    
+    # Find intersection
+    common_cols = list(accepted_cols.intersection(rejected_cols))
+    
+    # Add the target variable back to the list for the accepted set
+    common_cols_accepted = common_cols + ['default_flag'] 
+    
+    print(f"Number of common features: {len(common_cols)}")
+    # print(f"Common features: {common_cols}") # Uncomment to see the list
+    
+    # Subset dataframes to common columns (+ target for accepted)
+    # Note: Rejected data doesn't have 'default_flag'
+    df_accepted_common = df_accepted[common_cols_accepted].copy()
+    df_rejected_common = df_rejected[common_cols].copy()
+    
+    print(f"\nAccepted data shape (common features): {df_accepted_common.shape}")
+    print(f"Rejected data shape (common features): {df_rejected_common.shape}")
+else:
+    print("Skipping common feature identification due to data loading issues.")
+    df_accepted_common, df_rejected_common = None, None
+```
+
+## Binned Probability Plot
+
+A binned probability plot visualizes probability of default (the event rate) across different values or categories of a specific feature. The plot, along with the Spearman correlation coefficient, measures the strength of the monotonic relationship between a specific feature and the binary target. 
+
+For continuous features (like dti or loan_amnt), the data is first grouped into bins (e.g., 10 or 20 bins based on quantiles). This discretization helps to smooth out noise and reveal the underlying trend in risk across the feature's range. For categorical features (like purpose or grade), the existing categories are used directly.
+
+While visual inspection is helpful, the Spearman rank correlation coefficient provides a quantitative measure of the strength and direction of the monotonic relationship for continuous features. It calculates the correlation between the rank order of the bins and the corresponding event rates (or log-odds).
+
+* A value close to +1 indicates a strong positive monotonic relationship (as the feature increases, risk increases).
+* A value close to -1 indicates a strong negative monotonic relationship (as the feature increases, risk decreases).
+* A value close to 0 suggests a weak or non-monotonic relationship.
+
+The associated p-value helps determine if the observed correlation is statistically significant.
+
+For categorical features (like purpose or grade), mutual information measures whether some caregories are more risky than others.
+
+
+
+```{python}
+
+```
+
+
+# 2. Reject Inference via Fuzzy Augmentation
+
+**Concept:** Reject inference (RI) techniques aim to address the selection bias inherent in training models only on accepted applicants (KGB - Known Good/Bad population). Since we don't know the true outcome (default or not) for rejected applicants, RI methods estimate this information or adjust the modeling process to account for the missing group.
+
+**Fuzzy Augmentation:** This specific RI technique involves: 1. Training a simple model (often Logistic Regression) on the accepted (KGB) data using common features. 2. Using this model to predict the probability of *acceptance* (or a related proxy like probability of being 'good') for the rejected applicants. 3. Assigning all rejected applicants a 'bad' outcome (default_flag = 1). *This is a strong assumption, but common in some RI methods.* 4. Calculating sample weights for the rejected applicants based on their predicted probability from step 2. A common weighting scheme is `weight = p / (1 - p)`, where `p` is the predicted probability (e.g., probability of being 'good' or 'accepted'). This gives higher weight to rejected applicants who look similar to accepted 'good' applicants. 5. Combining the accepted data (with weight = 1) and the weighted rejected data to create an augmented "Through-the-Door" (TTD) dataset.
+
+**Comparison to Other Methods:** \* **Naive Augmentation (All Bad):** Simplest method. Assigns all rejected applicants `default_flag = 1` and `sample_weight = 1`. Often performs poorly as it doesn't differentiate risk within the rejected pool. \* **Bureau Augmentation (Proxy Bad):** Uses external credit bureau data (if available) for the rejected applicants to estimate their default probability or assign a risk category. Requires access to additional data sources. \* **Fuzzy Augmentation (as described above):** Attempts to infer risk within the rejected pool based on their similarity to accepted applicants. Relies on the assumption that the initial simple model captures some relationship between features and acceptance/goodness.
+
+**Why Tree Models Struggle with Extrapolation:** Tree-based models (like Random Forests, Gradient Boosting) make predictions based on the regions of the feature space learned during training. If the rejected population occupies regions significantly different from the accepted population (e.g., much lower credit scores, higher DTI), the tree model has no data to learn patterns there. It will typically extrapolate poorly, often assigning the prediction from the nearest leaf node learned on the accepted data, which is likely incorrect for the high-risk rejected group. Logistic Regression, being a linear model (in log-odds space), extrapolates more predictably, although its assumptions might not hold perfectly either.
+
+## Train Initial Model for Weighting
+
+**Goal:** Train a simple Logistic Regression model on a subset of common features from the *accepted* data. This model will predict a score used to calculate weights for the rejected applicants. We select a few key features known to be important in credit risk.
+
+```{python}
+#| label: ri-train-logit
+#| code-summary: "Train a Logistic Regression model on accepted data for reject inference weighting."
+
+if df_accepted_common is not None:
+    # Select a small subset of common features for the simple weighting model
+    # Ensure these features exist in both df_accepted_common and df_rejected_common
+    ri_features = ['loan_amnt', 'dti', 'emp_length'] # Example features
+    
+    # Verify features exist
+    missing_in_accepted = [f for f in ri_features if f not in df_accepted_common.columns]
+    missing_in_rejected = [f for f in ri_features if f not in df_rejected_common.columns]
+    if missing_in_accepted or missing_in_rejected:
+        print(f"Error: RI features missing. Accepted: {missing_in_accepted}, Rejected: {missing_in_rejected}")
+        ri_model = None
+    else:
+        print(f"Using RI features: {ri_features}")
+        
+        # Prepare data for Logistic Regression
+        X_acc_ri = df_accepted_common[ri_features]
+        y_acc_ri = df_accepted_common['default_flag'] # Target: default status within accepted
+
+        # Basic Preprocessing Pipeline for Logistic Regression
+        # Handle categorical 'emp_length' and numerical 'loan_amnt', 'dti'
+        # Impute missing values and scale numerical features
+        
+        # Convert emp_length to numerical (simplistic approach for this example)
+        # Use the globally defined parse_emp_length function
+        X_acc_ri.loc[:, 'emp_length_num'] = X_acc_ri['emp_length'].apply(parse_emp_length)
+        
+        numeric_features_ri = ['loan_amnt', 'dti', 'emp_length_num']
+        
+        # Define preprocessing steps
+        numeric_transformer_ri = Pipeline(steps=[
+            ('imputer', SimpleImputer(strategy='median')),
+            ('scaler', StandardScaler())
+        ])
+        
+        # Create the preprocessor
+        preprocessor_ri = ColumnTransformer(
+            transformers=[
+                ('num', numeric_transformer_ri, numeric_features_ri)
+            ], 
+            remainder='drop' # Drop original emp_length
+        )
+
+        # Create the full pipeline with Logistic Regression
+        ri_model = Pipeline(steps=[('preprocessor', preprocessor_ri),
+                                   ('classifier', LogisticRegression(solver='liblinear', random_state=2025, class_weight='balanced'))]) # Added class_weight
+
+        print("Training Reject Inference Logistic Regression model...")
+        start_time = time.time()
+        ri_model.fit(X_acc_ri, y_acc_ri)
+        end_time = time.time()
+        print(f"RI model training completed in {end_time - start_time:.2f} seconds.")
+        
+        # Evaluate briefly on accepted data (just for sanity check)
+        y_pred_proba_acc_ri = ri_model.predict_proba(X_acc_ri)[:, 1] # Prob of default
+        auc_acc_ri = roc_auc_score(y_acc_ri, y_pred_proba_acc_ri)
+        print(f"RI Model AUC on Accepted Data (Sanity Check): {auc_acc_ri:.4f}")
+
+else:
+    print("Skipping RI model training due to data loading issues.")
+    ri_model = None
+
+```
+
+## Calculate Weights and Create TTD Dataset
+
+**Goal:** Use the trained RI model to predict probabilities on the *rejected* data. Calculate fuzzy augmentation weights (`p/(1-p)`) for rejected applicants, assign them `default_flag = 1`, and combine with accepted data (weight=1) to form the TTD dataset.
+
+```{python}
+#| label: ri-apply-weights
+#| code-summary: "Apply RI model to rejected data, calculate weights, and create TTD dataset."
+
+if ri_model is not None and df_rejected_common is not None and df_accepted_common is not None:
+    print("Applying RI model to rejected data...")
+    X_rej_ri = df_rejected_common[ri_features].copy() # Use the same features as training
+
+    # Apply the same emp_length transformation
+    # Use the globally defined parse_emp_length function
+    X_rej_ri.loc[:, 'emp_length_num'] = X_rej_ri['emp_length'].apply(parse_emp_length)
+
+    # Predict probability of default (class 1) for rejected applicants
+    # Note: The interpretation is tricky. We trained on accepted defaults.
+    # Let's predict P(default=1 | features), assuming the model captures some risk signal.
+    # A higher predicted P(default) for a rejected applicant means they look more like
+    # the accepted applicants who defaulted.
+    # Let p = P(default=1 | features). We want weights for the *rejected* set.
+    # A common fuzzy weight is p / (1 - p), where p is P(good | features) = 1 - P(default | features).
+    # This gives higher weight to rejected applicants who look like accepted 'good' applicants.
+    
+    prob_default_rejected = ri_model.predict_proba(X_rej_ri)[:, 1]
+    prob_good_rejected = 1.0 - prob_default_rejected
+
+    # Calculate fuzzy weights: p_good / (1 - p_good) = p_good / p_default
+    # Add a small epsilon to avoid division by zero or infinite weights
+    epsilon = 1e-6
+    fuzzy_weights = prob_good_rejected / (prob_default_rejected + epsilon)
+    
+    # Cap weights to prevent extreme values (e.g., max weight of 10 or 20)
+    max_weight = 10 
+    fuzzy_weights = np.clip(fuzzy_weights, 0, max_weight) 
+
+    df_rejected_weighted = df_rejected_common.copy()
+    df_rejected_weighted['sample_weight'] = fuzzy_weights
+    df_rejected_weighted['default_flag'] = 1 # Assign all rejected as 'bad' outcome
+
+    # Prepare accepted data
+    df_accepted_weighted = df_accepted_common.copy()
+    df_accepted_weighted['sample_weight'] = 1.0 # Accepted applicants get weight 1
+
+    # Ensure columns align before concatenation (use only common features + target + weight)
+    common_features_for_ttd = [f for f in ri_features] # Start with RI features
+    # Add other common features if desired for the main model, but ensure they exist and are handled
+    # For simplicity now, let's stick to the RI features for the TTD model as well.
+    # If using more features, ensure preprocessing handles them in both sets.
+    
+    cols_for_concat = common_features_for_ttd + ['default_flag', 'sample_weight']
+    
+    # Select necessary columns and ensure consistency
+    df_accepted_final = df_accepted_weighted[cols_for_concat].copy()
+    df_rejected_final = df_rejected_weighted[cols_for_concat].copy()
+
+    # Concatenate to create TTD dataset
+    df_ttd = pd.concat([df_accepted_final, df_rejected_final], ignore_index=True)
+
+    print("TTD dataset created.")
+    print(f"TTD data shape: {df_ttd.shape}")
+    print("\nSample Weight distribution in TTD:")
+    print(df_ttd['sample_weight'].describe())
+    print("\nDefault Flag distribution in TTD:")
+    print(df_ttd['default_flag'].value_counts(normalize=True))
+    
+    # Clean up intermediate dataframes to save memory
+    del df_accepted_weighted, df_rejected_weighted, df_accepted_final, df_rejected_final
+    del X_acc_ri, y_acc_ri, X_rej_ri, prob_default_rejected, prob_good_rejected, fuzzy_weights
+
+else:
+    print("Skipping TTD dataset creation due to previous errors.")
+    df_ttd = None
+
+```
+
+# 3. Through-the-Door Modeling
+
+**Goal:** Train a more sophisticated model using AutoGluon on the augmented TTD dataset. We will use the `sample_weight` column generated during reject inference and restrict the model complexity (shallow trees, no neural networks) to enhance interpretability.
+
+```{python}
+#| label: ttd-modeling-setup
+#| code-summary: "Prepare TTD data and set up AutoGluon for weighted training."
+
+if df_ttd is not None:
+    # Define features (X) and target (y) and weights (w)
+    label = 'default_flag'
+    weight_col = 'sample_weight'
+    
+    # Use the features selected for TTD creation
+    features = common_features_for_ttd 
+    
+    X = df_ttd[features]
+    y = df_ttd[label]
+    w = df_ttd[weight_col]
+
+    # Split TTD data into training and testing sets (stratify by target)
+    # Use a smaller test size for faster lab execution if needed
+    X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
+        X, y, w, test_size=0.3, random_state=2025, stratify=y
+    )
+
+    print("TTD data split into train/test sets.")
+    print(f"Train shape: {X_train.shape}, Test shape: {X_test.shape}")
+    print(f"Train weights sum: {w_train.sum():.2f}, Test weights sum: {w_test.sum():.2f}")
+    print(f"Train target mean: {y_train.mean():.4f}, Test target mean: {y_test.mean():.4f}")
+
+    # --- AutoGluon Configuration ---
+    model_folder_ttd = 'Lab02_ag_models_TTD'
+    remove_ag_folder(model_folder_ttd) # Clean up previous runs
+
+    # Define hyperparameters to exclude NNs and limit tree depth
+    # Limit depth for GBM (LightGBM), CatBoost, XGBoost, RandomForest, ExtraTrees
+    hyperparameters = {
+        'GBM': {'extra_trees': True, 'ag_args': {'name_suffix': 'Catboost'}}, # Use CatBoost style GBM
+        'CAT': {'max_depth': 2},
+        'XGB': {'max_depth': 2},
+        'RF': {'max_depth': 2, 'n_estimators': 100}, # Reduce estimators for speed
+        'XT': {'max_depth': 2, 'n_estimators': 100}, # Reduce estimators for speed
+    }
+    
+    # Exclude Neural Networks
+    excluded_model_types = ['NN_TORCH', 'NN_MXNET']
+
+    # AutoGluon Predictor Arguments
+    predictor_args = {
+        'path': model_folder_ttd,
+        'eval_metric': 'roc_auc', # Use AUC for evaluation
+        'problem_type': 'binary'
+    }
+
+    # AutoGluon Fit Arguments
+    fit_args = {
+        'presets': 'medium_quality_faster_train', # Balance quality and speed
+        'time_limit': 300, # Limit training time (e.g., 5 minutes)
+        'hyperparameters': hyperparameters,
+        'excluded_model_types': excluded_model_types,
+        'num_bag_folds': 0, # Disable bagging for simplicity/speed
+        'num_stack_levels': 0 # Disable stacking for simplicity/speed
+        # sample_weight is passed during fit method call
+    }
+
+    # Instantiate the wrapper
+    ag_model_ttd = AutoGluonSklearnWrapper(
+        label=label,
+        predictor_args=predictor_args,
+        fit_args=fit_args # Pass fit_args here, sample_weight added in .fit()
+    )
+
+    print("AutoGluon TTD model configured.")
+
+else:
+    print("Skipping TTD modeling setup due to data loading issues.")
+    ag_model_ttd = None
+```
+
+```{python}
+#| label: ttd-modeling-train
+#| code-summary: "Train the AutoGluon model on the weighted TTD training data."
+
+if ag_model_ttd is not None:
+    print("Training AutoGluon TTD model...")
+    global_set_seed() # Set seed before training
+    start_time = time.time()
+    
+    # Fit the model using X_train, y_train, and w_train
+    ag_model_ttd.fit(X_train, y_train, sample_weight=w_train)
+    
+    end_time = time.time()
+    print(f"AutoGluon TTD training completed in {end_time - start_time:.2f} seconds.")
+
+    # Display leaderboard on the training data (or a holdout set if defined)
+    print("\nAutoGluon Leaderboard (on training data):")
+    # Access the internal predictor to show leaderboard
+    leaderboard = ag_model_ttd.predictor.leaderboard(silent=True) 
+    display(leaderboard)
+
+    # Set best model explicitly if needed (e.g., based on leaderboard)
+    # best_model_name = leaderboard.iloc[0]['model'] # Example: choose top model
+    # print(f"\nSetting best model to: {best_model_name}")
+    # ag_model_ttd.predictor.set_model_best(best_model_name) 
+    # Note: AutoGluon uses the weighted ensemble by default unless changed.
+
+else:
+    print("Skipping TTD model training.")
+```
+
+# 4. Diagnostics, ICE & Monotonic Constraints
+
+**Goal:** Understand how the trained TTD model makes predictions for individual features using Partial Dependence Plots (PDP) and Individual Conditional Expectation (ICE) plots. Then, enforce business logic by applying monotonic constraints and retraining the model.
+
+**PDP vs. ICE:** \* **PDP (Partial Dependence Plot):** Shows the *average* marginal effect of a feature on the model's prediction, holding other features constant (or averaging their effect). It helps understand the overall trend. \* **ICE (Individual Conditional Expectation) Plot:** Shows how the prediction for *each individual instance* changes as a single feature varies. It reveals heterogeneity in the model's response that might be hidden by the average PDP curve.
+
+## Plot PDP and ICE Curves
+
+**Goal:** Visualize the relationship between key features (`loan_amnt`, `dti`) and the predicted probability of default using PDP and ICE plots generated from the trained TTD model.
+
+```{python}
+#| label: plot-pdp-ice
+#| code-summary: "Generate PDP and ICE plots for key features."
+#| fig-cap: "PDP and ICE plots for loan_amnt and dti"
+#| fig-subcap: 
+#|   - "Partial Dependence and ICE for loan_amnt"
+#|   - "Partial Dependence and ICE for dti"
+#| layout-ncol: 2
+
+if ag_model_ttd is not None and ag_model_ttd.__sklearn_is_fitted__():
+    print("Generating PDP and ICE plots...")
+    
+    # Select a smaller sample of the test set for faster plotting
+    n_sample_plot = min(1000, X_test.shape[0]) 
+    X_test_sample = X_test.sample(n_sample_plot, random_state=2025)
+
+    features_to_plot = ['loan_amnt', 'dti']
+    
+    # Ensure features exist in the test sample
+    features_to_plot = [f for f in features_to_plot if f in X_test_sample.columns]
+
+    if not features_to_plot:
+        print("Error: Features selected for plotting not found in test data.")
+    else:
+        fig, axes = plt.subplots(1, len(features_to_plot), figsize=(8 * len(features_to_plot), 6), constrained_layout=True)
+        
+        # Ensure axes is always iterable, even if only one plot
+        if len(features_to_plot) == 1:
+            axes = [axes]
+
+        display_objs = PartialDependenceDisplay.from_estimator(
+            ag_model_ttd,
+            X_test_sample,
+            features=features_to_plot,
+            kind='both', # Plot both average (PDP) and individual (ICE) lines
+            line_kw={'color': 'blue', 'alpha': 0.8, 'linewidth': 0.5}, # ICE line style
+            pd_line_kw={'color': 'red', 'linestyle': '--', 'linewidth': 2}, # PDP line style
+            percentiles=(0.05, 0.95), # Range of feature values to plot
+            n_jobs=-1, # Use all available cores
+            grid_resolution=50, # Number of points on the grid
+            ax=axes
+        )
+
+        # Customize plots
+        for i, feature in enumerate(features_to_plot):
+             axes[i].set_title(f'PDP and ICE for {feature}')
+             axes[i].set_xlabel(feature)
+             axes[i].set_ylabel('Partial Dependence (Probability of Default)')
+             axes[i].grid(True, alpha=0.3)
+
+        # fig.suptitle('Partial Dependence and Individual Conditional Expectation Plots') # Removed for subcaps
+        plt.show()
+        print("PDP and ICE plots generated.")
+
+else:
+    print("Skipping PDP/ICE plot generation as the TTD model is not available or fitted.")
+
+```
+
+**Interpretation:** Examine the plots. Does the average relationship (red dashed line) make sense? For example, does higher `loan_amnt` generally lead to higher predicted default probability? Do the individual ICE lines (thin blue lines) show significant variation, suggesting interactions with other features? Are there non-monotonic relationships where the trend reverses?
+
+## Apply Monotonic Constraints
+
+**Concept:** Monotonic constraints enforce a specific directional relationship between a feature and the model's output. For example, we might require that as `dti` (Debt-to-Income ratio) increases, the predicted probability of default must either increase or stay the same (non-decreasing), reflecting business intuition that higher debt burden increases risk. This improves model interpretability and alignment with domain knowledge. AutoGluon allows specifying these constraints for models that support them (like LightGBM, XGBoost, CatBoost).
+
+**Goal:** Define monotonic constraints for `loan_amnt` (increasing risk) and `dti` (increasing risk). Retrain the AutoGluon model with these constraints enforced.
+
+```{python}
+#| label: monotonic-constraints-setup
+#| code-summary: "Define monotonic constraints and configure a new AutoGluon model."
+
+if df_ttd is not None:
+    # Define constraints: 1 for increasing, -1 for decreasing, 0 for no constraint
+    # We expect higher loan amount and higher DTI to increase default risk (positive correlation with target=1)
+    constraints = {
+        'loan_amnt': 1, 
+        'dti': 1,
+        # 'emp_length_num': 0 # Example: No constraint or maybe -1 if longer employment decreases risk
+    }
+    
+    # Create FeatureMetadata object
+    # Need to map feature names to their types as well for FeatureMetadata
+    # Infer types from the training data
+    feature_types = X_train.dtypes.to_dict()
+    feature_metadata = FeatureMetadata.from_df(X_train) # Auto-infer types initially
+    
+    # Apply constraints to the metadata
+    for feature, constraint_type in constraints.items():
+        if feature in feature_metadata.get_features():
+            feature_metadata = feature_metadata.add_feature_special_types(
+                {feature: [f'monotonic_{"inc" if constraint_type == 1 else "dec"}']}
+            )
+            print(f"Applied {'increasing' if constraint_type == 1 else 'decreasing'} constraint to: {feature}")
+        else:
+             print(f"Warning: Feature '{feature}' for constraint not found in training data columns.")
+
+    # --- Configure New AutoGluon Model with Constraints ---
+    model_folder_constrained = 'Lab02_ag_models_Constrained'
+    remove_ag_folder(model_folder_constrained)
+
+    # Use the same base hyperparameters and exclusions, but add feature_metadata
+    predictor_args_constrained = {
+        'path': model_folder_constrained,
+        'eval_metric': 'roc_auc',
+        'problem_type': 'binary',
+        'feature_metadata': feature_metadata # Pass constraints here
+    }
+
+    # Fit args remain similar (can reuse from previous step)
+    fit_args_constrained = fit_args.copy() 
+    # Ensure hyperparameters only include models supporting constraints if needed
+    # AutoGluon should handle this, but double-check if issues arise.
+    # The models used (GBM, CAT, XGB) generally support monotonic constraints.
+
+    # Instantiate the wrapper for the constrained model
+    ag_model_constrained = AutoGluonSklearnWrapper(
+        label=label,
+        predictor_args=predictor_args_constrained,
+        fit_args=fit_args_constrained
+    )
+
+    print("\nAutoGluon Constrained model configured.")
+
+else:
+    print("Skipping constrained model setup.")
+    ag_model_constrained = None
+
+```
+
+```{python}
+#| label: monotonic-constraints-train
+#| code-summary: "Train the AutoGluon model with monotonic constraints."
+
+if ag_model_constrained is not None:
+    print("Training AutoGluon Constrained model...")
+    global_set_seed()
+    start_time = time.time()
+    
+    # Fit the constrained model using the same weighted TTD data
+    ag_model_constrained.fit(X_train, y_train, sample_weight=w_train)
+    
+    end_time = time.time()
+    print(f"AutoGluon Constrained training completed in {end_time - start_time:.2f} seconds.")
+
+    # Display leaderboard
+    print("\nAutoGluon Constrained Leaderboard (on training data):")
+    leaderboard_constrained = ag_model_constrained.predictor.leaderboard(silent=True)
+    display(leaderboard_constrained)
+    
+    # Verify constraints by plotting PDP again (optional, but recommended)
+    print("\nGenerating PDP plots for constrained model (verification)...")
+    try:
+        fig_constrained, axes_constrained = plt.subplots(1, len(features_to_plot), figsize=(8 * len(features_to_plot), 6), constrained_layout=True)
+        if len(features_to_plot) == 1:
+            axes_constrained = [axes_constrained]
+
+        display_objs_constrained = PartialDependenceDisplay.from_estimator(
+            ag_model_constrained,
+            X_test_sample, # Use the same sample as before
+            features=features_to_plot,
+            kind='average', # Just PDP is enough for verification
+            pd_line_kw={'color': 'green', 'linestyle': '-', 'linewidth': 2},
+            percentiles=(0.05, 0.95),
+            n_jobs=-1,
+            grid_resolution=50,
+            ax=axes_constrained
+        )
+        for i, feature in enumerate(features_to_plot):
+             axes_constrained[i].set_title(f'Constrained PDP for {feature}')
+             axes_constrained[i].set_xlabel(feature)
+             axes_constrained[i].set_ylabel('Partial Dependence (Probability of Default)')
+             axes_constrained[i].grid(True, alpha=0.3)
+        plt.show()
+        print("Constrained PDP plots generated. Check if trends are monotonic as expected.")
+    except Exception as e:
+        print(f"Could not generate constrained PDP plots: {e}")
+
+
+else:
+    print("Skipping constrained model training.")
+
+```
+
+**Verification:** Check the new PDP plots. The curves for `loan_amnt` and `dti` should now be non-decreasing (monotonic increasing). If they are not, there might be an issue with how constraints were applied or the underlying models chosen by AutoGluon.
+
+# 5. Evaluation & Scoring
+
+**Goal:** Evaluate the performance of the *constrained* model on the held-out TTD test set. Convert the predicted probabilities into a 3-digit scorecard format and analyze the results using a KS table.
+
+## Evaluate on Test Set
+
+**Goal:** Calculate key performance metrics (like AUC) and compare the average predicted probability of default (PD) for applicants who were originally accepted versus rejected in the test set.
+
+```{python}
+#| label: evaluate-test-set
+#| code-summary: "Evaluate the constrained model on the TTD test set."
+
+if ag_model_constrained is not None and ag_model_constrained.__sklearn_is_fitted__():
+    print("Evaluating constrained model on the TTD test set...")
+    
+    # Predict probabilities on the test set
+    y_pred_proba_test = ag_model_constrained.predict_proba(X_test)[:, 1] # Probability of default (class 1)
+    y_pred_test = ag_model_constrained.predict(X_test) # Class predictions (0 or 1)
+
+    # Calculate AUC (using true labels and predicted probabilities)
+    # Note: Evaluation uses true y_test, not weighted. Weights were for training bias correction.
+    auc_test = roc_auc_score(y_test, y_pred_proba_test)
+    print(f"Test Set AUC: {auc_test:.4f}")
+
+    # Classification Report
+    print("\nClassification Report (Test Set):")
+    # Use a default threshold of 0.5 for the report, threshold selection comes later
+    print(classification_report(y_test, y_pred_test, target_names=['Not Default (0)', 'Default (1)'])) 
+
+    # Compare predicted PD for originally accepted vs. rejected in the test set
+    # We need to know the original status (accepted/rejected) for the test set samples
+    # Let's assume the index aligns with the original df_ttd before shuffling
+    test_indices = X_test.index
+    original_status = df_ttd.loc[test_indices, 'sample_weight'].apply(lambda w: 'Accepted' if w == 1.0 else 'Rejected')
+    
+    df_test_results = pd.DataFrame({
+        'true_default': y_test,
+        'pred_proba': y_pred_proba_test,
+        'original_status': original_status
+    })
+
+    avg_pd_by_status = df_test_results.groupby('original_status')['pred_proba'].mean()
+    print("\nAverage Predicted PD by Original Status (Test Set):")
+    print(avg_pd_by_status)
+    
+    # Check if rejected group has higher predicted PD on average
+    if 'Rejected' in avg_pd_by_status.index and 'Accepted' in avg_pd_by_status.index:
+        if avg_pd_by_status['Rejected'] > avg_pd_by_status['Accepted']:
+            print("As expected, the model predicts a higher average PD for the originally rejected group.")
+        else:
+            print("Warning: The model does not predict a higher average PD for the originally rejected group. Check RI/model.")
+            
+else:
+    print("Skipping test set evaluation.")
+    df_test_results = None
+```
+
+**Interpretation:** The AUC gives an overall measure of discriminative power. The classification report provides precision, recall, and F1-score (at a 0.5 threshold). Crucially, the average predicted PD should be significantly higher for the group originally rejected by the bank, indicating the reject inference and TTD modeling successfully captured the higher risk profile of that segment.
+
+## Convert PD to Score
+
+**Concept:** Credit scores are typically presented as 3-digit numbers (e.g., 300-850). We can convert the model's predicted probability of default (PD) into a score using a scaling formula based on "Points to Double Odds" (PDO). \* **PDO:** The number of score points required for the odds of being "good" (non-default) versus "bad" (default) to double. A common value is 40. \* **Formula:** A common formula is `Score = base_score + Factor * log(Odds / base_odds)`, where `Odds = (1 - PD) / PD` (Good/Bad odds), `Factor = PDO / log(2)`, `base_score` is a target score (e.g., 600) corresponding to the `base_odds` (e.g., 50:1 Good/Bad).
+
+**Goal:** Apply the PDO formula to convert the predicted probabilities on the test set into 3-digit scores.
+
+```{python}
+#| label: convert-pd-to-score
+#| code-summary: "Convert predicted probabilities to 3-digit scores using PDO scaling."
+
+if df_test_results is not None:
+    print("Converting PD to Scores...")
+    
+    # Define scoring parameters
+    pdo = 40       # Points to double the odds (Good/Bad)
+    base_score = 600 # Target score for base odds
+    base_odds = 50   # Target odds (Good/Bad) corresponding to base_score (e.g., 50:1)
+    
+    # Calculate scores using the helper function
+    df_test_results['score'] = calculate_score(
+        df_test_results['pred_proba'], 
+        pdo=pdo, 
+        base_score=base_score, 
+        base_odds=base_odds
+    )
+
+    print("Scores calculated.")
+    print("\nScore Distribution (Test Set):")
+    print(df_test_results['score'].describe())
+
+    # Plot score distribution
+    plt.figure(figsize=(10, 5))
+    sns.histplot(df_test_results['score'], bins=50, kde=True)
+    plt.title('Score Distribution on Test Set')
+    plt.xlabel('Calculated Score')
+    plt.ylabel('Frequency')
+    plt.grid(True, alpha=0.3)
+    plt.show()
+    
+else:
+    print("Skipping score conversion.")
+
+```
+
+## Build KS Table
+
+**Concept:** The Kolmogorov-Smirnov (KS) statistic measures the maximum difference between the cumulative distribution functions of "goods" (non-defaults) and "bads" (defaults) across score or probability bins. A higher KS statistic indicates better separation between the two groups. A KS table summarizes performance across score bins.
+
+**Goal:** Create a KS table by binning the calculated scores on the test set and calculating relevant metrics for each bin.
+
+```{python}
+#| label: build-ks-table
+#| tbl-cap: "KS Table for Constrained Model on Test Set"
+#| code-summary: "Generate a KS table based on calculated scores."
+
+if df_test_results is not None and 'score' in df_test_results.columns:
+    print("Building KS Table...")
+    
+    # Use the helper function (requires probabilities, not scores directly for qcut)
+    # Or adapt the helper function to work with scores
+    
+    # Let's use the probability-based KS table function for consistency
+    ks_df_test = ks_table(df_test_results['true_default'], df_test_results['pred_proba'], n_bins=10)
+    
+    print("KS Table generated.")
+    display(ks_df_test)
+    
+    # Find max KS
+    max_ks = ks_df_test['ks'].max()
+    print(f"\nMaximum KS Statistic: {max_ks:.2f}")
+
+else:
+    print("Skipping KS table generation.")
+
+```
+
+**Interpretation:** The KS table shows how well the model ranks applicants. The `bad_rate` should generally decrease as you move down the table (from higher probability/lower score bins to lower probability/higher score bins). The `ks` column shows the separation power at each bin; the maximum KS value indicates the point of greatest separation between defaults and non-defaults according to the model's ranking. A KS above 30 is often considered acceptable, above 40 good, and above 50 excellent, but context matters.
+
+# 6. Decision Threshold Selection
+
+**Goal:** Determine an appropriate score or probability cutoff to approve or reject loan applications based on the model's output and business objectives. We will compare thresholds based on KS, F1-score, and a simple profit maximization example.
+
+## Compare Candidate Cutoffs
+
+**Goal:** Calculate the optimal threshold based on maximizing the KS statistic, maximizing the F1-score, and maximizing a hypothetical profit function.
+
+```{python}
+#| label: compare-thresholds
+#| code-summary: "Calculate optimal thresholds based on KS, F1, and profit maximization."
+
+if df_test_results is not None:
+    print("Comparing decision thresholds...")
+    
+    y_true_test = df_test_results['true_default']
+    y_prob_test = df_test_results['pred_proba']
+
+    # --- 1. Maximize KS ---
+    # The KS table already finds the max KS. The threshold lies between the bins
+    # where the max KS occurs. We can approximate it.
+    max_ks_row = ks_df_test.loc[ks_df_test['ks'].idxmax()]
+    # Threshold is roughly between min_prob of this bin and max_prob of the previous one
+    # Or simply use the min_prob of the bin where KS is max as an approximation
+    threshold_ks = max_ks_row['min_prob'] 
+    print(f"\n1. Threshold maximizing KS (approx): {threshold_ks:.4f} (Max KS = {max_ks_row['ks']:.2f})")
+
+    # --- 2. Maximize F1-Score ---
+    thresholds = np.linspace(0.01, 0.99, 100) # Range of potential thresholds
+    f1_scores = [f1_score(y_true_test, (y_prob_test >= t).astype(int)) for t in thresholds]
+    max_f1_idx = np.argmax(f1_scores)
+    threshold_f1 = thresholds[max_f1_idx]
+    max_f1 = f1_scores[max_f1_idx]
+    print(f"2. Threshold maximizing F1-Score: {threshold_f1:.4f} (Max F1 = {max_f1:.4f})")
+
+    # --- 3. Maximize Profit (Hypothetical) ---
+    # Define profit/loss: e.g., Profit per 'good' loan, Loss per 'bad' loan
+    profit_good = 500  # Example: $500 profit for a non-defaulting loan
+    loss_bad = -2000 # Example: $2000 loss for a defaulting loan (includes principal, costs)
+
+    profits = []
+    for t in thresholds:
+        y_pred_t = (y_prob_test >= t).astype(int)
+        # Calculate confusion matrix elements for loans *approved* at this threshold
+        # TP: Approved and Defaulted (Loss)
+        # FP: Approved and Not Defaulted (Profit)
+        # TN: Rejected and Not Defaulted (Neutral profit=0)
+        # FN: Rejected and Defaulted (Neutral profit=0)
+        
+        # We only care about the outcomes of *approved* loans (y_pred_t == 1 is reject in default prediction)
+        # Let's redefine: Predict 1 = Default, Predict 0 = Not Default
+        # Approve if predicted probability < threshold (Predict 0)
+        
+        approve = (y_prob_test < t)
+        
+        true_pos = np.sum(approve & (y_true_test == 0)) # Approved and Good (TN in default prediction) -> Profit
+        false_pos = np.sum(approve & (y_true_test == 1)) # Approved and Bad (FN in default prediction) -> Loss
+        
+        total_profit = (true_pos * profit_good) + (false_pos * loss_bad)
+        profits.append(total_profit)
+
+    max_profit_idx = np.argmax(profits)
+    threshold_profit = thresholds[max_profit_idx]
+    max_profit = profits[max_profit_idx]
+    print(f"3. Threshold maximizing Profit: {threshold_profit:.4f} (Max Profit = ${max_profit:.0f})")
+    
+    # Plot F1 and Profit vs. Threshold
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+
+    color = 'tab:red'
+    ax1.set_xlabel('Probability Threshold (Approve if PD < Threshold)')
+    ax1.set_ylabel('F1 Score', color=color)
+    ax1.plot(thresholds, f1_scores, color=color, label='F1 Score')
+    ax1.tick_params(axis='y', labelcolor=color)
+    ax1.axvline(threshold_f1, color=color, linestyle='--', label=f'Max F1 Threshold ({threshold_f1:.2f})')
+
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+    color = 'tab:blue'
+    ax2.set_ylabel('Total Profit ($)', color=color)
+    ax2.plot(thresholds, profits, color=color, label='Profit')
+    ax2.tick_params(axis='y', labelcolor=color)
+    ax2.axvline(threshold_profit, color=color, linestyle='--', label=f'Max Profit Threshold ({threshold_profit:.2f})')
+
+    fig.suptitle('F1 Score and Profit vs. Decision Threshold')
+    fig.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=2)
+    plt.grid(True, alpha=0.3)
+    fig.tight_layout()
+    plt.show()
+
+else:
+    print("Skipping threshold comparison.")
+
+```
+
+## Choose and Document Optimal Threshold
+
+**Goal:** Select the final decision threshold based on the analysis above and document the choice. The "best" threshold depends on the bank's priorities (e.g., maximizing profit, controlling risk via F1/precision/recall, meeting regulatory requirements).
+
+**Decision:** Based on the analysis, let's choose the threshold that maximizes the hypothetical profit, as it directly relates to a business outcome.
+
+```{python}
+#| label: select-threshold
+#| code-summary: "Select and document the final decision threshold."
+
+if 'threshold_profit' in locals():
+    final_threshold_prob = threshold_profit 
+    # Convert probability threshold to score threshold
+    # Score = Offset - Factor * log(PD / (1 - PD))
+    # Find the score corresponding to this probability
+    final_threshold_score = calculate_score(
+        final_threshold_prob, 
+        pdo=pdo, 
+        base_score=base_score, 
+        base_odds=base_odds
+    )
+
+    print(f"Selected Final Threshold (Probability): {final_threshold_prob:.4f}")
+    print(f"Corresponding Score Threshold (Approve if Score >= Threshold): {final_threshold_score}")
+    print("\nDocumentation:")
+    print("The decision threshold was selected to maximize the estimated profit on the test set,")
+    print(f"using a hypothetical profit of ${profit_good} for good loans and loss of ${loss_bad} for bad loans.")
+    print(f"This corresponds to approving applicants with a predicted probability of default LESS THAN {final_threshold_prob:.4f},")
+    print(f"or equivalently, a calculated score GREATER THAN OR EQUAL TO {final_threshold_score}.")
+    
+    # Store for later use
+    selected_threshold_prob = final_threshold_prob
+    selected_threshold_score = final_threshold_score
+
+else:
+    print("Cannot select threshold due to previous errors.")
+    selected_threshold_prob = 0.5 # Default fallback
+    selected_threshold_score = calculate_score(0.5, pdo, base_score, base_odds)
+
+```
+
+# 7. Adverse Action & Counterfactual Explanations
+
+**Concept:** When a loan application is rejected, regulations often require providing reasons (adverse action notice). Counterfactual explanations identify the *minimal changes* to an applicant's profile that would have resulted in approval. This provides concrete feedback. Different distance metrics (L1, L2, Gower) define "minimal change" differently.
+
+-   **L1 (Manhattan):** Sum of absolute changes. Favors changing fewer features by larger amounts.
+-   **L2 (Euclidean):** Square root of sum of squared changes. Favors changing many features by small amounts.
+-   **Gower:** Handles mixed data types (numerical/categorical). Good for real-world data but can be complex.
+-   **Wachter Method:** Focuses specifically on finding the closest point across the decision boundary, often cited in fairness literature.
+
+**Goal:** Use the `dice-ml` library (if installed) to generate counterfactual explanations for a few rejected applicants from the test set, demonstrating how different distance metrics yield different suggested changes.
+
+**Note:** The following section requires the `dice-ml` library, which is not included in the specified `conda_env_requirements_MacOS.yml` file. Therefore, the code blocks for setting up and generating counterfactuals have been commented out to allow the document to render without errors in the target environment.
+
+```{python}
+#| label: setup-counterfactuals
+#| code-summary: "Set up DiCE for generating counterfactual explanations."
+#| eval: false # Do not evaluate this cell
+
+# Note: This cell is commented out because dice-ml is not in the environment.
+# if dice_ml is not None and ag_model_constrained is not None and ag_model_constrained.__sklearn_is_fitted__() and df_test_results is not None:
+#     print("Setting up DiCE for counterfactual explanations...")
+# 
+#     # Prepare data for DiCE
+#     # DiCE needs the data with features and the outcome (prediction)
+#     dice_data = X_train.copy() # Use training data to inform DiCE about feature distributions/ranges
+#     dice_data[label] = y_train # Add true label (DiCE can use this)
+# 
+#     # Define continuous features for DiCE
+#     continuous_features = X_train.select_dtypes(include=np.number).columns.tolist()
+# 
+#     # Create DiCE Data object
+#     d = dice_ml.Data(dataframe=dice_data, 
+#                      continuous_features=continuous_features, 
+#                      outcome_name=label)
+# 
+#     # Create DiCE Model object (using the AutoGluon wrapper)
+#     # Need to ensure the predict_proba method returns probabilities for class 1 (default)
+#     # Let's create a simple wrapper if needed for DiCE compatibility
+#     class DiCEWrapper:
+#         def __init__(self, model):
+#             self._model = model
+#         
+#         def predict(self, X):
+#             # DiCE often expects class labels
+#             return self._model.predict(X)
+# 
+#         def predict_proba(self, X):
+#              # DiCE needs probability of the desired outcome (e.g., Not Default = 0)
+#              # Our model predicts P(Default=1). We want P(Not Default=0)
+#              prob_default = self._model.predict_proba(X)[:, 1]
+#              prob_not_default = 1.0 - prob_default
+#              # Return probabilities for both classes [P(0), P(1)]
+#              return np.vstack([prob_not_default, prob_default]).T
+# 
+#         @property
+#         def classes_(self):
+#              # Provide classes if the underlying model has them
+#              return self._model.classes_ if hasattr(self._model, 'classes_') else [0, 1]
+# 
+# 
+#     dice_model_wrapper = DiCEWrapper(ag_model_constrained)
+#     m = dice_ml.Model(model=dice_model_wrapper, backend='sklearn') # Treat AG wrapper as sklearn
+# 
+#     # Initialize DiCE explainer
+#     # Method 'random' is usually a good start. 'kdtree' works for numerical.
+#     exp = dice_ml.Dice(d, m, method='kdtree') 
+#     
+#     print("DiCE setup complete.")
+# 
+#     # Select applicants for explanation
+#     # Find rejected applicants in the test set (predicted prob >= threshold)
+#     rejected_test_indices = df_test_results[df_test_results['pred_proba'] >= selected_threshold_prob].index
+#     
+#     # Sample 3 rejected applicants
+#     if len(rejected_test_indices) >= 3:
+#         sample_indices = random.sample(list(rejected_test_indices), 3)
+#         applicants_to_explain = X_test.loc[sample_indices]
+#         print(f"\nSelected {len(sample_indices)} rejected applicants for counterfactuals:")
+#         display(applicants_to_explain)
+#     else:
+#         print("\nNot enough rejected applicants found in the test set to sample for counterfactuals.")
+#         applicants_to_explain = None
+# 
+# else:
+#     print("Skipping counterfactual setup (DiCE library not found or model not trained).")
+#     exp = None
+#     applicants_to_explain = None
+print("Counterfactual setup cell skipped (dice-ml not in environment).") # Add print statement
+```
+
+```{python}
+#| label: generate-counterfactuals
+#| code-summary: "Generate counterfactuals for sampled rejected applicants using different metrics."
+#| eval: false # Do not evaluate this cell
+
+# Note: This cell is commented out because dice-ml is not in the environment.
+# if exp is not None and applicants_to_explain is not None:
+#     print("Generating counterfactuals...")
+#     
+#     # Desired outcome: Not Default (class 0)
+#     desired_class = 0 
+#     
+#     for i, idx in enumerate(applicants_to_explain.index):
+#         applicant_query = applicants_to_explain.loc[[idx]]
+#         print(f"\n--- Counterfactuals for Applicant {i+1} (Index: {idx}) ---")
+#         
+#         # --- L1 Distance (using 'proximity_weight' in DiCE) ---
+#         print("\n1. Using L1 Distance (Proximity Focus):")
+#         try:
+#             # Generate counterfactuals focusing on proximity (closer to L1)
+#             dice_exp_l1 = exp.generate_counterfactuals(
+#                 applicant_query, 
+#                 total_CFs=3, 
+#                 desired_class=desired_class,
+#                 proximity_weight=0.8, # Higher weight on proximity
+#                 diversity_weight=0.2  # Lower weight on diversity
+#             )
+#             if dice_exp_l1:
+#                  dice_exp_l1.visualize_as_dataframe(show_only_changes=True)
+#             else:
+#                  print("No counterfactuals found with L1 focus.")
+#         except Exception as e:
+#             print(f"Error generating L1 counterfactuals: {e}")
+# 
+#         # --- L2 Distance (using 'diversity_weight' in DiCE - approximate) ---
+#         # DiCE's diversity often relates to spreading changes (closer to L2 idea)
+#         print("\n2. Using L2 Distance (Diversity Focus):")
+#         try:
+#             dice_exp_l2 = exp.generate_counterfactuals(
+#                 applicant_query, 
+#                 total_CFs=3, 
+#                 desired_class=desired_class,
+#                 proximity_weight=0.2, # Lower weight on proximity
+#                 diversity_weight=0.8  # Higher weight on diversity
+#             )
+#             if dice_exp_l2:
+#                 dice_exp_l2.visualize_as_dataframe(show_only_changes=True)
+#             else:
+#                 print("No counterfactuals found with L2 focus.")
+#         except Exception as e:
+#             print(f"Error generating L2 counterfactuals: {e}")
+#             
+#         # --- Gower Distance (Not directly supported by default DiCE methods like kdtree) ---
+#         # Would require a custom distance function or a different DiCE method if available.
+#         print("\n3. Gower Distance: (Not directly implemented in this example)")
+#         
+#         # --- Wachter Method (Conceptual) ---
+#         # Finding the closest point across the boundary. DiCE's proximity focus approximates this.
+#         print("\n4. Wachter Method: (Conceptually similar to high proximity weight)")
+# 
+# else:
+#     print("Skipping counterfactual generation.")
+print("Counterfactual generation cell skipped (dice-ml not in environment).") # Add print statement
+```
+
+**Interpretation:** Compare the counterfactuals generated by L1 and L2 focus. L1 might suggest changing one feature significantly (e.g., "increase income by \$X"), while L2 might suggest smaller changes across multiple features (e.g., "slightly decrease loan amount AND slightly increase income"). The choice of metric impacts the type of advice given to the applicant. Gower would be ideal for mixed data but requires more setup. Wachter emphasizes the minimal change needed *just* to cross the threshold.
+
+# 8. Local Interpretability with SHAP
+
+**Concept:** SHAP (SHapley Additive exPlanations) is a game-theoretic approach to explain individual predictions. It assigns each feature an "importance value" (SHAP value) representing its contribution to pushing the prediction away from a baseline (average prediction). SHAP values are additive, meaning the sum of SHAP values plus the baseline prediction equals the final prediction.
+
+**Goal:** Explain the predictions for the same three rejected applicants using SHAP values and visualize the contributions of each feature. Also, provide a simple manual SHAP calculation example.
+
+## SHAP Toy Example (Manual Calculation)
+
+**Goal:** Illustrate the core idea of SHAP values with a very simple model and data where calculations can be done manually.
+
+**Scenario:** Predict house price based on `Size (sq ft)` and `Has Pool (1/0)`. \* Baseline (average price): \$300k \* Model: `Price = 200 * Size + 50000 * HasPool + 10000` (Simple linear model) \* Applicant House: Size = 1500 sq ft, Has Pool = 1 (Yes) \* Prediction: `200 * 1500 + 50000 * 1 + 10000 = 300000 + 50000 + 10000 = $360k`
+
+**SHAP Calculation Idea:** How much did each feature contribute to moving the prediction from the baseline (\$300k) to the final (\$360k)? \* **Contribution of Size:** The average size might be, say, 1200 sq ft. The applicant's size (1500) is 300 sq ft above average. Contribution = `200 * (1500 - 1200) = 200 * 300 = +$60k`. (This is simplified; true SHAP considers feature orderings). \* **Contribution of Pool:** Maybe 10% of houses have pools (average HasPool = 0.1). Applicant has a pool (1). Contribution = `50000 * (1 - 0.1) = 50000 * 0.9 = +$45k`. (Again, simplified). \* **Intercept/Other:** The remaining difference might be attributed to the intercept or interactions. `Predicted - Baseline = $360k - $300k = +$60k`. Sum of simplified contributions = `$60k + $45k = $105k`. The difference (\$60k - $105k$) highlights the simplification; real SHAP ensures additivity.
+
+**Key Insight:** The prediction (\$360k) can be seen as `Baseline ($300k) + SHAP_Size (approx +$60k) + SHAP_Pool (approx +$45k) + SHAP_Intercept/Other (adjusts to match) = $360k`. SHAP provides a principled way to calculate these additive contributions.
+
+## Calculate and Plot Local SHAP Explanations
+
+**Goal:** Use the `shap` library to calculate SHAP values for the three selected applicants and visualize them using waterfall plots.
+
+```{python}
+#| label: setup-shap
+#| code-summary: "Set up SHAP explainer for the constrained AutoGluon model."
+
+if 'shap' in locals() and ag_model_constrained is not None and ag_model_constrained.__sklearn_is_fitted__():
+    print("Setting up SHAP explainer...")
+    
+    # SHAP needs a background dataset for reference (expectations)
+    # Use a sample of the training data for efficiency
+    n_sample_shap = min(200, X_train.shape[0]) # Smaller sample for background
+    X_train_shap_sample = X_train.sample(n_sample_shap, random_state=2025)
+
+    # Use KernelExplainer for model-agnostic explanations (can be slow)
+    # Need a function that takes a numpy array and returns probabilities for class 1
+    def predict_proba_for_shap(X_np):
+        # Convert numpy to pandas DataFrame with correct feature names
+        X_pd = pd.DataFrame(X_np, columns=ag_model_constrained.feature_names_in_)
+        # Return probability of the positive class (Default=1)
+        return ag_model_constrained.predict_proba(X_pd)[:, 1]
+
+    try:
+        explainer = shap.KernelExplainer(predict_proba_for_shap, X_train_shap_sample)
+        print("SHAP KernelExplainer created.")
+        shap_ready = True
+    except Exception as e:
+        print(f"Error creating SHAP KernelExplainer: {e}")
+        print("SHAP analysis will be skipped.")
+        explainer = None
+        shap_ready = False
+        
+else:
+    print("Skipping SHAP setup (library not found or model not trained).")
+    explainer = None
+    shap_ready = False
+
+```
+
+```{python}
+#| label: calculate-local-shap
+#| code-summary: "Calculate and plot SHAP values for the selected applicants."
+
+if shap_ready and explainer is not None and applicants_to_explain is not None:
+    print("Calculating SHAP values for selected applicants (this may take time)...")
+    start_time = time.time()
+    
+    # Ensure applicants_to_explain is pandas DataFrame with correct columns
+    applicants_pd = applicants_to_explain[ag_model_constrained.feature_names_in_]
+    
+    try:
+        shap_values_local = explainer.shap_values(applicants_pd)
+        end_time = time.time()
+        print(f"SHAP values calculated in {end_time - start_time:.2f} seconds.")
+
+        # Plot waterfall plots for each applicant
+        for i in range(len(applicants_pd)):
+            print(f"\n--- SHAP Waterfall Plot for Applicant {i+1} (Index: {applicants_pd.index[i]}) ---")
+            # Need shap >= 0.40 for Explanation object plotting
+            try:
+                 # Create Explanation object for plotting
+                 exp_obj = shap.Explanation(
+                     values=shap_values_local[i], 
+                     base_values=explainer.expected_value, 
+                     data=applicants_pd.iloc[i], 
+                     feature_names=applicants_pd.columns.tolist()
+                 )
+                 shap.plots.waterfall(exp_obj, max_display=10, show=True)
+                 # plt.show() # Already shown by shap plot function
+            except AttributeError:
+                 # Fallback for older shap versions
+                 print("Warning: shap.Explanation object not available. Using older plot method.")
+                 shap.plots.waterfall(explainer.expected_value, shap_values_local[i], feature_names=applicants_pd.columns, max_display=10, show=True)
+                 # plt.show()
+
+    except Exception as e:
+        print(f"Error calculating or plotting local SHAP values: {e}")
+
+else:
+    print("Skipping local SHAP value calculation/plotting.")
+
+```
+
+**Interpretation:** Each waterfall plot shows how the prediction for that specific applicant was built up from the baseline (E\[f(x)\]). Red bars represent features pushing the prediction higher (towards default), while blue bars push it lower (towards non-default). The length of the bar indicates the magnitude of the feature's contribution for that applicant.
+
+## SHAP Dependence and Interaction Plots
+
+**Goal:** Explore overall feature effects and potential interactions using SHAP dependence plots.
+
+```{python}
+#| label: plot-shap-dependence
+#| code-summary: "Generate SHAP dependence plots for key features."
+
+if shap_ready and explainer is not None:
+    print("Calculating SHAP values for dependence plots (using test set sample)...")
+    # Use a larger sample of the test set for more robust dependence plots
+    n_sample_dep = min(500, X_test.shape[0])
+    X_test_shap_sample = X_test.sample(n_sample_dep, random_state=2025)
+    
+    # Ensure columns match training
+    X_test_shap_sample = X_test_shap_sample[ag_model_constrained.feature_names_in_]
+
+    try:
+        start_time = time.time()
+        shap_values_dep = explainer.shap_values(X_test_shap_sample)
+        end_time = time.time()
+        print(f"SHAP values for dependence plots calculated in {end_time - start_time:.2f} seconds.")
+
+        features_for_dependence = ['loan_amnt', 'dti']
+        features_for_dependence = [f for f in features_for_dependence if f in X_test_shap_sample.columns]
+
+        if not features_for_dependence:
+             print("Error: Features for dependence plots not found.")
+        else:
+             print("\nGenerating SHAP Dependence Plots:")
+             for feature in features_for_dependence:
+                 try:
+                     print(f"\n--- Dependence Plot for {feature} ---")
+                     # Create Explanation object if possible
+                     exp_obj_dep = shap.Explanation(
+                         values=shap_values_dep, 
+                         base_values=explainer.expected_value, 
+                         data=X_test_shap_sample, 
+                         feature_names=X_test_shap_sample.columns.tolist()
+                     )
+                     shap.plots.scatter(exp_obj_dep[:, feature], color=exp_obj_dep, show=True)
+                     # plt.show()
+                 except AttributeError:
+                     print("Warning: shap.Explanation object not available. Using older plot method.")
+                     shap.dependence_plot(feature, shap_values_dep, X_test_shap_sample, interaction_index="auto", show=True)
+                     # plt.show()
+                 except Exception as inner_e:
+                      print(f"Could not generate dependence plot for {feature}: {inner_e}")
+
+    except Exception as e:
+        print(f"Error calculating SHAP values for dependence plots: {e}")
+
+else:
+    print("Skipping SHAP dependence plot generation.")
+
+```
+
+**Interpretation:** Each dependence plot shows the relationship between a feature's value (x-axis) and its SHAP value (y-axis) for each instance in the sample. The vertical dispersion can indicate interaction effects, often colored by the value of another feature that SHAP identifies as having the strongest interaction. This helps visualize not just the main effect but also how it might change depending on other features.
+
+# 9. Global Feature Importance
+
+**Goal:** Aggregate local SHAP values across the dataset to understand which features have the largest impact on the model's predictions overall.
+
+```{python}
+#| label: plot-global-shap
+#| code-summary: "Calculate and visualize global feature importance using SHAP."
+
+if shap_ready and 'shap_values_dep' in locals(): # Reuse SHAP values from dependence plots
+    print("Generating Global SHAP Feature Importance plot...")
+    
+    try:
+        # Use the Explanation object if available
+        exp_obj_dep = shap.Explanation(
+            values=shap_values_dep, 
+            base_values=explainer.expected_value, 
+            data=X_test_shap_sample, 
+            feature_names=X_test_shap_sample.columns.tolist()
+        )
+        
+        plt.figure() # Create a figure context for potential customization
+        shap.plots.bar(exp_obj_dep, max_display=15, show=True) # Bar plot of mean abs SHAP
+        plt.title('Global Feature Importance (Mean Absolute SHAP Value)')
+        # plt.show() # Shown by shap plot
+
+        plt.figure() # Create another figure context
+        shap.summary_plot(shap_values_dep, X_test_shap_sample, max_display=15, show=True) # Beeswarm plot
+        plt.title('SHAP Summary Plot (Beeswarm)')
+        # plt.show() # Shown by shap plot
+
+    except NameError: # If exp_obj_dep wasn't created due to older shap
+         print("Warning: shap.Explanation object not available. Using older plot methods.")
+         plt.figure()
+         shap.summary_plot(shap_values_dep, X_test_shap_sample, plot_type="bar", max_display=15, show=True)
+         plt.title('Global Feature Importance (Mean Absolute SHAP Value)')
+         # plt.show()
+         
+         plt.figure()
+         shap.summary_plot(shap_values_dep, X_test_shap_sample, max_display=15, show=True)
+         plt.title('SHAP Summary Plot (Beeswarm)')
+         # plt.show()
+         
+    except Exception as e:
+        print(f"Error generating global SHAP plots: {e}")
+
+else:
+    print("Skipping global SHAP importance calculation (SHAP values not available).")
+
+```
+
+**Interpretation:** \* **Bar Plot:** Shows the average impact of each feature on the prediction magnitude (mean absolute SHAP value). Higher bars indicate more influential features overall. \* **Summary Plot (Beeswarm):** Provides more detail. Each point is a SHAP value for a specific instance and feature. The x-axis is the SHAP value (impact on prediction). Color often represents the feature's value (high/low), showing whether high/low values tend to push the prediction up or down. Feature importance is determined by the spread of SHAP values.
+
+# Conclusion
+
+This lab demonstrated a comprehensive workflow for credit scorecard development, incorporating reject inference, interpretable modeling with constraints, rigorous evaluation, threshold selection based on business goals, and advanced interpretability techniques like counterfactual explanations and SHAP analysis. By following these steps, data scientists can build more robust, fair, and understandable credit risk models.
