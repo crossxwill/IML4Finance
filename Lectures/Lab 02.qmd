@@ -62,6 +62,7 @@ from IPython.display import display # Explicit import for display
 from scipy import stats, special
 from sklearn.feature_selection import mutual_info_classif
 import re
+import duckdb
 
 # Machine learning - scikit-learn
 from sklearn.model_selection import train_test_split
@@ -242,8 +243,6 @@ def binned_prob_plot(
         )
         ax.set_xlabel(feature, fontsize=14)
         ax.set_ylabel("Log Odds" if transform_log_odds else "Probability", fontsize=14)
-        if not transform_log_odds:
-            ax.set_ylim(0, 1)
         ax.tick_params(axis="both", labelsize=14)
 
         ax2 = ax.twinx()
@@ -467,15 +466,15 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
             if list(X.columns) != self.feature_names_:
                 raise ValueError("Feature names mismatch between fit and predict")
 
-def calculate_score(prob_default, pdo=40, base_score=600, base_odds=50):
-    """Converts probability of default to a 3-digit score."""
+def calculate_score(prob_default, pdo=40, base_score=600):
+    """Converts probability of default to a 3-digit score using OddsBad."""
     # Avoid log(0) or division by zero
     eps = 1e-9
     prob_default = np.clip(prob_default, eps, 1 - eps)
-    odds = (1 - prob_default) / prob_default # Good/Bad odds
+    odds_bad = prob_default / (1 - prob_default)  # Bad/Good odds
     factor = pdo / np.log(2)
-    # Score = Base + Factor * log(Odds / Base_Odds)
-    score = base_score + factor * np.log(odds / base_odds)
+    # Score = Base - Factor * log(OddsBad)
+    score = base_score - factor * np.log(odds_bad)
     # Clip score to a reasonable range, e.g., 300-850
     return np.clip(score, 300, 850).astype(int)
 
@@ -500,16 +499,25 @@ def parse_emp_length(x):
     except:
         return -1  # Fallback for unexpected formats
 
+
+import pandas as pd
+import numpy as np
+from scipy import stats, special
+from sklearn.feature_selection import mutual_info_classif
+import matplotlib.pyplot as plt
+import re
+
+
+
 def ks_table(data: pd.DataFrame, y_true_col: str, y_pred_col: str, n_bins: int = 10, is_score: bool = False, sample_weight_col: str | None = None):
     """
     Generates a KS table from a DataFrame using either probabilities or scores,
     optionally using sample weights.
 
     Parameters:
-        data (pd.DataFrame): DataFrame containing the true labels and predicted probabilities/scores.
+        data (pd.DataFrame): DataFrame containing the true labels and predicted probabilities (or scores).
         y_true_col (str): Name of the column with the true binary labels (0 or 1).
-        y_pred_col (str): Name of the column with the predicted probabilities (higher=riskier)
-                            or scores (lower=riskier).
+        y_pred_col (str): Name of the column with the predicted probabilities (higher=riskier) or scores (lower=riskier).
         n_bins (int): Number of bins to divide the values into.
         is_score (bool): Set to True if y_pred_col contains scores (lower=riskier),
                             False if it contains probabilities (higher=riskier). Default is False.
@@ -523,17 +531,22 @@ def ks_table(data: pd.DataFrame, y_true_col: str, y_pred_col: str, n_bins: int =
     cols_to_select = [y_true_col, y_pred_col]
     if sample_weight_col:
         cols_to_select.append(sample_weight_col)
+
     df = data[cols_to_select].copy()
+
 
     # Rename columns for internal consistency
     rename_map = {y_true_col: 'y_true', y_pred_col: 'y_pred'}
-    if sample_weight_col:
+    if sample_weight_col in df.columns:
         rename_map[sample_weight_col] = 'weight'
         # Ensure weights are numeric and fill NaNs with 1 (or raise error if preferred)
         df['weight'] = pd.to_numeric(df[sample_weight_col], errors='coerce').fillna(1.0)
     else:
-        # Assign weight of 1 if no weight column provided
+        # Assign weight of 1 if no weight column provided or if column name was invalid
         df['weight'] = 1.0
+        if sample_weight_col not in data.columns:
+             print(f"Warning: sample_weight_col '{sample_weight_col}' not found. Using weight=1 for all samples.")
+
     df.rename(columns=rename_map, inplace=True)
 
 
@@ -562,26 +575,31 @@ def ks_table(data: pd.DataFrame, y_true_col: str, y_pred_col: str, n_bins: int =
     # If probability (higher=riskier), sort bins by descending min_value (highest probs first)
     sort_ascending = is_score
 
-    # Define aggregation functions based on whether weights are used
-    agg_funcs = {
-        "min_value": ("y_pred", "min"),
-        "max_value": ("y_pred", "max"),
-        "avg_value": ("y_pred", "mean"), # Average prediction value in bin
-        "count": ("weight", "sum"), # Total weight (or count if weight=1)
-        "bads": lambda x: (x['y_true'] * x['weight']).sum() # Sum of weights for bads
-    }
+    # Use duckdb to perform aggregations
 
-    ks_df = (
-        df.groupby("bin")
-        .agg(**agg_funcs)
-        .reset_index()
-        # Sort bins appropriately for cumulative calculation (highest risk first)
-        .sort_values("min_value", ascending=sort_ascending)
-    )
+    ks_df = duckdb.query(
+        """
+        SELECT
+            bin,
+            MIN(y_pred) AS min_value,
+            MAX(y_pred) AS max_value,
+            AVG(y_pred) AS avg_value,
+            SUM(weight) AS count,
+            SUM(y_true * weight) AS bads
+        FROM df
+        GROUP BY bin
+        """
+    ).to_df()
+
+    # Reset index and sort
+    ks_df = ks_df.reset_index().sort_values("min_value", ascending=sort_ascending)
+
 
     ks_df["goods"] = ks_df["count"] - ks_df["bads"] # Total weight - bad weight = good weight
     # Avoid division by zero if a bin has zero total weight
-    ks_df["bad_rate"] = (ks_df["bads"] / ks_df["count"]).fillna(0)
+    # Use np.where for safer division
+    ks_df["bad_rate"] = np.where(ks_df["count"] > 1e-9, ks_df["bads"] / ks_df["count"], 0)
+
 
     total_bads = ks_df["bads"].sum() # Total bad weight
     total_goods = ks_df["goods"].sum() # Total good weight
@@ -607,6 +625,7 @@ def ks_table(data: pd.DataFrame, y_true_col: str, y_pred_col: str, n_bins: int =
     # Print the KS statistic and associated bin info before returning
     if 'ks' in ks_df.columns and not ks_df['ks'].empty and total_bads > 1e-9 and total_goods > 1e-9:
         max_ks = ks_df['ks'].max()
+        # Handle potential multiple max KS values - take the first one
         max_ks_row = ks_df.loc[ks_df['ks'].idxmax()]
         min_val_at_max_ks = max_ks_row[f'min_{y_pred_col}']
         max_val_at_max_ks = max_ks_row[f'max_{y_pred_col}']
@@ -618,12 +637,11 @@ def ks_table(data: pd.DataFrame, y_true_col: str, y_pred_col: str, n_bins: int =
     elif total_bads <= 1e-9 or total_goods <= 1e-9:
         print("KS Statistic is 0 because total weighted goods or bads is effectively zero.")
     else:
-        print("KS Statistic could not be calculated.")
+        print("KS Statistic could not be calculated (check input data and binning).")
 
 
     # Reorder columns for final output
-    return ks_df[
-        [
+    final_cols = [
             f"min_{y_pred_col}",
             f"max_{y_pred_col}",
             f"avg_{y_pred_col}", # Add average column to output list
@@ -635,8 +653,9 @@ def ks_table(data: pd.DataFrame, y_true_col: str, y_pred_col: str, n_bins: int =
             "cum_goods_pct",
             "ks",
         ]
-    ].reset_index(drop=True)
-
+    # Ensure all expected columns exist before selecting
+    final_cols = [col for col in final_cols if col in ks_df.columns]
+    return ks_df[final_cols].reset_index(drop=True)
 
 
 def show_pdp(wrappedAGModel: BaseEstimator,
@@ -1715,167 +1734,151 @@ else:
 
 **Interpretation:** Carefully examine the PDP curves (red dashed lines) for `loan_amnt`, `dti`, and `credit_score`. They should now exhibit the enforced monotonic behavior: non-decreasing for `loan_amnt` and `dti`, and non-increasing for `credit_score`. If the curves are flat or follow the expected trend without reversals, the constraints have been successfully applied.
 
-# 8. Evaluation & Scoring
+# 8. Evaluation & Scoring the Test Set
 
-**Goal:** Evaluate the performance of the final *constrained* model on the held-out TTD test set. Convert predicted probabilities into a 3-digit scorecard format and analyze the results using a KS table.
+**Goal:** Evaluate the performance of the final *constrained* model on the held-out TTD test set. Convert predicted PDs into a 3-digit scores and analyze the results using a KS table.
 
 ## 8.1. Prepare Test Set and Evaluate
 
-**Goal:** Apply the same feature processing steps used for the training data to the *accepted* and *rejected* test sets. Combine them (without weighting, as weights are for training) to create a TTD test set. Evaluate the constrained model's performance (AUC, classification report) on this test set. Also, compare the average predicted probability of default (PD) for applicants who were originally accepted versus rejected in the test set.
+**Goal:** Apply the same feature processing steps used for the training data to the *accepted* and *rejected* test sets. For the rejected applicants, use the `ri_model` to estimate their reject inference weights. Combine the accepted and rejected test sets, ensuring that the `sample_weight` is set to 1 for accepted applicants and the rejected inference weights are used for rejected applicants.
 
 ```{python}
 #| label: evaluate-test-set
 #| code-summary: "Prepare TTD test set and evaluate the constrained model."
 
-if ag_predictor_constrained is not None and \
-   'df_accepted_test' in locals() and df_accepted_test is not None and \
-   'df_rejected_test' in locals() and df_rejected_test is not None:
-    
-    print("Preparing TTD Test Set...")
-    
-    # --- Process Accepted Test Data using the function ---
-    # Note: The function expects the original df and adds the target if source_type='accepted'
-    # We need to ensure the target is defined in the original df_accepted_test first
-    if 'default_flag' not in df_accepted_test.columns:
-         # Define default status based on 'loan_status' if not already present
-         default_statuses = [
-             "Charged Off", 
-             "Late (31-120 days)", 
-             "Does not meet the credit policy. Status:Charged Off", 
-             "Default"
-         ] 
-         df_accepted_test['default_flag'] = df_accepted_test['loan_status'].apply(lambda x: 1 if x in default_statuses else 0)
-         
-    df_accepted_test_common = process_lending_data(df_accepted_test, 'accepted')
-    if df_accepted_test_common is not None:
-        df_accepted_test_common['original_source'] = 'Accepted'
-        print(f"Accepted test data processed. Shape: {df_accepted_test_common.shape}")
-    else:
-        print("Accepted test data processing failed.")
+print("--- Preparing TTD Test Set ---")
+
+# 1. Process Accepted Test Data
+print("Processing accepted test data...")
+df_accepted_test_common = process_lending_data(
+    df=df_accepted_test,
+    source_type='accepted',
+    fillMissing_loanamnt=rejected_train_median_loan_amnt, # Use values derived from training
+    fillMising_emp_length=rejected_train_median_emp_length,
+    fillMissing_dti=rejected_train_p90_dti,
+    fillMissing_credit_score=rejected_train_p10_credit_score
+)
+
+# 2. Process Rejected Test Data
+print("Processing rejected test data...")
+# Remove non-numeric chars from dti in df_rejected_test before processing
+df_rejected_test['Debt-To-Income Ratio'] = df_rejected_test['Debt-To-Income Ratio'].astype(str).str.replace(r'[^0-9\.\-]', '', regex=True)
+df_rejected_test['Debt-To-Income Ratio'] = pd.to_numeric(df_rejected_test['Debt-To-Income Ratio'], errors='coerce')
+
+df_rejected_test_common = process_lending_data(
+    df=df_rejected_test,
+    source_type='rejected',
+    fillMissing_loanamnt=rejected_train_median_loan_amnt, # Use values derived from training
+    fillMising_emp_length=rejected_train_median_emp_length,
+    fillMissing_dti=rejected_train_p90_dti,
+    fillMissing_credit_score=rejected_train_p10_credit_score
+)
 
 
-    # --- Process Rejected Test Data using the function ---
-    df_rejected_test_common = process_lending_data(df_rejected_test, 'rejected')
-    if df_rejected_test_common is not None:
-        # Assign a placeholder target for rejected (e.g., -1 or NaN) as it's unknown
-        df_rejected_test_common['default_flag'] = -1 # Or np.nan
-        df_rejected_test_common['original_source'] = 'Rejected'
-        print(f"Rejected test data processed. Shape: {df_rejected_test_common.shape}")
-    else:
-        print("Rejected test data processing failed.")
 
-    # --- Combine into TTD Test Set ---
-    if df_accepted_test_common is not None and df_rejected_test_common is not None:
-        # Ensure columns match before combining. Use modeling_features + target + original_source
-        cols_for_test_concat = modeling_features + ['default_flag', 'original_source']
-        
-        # Select necessary columns, ensuring they exist
-        cols_acc_test = [col for col in cols_for_test_concat if col in df_accepted_test_common.columns]
-        cols_rej_test = [col for col in cols_for_test_concat if col in df_rejected_test_common.columns]
-        
-        # Ensure placeholder 'default_flag' exists in rejected if not already added
-        if 'default_flag' not in df_rejected_test_common.columns:
-             df_rejected_test_common['default_flag'] = -1 # Or np.nan
-             cols_rej_test.append('default_flag')
+# 3. Calculate Weights for Rejected Test Data
+print("Calculating weights for rejected test data using RI model...")
 
-        # Use only columns present in both, plus original_source (which is guaranteed)
-        # Focus on modeling_features, default_flag, original_source
-        final_test_cols = modeling_features + ['default_flag', 'original_source']
-        
-        # Verify all needed columns are present before concat
-        missing_acc_final = [c for c in final_test_cols if c not in df_accepted_test_common.columns]
-        missing_rej_final = [c for c in final_test_cols if c not in df_rejected_test_common.columns]
+X_rej_test_ri = df_rejected_test_common[ri_features].copy()
+weights_bad = ri_model.predict_proba(X_rej_test_ri)[:, 1]
+weights_good = 1.0 - weights_bad
 
-        if missing_acc_final or missing_rej_final:
-             print(f"Error: Columns missing for TTD test concat. Accepted missing: {missing_acc_final}, Rejected missing: {missing_rej_final}")
-             df_ttd_test = None
-        else:
-            df_ttd_test = pd.concat([
-                df_accepted_test_common[final_test_cols], 
-                df_rejected_test_common[final_test_cols]
-            ], ignore_index=True)
-            
-            print(f"TTD Test set created. Shape: {df_ttd_test.shape}")
-            print(f"TTD Test columns: {df_ttd_test.columns.tolist()}") # Verify columns
-            print(df_ttd_test['original_source'].value_counts())
+# 4. Create two copies of the rejected test data set and assign weights
 
-        # --- Evaluate Constrained Model on TTD Test Set ---
-        if df_ttd_test is not None:
-            print("\nEvaluating constrained model on TTD Test Set...")
-            # Ensure features used for prediction are the modeling_features
-            features_for_eval = modeling_features
-            missing_eval_feats = [f for f in features_for_eval if f not in df_ttd_test.columns]
-            if missing_eval_feats:
-                 print(f"Error: Evaluation features missing in TTD test set: {missing_eval_feats}")
-                 df_test_results = None
-            else:
-                 X_test = df_ttd_test[features_for_eval]
-                 y_test_actual = df_ttd_test['default_flag'] # Includes actuals for accepted, placeholders for rejected
+# Copy 1: Assumed Bad (default_flag = 1)
+df_rejected_test_bad = df_rejected_test_common[modeling_features].copy()
+df_rejected_test_bad['sample_weight'] = weights_bad
+df_rejected_test_bad['default_flag'] = 1
+df_rejected_test_bad['original_source'] = 'Rejected' # Track original source
 
-                 # Predict probabilities
-                 pred_proba_test = ag_predictor_constrained.predict_proba(X_test, as_pandas=False)[:, 1]
-                 df_test_results = df_ttd_test.copy()
-                 df_test_results['pred_proba'] = pred_proba_test
-                 
-                 # Predict class labels (using default 0.5 threshold for report)
-                 pred_labels_test = ag_predictor_constrained.predict(X_test)
-                 df_test_results['pred_label'] = pred_labels_test
+# Copy 2: Assumed Good (default_flag = 0)
+df_rejected_test_good = df_rejected_test_common[modeling_features].copy()
+df_rejected_test_good['sample_weight'] = weights_good
+df_rejected_test_good['default_flag'] = 0
+df_rejected_test_good['original_source'] = 'Rejected' # Track original source
 
-                 # --- Performance Metrics (Calculated ONLY on Accepted portion where outcome is known) ---
-                 accepted_test_mask = (df_test_results['original_source'] == 'Accepted')
-                 y_test_accepted_actual = df_test_results.loc[accepted_test_mask, 'default_flag']
-                 pred_proba_accepted = df_test_results.loc[accepted_test_mask, 'pred_proba']
-                 pred_labels_accepted = df_test_results.loc[accepted_test_mask, 'pred_label']
+# 5. Prepare Accepted Test Data with Weight and Source
+df_accepted_test_weighted = df_accepted_test_common[modeling_features + [target_col]].copy()
+df_accepted_test_weighted['sample_weight'] = 1.0
+df_accepted_test_weighted['original_source'] = 'Accepted' # Track original source
 
-                 if len(y_test_accepted_actual) > 0 and y_test_accepted_actual.isin([0, 1]).all():
-                     auc_test = roc_auc_score(y_test_accepted_actual, pred_proba_accepted)
-                     print(f"\nPerformance on Accepted Test Subset:")
-                     print(f"  AUC: {auc_test:.4f}")
-                     print("\n  Classification Report (at 0.5 threshold):")
-                     print(classification_report(y_test_accepted_actual, pred_labels_accepted))
-                     print("\n  Confusion Matrix (at 0.5 threshold):")
-                     print(confusion_matrix(y_test_accepted_actual, pred_labels_accepted))
-                 else:
-                     print("\nNo valid accepted applicants in the test set to calculate performance metrics.")
-                     auc_test = None
+# 6. Concatenate to create the full TTD test set for evaluation
+cols_for_ttd_test = modeling_features + ['default_flag', 'sample_weight', 'original_source']
+df_ttd_test_full = pd.concat(
+    [df_accepted_test_weighted[cols_for_ttd_test],
+     df_rejected_test_bad[cols_for_ttd_test],
+     df_rejected_test_good[cols_for_ttd_test]],
+    ignore_index=True
+)
 
-                 # --- Compare Predicted PD for Accepted vs. Rejected ---
-                 avg_pd_accepted = df_test_results.loc[accepted_test_mask, 'pred_proba'].mean()
-                 avg_pd_rejected = df_test_results.loc[~accepted_test_mask, 'pred_proba'].mean()
-                 print("\nAverage Predicted Probability of Default (PD):")
-                 print(f"  Originally Accepted Group: {avg_pd_accepted:.4f}")
-                 print(f"  Originally Rejected Group: {avg_pd_rejected:.4f}")
-                 
-                 if not np.isnan(avg_pd_rejected) and not np.isnan(avg_pd_accepted) and avg_pd_rejected <= avg_pd_accepted:
-                      print("  Warning: Average predicted PD for rejected group is not higher than accepted group. Check RI/model.")
-                 elif np.isnan(avg_pd_rejected) or np.isnan(avg_pd_accepted):
-                      print("  Warning: Could not compare average PDs due to NaN values.")
-        else:
-             # df_ttd_test could not be created
-             df_test_results = None
-             auc_test = None
+print(f"TTD test set created. Shape: {df_ttd_test_full.shape}")
 
-    else:
-        print("Skipping TTD test set combination and evaluation: Processed dataframes not available.")
-        df_test_results = None
-        auc_test = None
+# 7. Summarize the TTD Test Set by Source
+if 'df_ttd_test_full' in locals() and df_ttd_test_full is not None:
+    print("\n--- Summary of TTD Test Set by Original Source ---")
+    # Step 1: Calculate standard aggregations
+    summary_stats_test = df_ttd_test_full.groupby('original_source').agg(
+        row_count=('default_flag', 'size'),
+        sum_weights=('sample_weight', 'sum'),
+        unweighted_default_rate=('default_flag', 'mean')
+    ).reset_index()
 
+    # Step 2: Calculate weighted default rate separately using apply
+    weighted_rates_test = df_ttd_test_full.groupby('original_source').apply(
+        lambda x: np.average(x['default_flag'], weights=x['sample_weight']) if x['sample_weight'].sum() > 0 else np.nan
+    ).reset_index(name='weighted_default_rate')
+
+    # Step 3: Merge the results
+    summary_default_rates_test = pd.merge(summary_stats_test, weighted_rates_test, on='original_source')
+
+    # Display the summary
+    print("Summary of Default Rates by Original Source (Test Set):")
+    display(summary_default_rates_test[['original_source', 'row_count', 'unweighted_default_rate', 'sum_weights', 'weighted_default_rate']])
 else:
-    print("Skipping test set evaluation: Constrained model or raw test data not available.")
-    df_test_results = None
-    auc_test = None
+    print("Skipping TTD test set summary: df_ttd_test_full not available.")
+
+
+# 8. Evaluate the Constrained Model on the TTD Test Set
+if 'ag_model_constrained_wrapped' in locals() and ag_model_constrained_wrapped is not None and \
+   'df_ttd_test_full' in locals() and df_ttd_test_full is not None:
+    print("\n--- Evaluating Constrained Model on TTD Test Set ---")
+    
+    # Prepare features for prediction
+    X_test_ttd = df_ttd_test_full[modeling_features]
+    y_true_ttd = df_ttd_test_full['default_flag']
+    weights_test_ttd = df_ttd_test_full['sample_weight']
+
+    # Predict probabilities using the wrapped model
+    pred_proba_ttd = ag_model_constrained_wrapped.predict_proba(X_test_ttd)[:, 1]
+
+    # Create results DataFrame
+    df_test_results = df_ttd_test_full.copy()
+    df_test_results['pred_proba'] = pred_proba_ttd
+
+    # Calculate weighted AUC for the entire TTD test set
+    auc_ttd_weighted = roc_auc_score(y_true_ttd, pred_proba_ttd, sample_weight=weights_test_ttd)
+    print(f"Weighted AUC on entire TTD Test Set: {auc_ttd_weighted:.4f}")
+
+    # Calculate unweighted AUC for the entire TTD test set
+    auc_ttd_unweighted = roc_auc_score(y_true_ttd, pred_proba_ttd)
+    print(f"Unweighted AUC on entire TTD Test Set: {auc_ttd_unweighted:.4f}")
 
 ```
 
-**Interpretation:** The AUC on the accepted test subset measures the model's ability to rank accepted applicants by risk. The classification report shows precision/recall at a default 0.5 threshold. Crucially, the average predicted PD *should* be significantly higher for the group originally rejected, indicating the model learned the higher risk profile associated with rejected applicants, validating the reject inference process.
-
 ## 8.2. Convert Probability (PD) to Score
 
-**Concept:** Convert the model's predicted probability of default (PD) into a more intuitive 3-digit credit score (e.g., 300-850). Lower scores indicate higher risk. We use a standard scaling formula based on "Points to Double Odds" (PDO).
-*   **PDO:** Score points needed for the Good/Bad odds to double (common value: 40).
-*   **Formula:** `Score = base_score + Factor * log(Odds / base_odds)`, where `Odds = (1 - PD) / PD`, `Factor = PDO / log(2)`.
+**Concept:** Convert the model's predicted probability of default (PD) into a more intuitive 3-digit credit score (e.g., 300-850). Lower scores indicate higher risk.
 
-**Goal:** Apply the PDO formula to convert the `pred_proba` in `df_test_results` into a `score`.
+
+**Formulas:** 
+
+$Score = BaseScore - Factor \cdot \ln(OddsBad)$
+
+where $OddsBad = \frac{PD}{1 - PD}$
+
+$Factor = \frac{PDO}{\ln(2)}$.
+
+
 
 ```{python}
 #| label: convert-pd-to-score
@@ -1887,8 +1890,7 @@ if df_test_results is not None and 'pred_proba' in df_test_results.columns:
     df_test_results['score'] = calculate_score(
         df_test_results['pred_proba'], 
         pdo=40, 
-        base_score=600, 
-        base_odds=50 
+        base_score=680
     )
     
     print("Scores calculated and added to test results.")
@@ -1913,63 +1915,65 @@ else:
 
 **Concept:** The Kolmogorov-Smirnov (KS) statistic measures how well the scorecard separates "goods" (non-defaults) from "bads" (defaults). It finds the maximum difference between the cumulative distribution of goods and bads across score bins. A higher KS indicates better separation.
 
-**Goal:** Create a KS table using the calculated `score` on the *accepted portion* of the test set (where true outcomes are known) to assess the model's discriminative power.
-
 ```{python}
 #| label: build-ks-table
-#| tbl-cap: "KS Table for Constrained Model (Accepted Test Subset)"
-#| code-summary: "Generate a KS table based on scores for the accepted test data."
+#| tbl-cap: "KS Table for Constrained Model on TTD Test Set"
+#| tbl-number: true
+#| code-summary: "Generate a KS table based on scores for the TTD test data."
 
-if df_test_results is not None and 'score' in df_test_results.columns:
-    # Filter for accepted applicants where default_flag is known (0 or 1)
-    df_accepted_test_results = df_test_results[df_test_results['original_source'] == 'Accepted'].copy()
-    
-    if not df_accepted_test_results.empty and df_accepted_test_results['default_flag'].isin([0, 1]).all():
-        print("Generating KS table for the Accepted Test Subset...")
-        
-        ks_results_table = ks_table(
-            data=df_accepted_test_results, 
-            y_true_col='default_flag', 
-            y_pred_col='score', # Use score 
-            n_bins=10,
-            is_score=True # IMPORTANT: Tell the function it's a score (lower=riskier)
-        )
-        
-        if not ks_results_table.empty:
-             print("\nKS Table:")
-             display(ks_results_table)
-             
-             # Plot KS curve
-             plt.figure(figsize=(8, 6))
-             plt.plot(range(len(ks_results_table)), ks_results_table['cum_goods_pct'], label='Cumulative Goods %')
-             plt.plot(range(len(ks_results_table)), ks_results_table['cum_bads_pct'], label='Cumulative Bads %')
-             plt.plot(range(len(ks_results_table)), ks_results_table['ks'], label='KS Statistic', linestyle='--')
-             max_ks_idx = ks_results_table['ks'].idxmax()
-             max_ks_val = ks_results_table['ks'].max()
-             plt.scatter([max_ks_idx], [max_ks_val], color='red', s=100, label=f'Max KS = {max_ks_val:.2f}')
-             plt.title('KS Curve (Accepted Test Subset)')
-             plt.xlabel('Score Bin (Lower Scores First)')
-             plt.ylabel('Cumulative Percentage / KS')
-             plt.xticks(range(len(ks_results_table)), ks_results_table[f'max_score'].round(0).astype(int), rotation=45)
-             plt.legend()
-             plt.grid(alpha=0.5)
-             plt.tight_layout()
-             plt.show()
-             
-        else:
-            print("KS table could not be generated (e.g., no goods or bads).")
-            
-    else:
-        print("Skipping KS table: No valid accepted applicant results found in the test set.")
-        ks_results_table = None
-
+if df_test_results is not None and 'score' in df_test_results.columns and 'sample_weight' in df_test_results.columns:
+    print("Generating KS table using scores and sample weights...")
+    ks_results_table = ks_table(
+        data=df_test_results,
+        y_true_col='default_flag',
+        y_pred_col='score',
+        n_bins=20,
+        is_score=True,
+        sample_weight_col='sample_weight'
+    )
+    display(ks_results_table)
 else:
-    print("Skipping KS table: Test results or scores not available.")
-    ks_results_table = None
+    print("Skipping KS table generation: Required columns not available in df_test_results.")
 
 ```
 
-**Interpretation:** The KS table shows performance across score bins for the accepted applicants. The `bad_rate` should generally decrease as scores increase (moving down the table). The `ks` column's maximum value is the overall KS statistic for the model on this data. A KS > 30 is often acceptable, > 40 good, > 50 excellent, but context (portfolio, risk appetite) matters. The plot visualizes the separation.
+Plot cumulative bad rates and good rates to visualize the KS statistic.
+
+```{python}
+#| label: plot-cumulative-rates
+#| #| code-summary: "Plot cumulative bad rates and good rates to visualize the KS statistic."
+if ks_results_table is not None and not ks_results_table.empty:
+    print("Plotting cumulative bad rates and good rates to visualize the KS statistic...")
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(ks_results_table['cum_bads_pct'], label='Cumulative Bad Rate (%)', color='red', marker='o')
+    plt.plot(ks_results_table['cum_goods_pct'], label='Cumulative Good Rate (%)', color='blue', marker='o')
+    plt.fill_between(range(len(ks_results_table)), 
+                     ks_results_table['cum_bads_pct'], 
+                     ks_results_table['cum_goods_pct'], 
+                     color='gray', alpha=0.2, label='KS Gap')
+    
+    # Highlight the maximum KS point
+    max_ks_idx = ks_results_table['ks'].idxmax()
+    max_ks_value = ks_results_table.loc[max_ks_idx, 'ks']
+    plt.axvline(x=max_ks_idx, color='green', linestyle='--', label=f'Max KS = {max_ks_value:.2f}')
+    
+    # Set x-ticks to average score from each bin
+    avg_scores = ks_results_table['avg_score']
+    plt.xticks(ticks=range(len(avg_scores)), labels=[f"{score:.0f}" for score in avg_scores], rotation=45)
+    
+    plt.title('Cumulative Bad and Good Rates with KS Statistic')
+    plt.xlabel('Average Score (per Bin)')
+    plt.ylabel('Cumulative Percentage (%)')
+    plt.legend(loc='best')
+    plt.grid(alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+else:
+    print("Skipping cumulative rates plot: KS results table is not available.")
+```
+
+**Interpretation:** A KS > 30 is often acceptable, > 40 good, > 50 excellent.
 
 # 9. Decision Threshold Selection
 
@@ -1977,7 +1981,7 @@ else:
 
 ## 9.1. Compare Candidate Cutoffs
 
-Calculate potential thresholds using different optimization criteria on the *accepted test data*.
+Calculate potential thresholds using different optimization criteria on the *TTD test data*.
 
 ```{python}
 #| label: compare-thresholds
@@ -2080,158 +2084,95 @@ else:
 
 **Note:** This section requires the `dice-ml` library. If not installed, the cells will be skipped.
 
-```{python}
-#| label: setup-counterfactuals
-#| code-summary: "Set up DiCE for generating counterfactual explanations."
-#| eval: false # Skip evaluation if dice-ml might not be present
-
-# Check if dice_ml was imported successfully
-if 'dice_ml' in locals() and dice_ml is not None and \
-   'ag_predictor_constrained' in locals() and ag_predictor_constrained is not None and \
-   'df_test_results' in locals() and df_test_results is not None and \
-   'train_data_ag' in locals() and train_data_ag is not None:
-    
-    print("Setting up DiCE for counterfactual explanations...")
-    dice_setup_ok = False
-    try:
-        # Prepare data for DiCE: Use TTD training data for feature distributions/ranges
-        # Need features + outcome (can be actual or predicted)
-        dice_data_df = train_data_ag.copy()
-        # DiCE usually works better if the outcome is the one used for training
-        dice_data_df[label] = dice_data_df[label].astype(int) # Ensure target is int
-
-        # Define continuous features for DiCE - use modeling_features
-        continuous_features_dice = modeling_features # All are numeric
-
-        # Create DiCE Data object
-        # Ensure dice_data_df only contains features + outcome for DiCE
-        dice_data_df_input = dice_data_df[continuous_features_dice + [label]].copy()
-        d = dice_ml.Data(dataframe=dice_data_df_input, 
-                         continuous_features=continuous_features_dice, 
-                         outcome_name=label)
-
-        # Create DiCE Model object using the AutoGluon predictor
-        # Need a wrapper for predict_proba that returns P(outcome)
-        # Our desired outcome for CF is 'Approve' (original label 0)
-        class DiCEPredictWrapper:
-            def __init__(self, predictor, features_list):
-                self._predictor = predictor
-                self._features = features_list # Should be modeling_features
-                # Assuming binary classification [0, 1] where 1 is 'Default'
-                self._positive_class_index = 1 
-                self._negative_class_index = 0
-
-            def predict_proba(self, X):
-                 # Ensure input is DataFrame with correct columns
-                 if not isinstance(X, pd.DataFrame): X_df = pd.DataFrame(X, columns=self._features)
-                 else: X_df = X[self._features] # Ensure only expected features
-                 # Get probabilities [P(0), P(1)]
-                 proba = self._predictor.predict_proba(X_df, as_pandas=False)
-                 return proba # DiCE expects probabilities for all classes
-
-            def predict(self, X): # Optional, but good practice
-                 if not isinstance(X, pd.DataFrame): X_df = pd.DataFrame(X, columns=self._features)
-                 else: X_df = X[self._features]
-                 return self._predictor.predict(X_df)
-
-        dice_model_wrapper = DiCEPredictWrapper(ag_predictor_constrained, modeling_features) # Use modeling_features
-        m = dice_ml.Model(model=dice_model_wrapper, backend='sklearn') # Treat as sklearn
-
-        # Initialize DiCE explainer (use 'random' or 'kdtree' if data is purely numeric)
-        # For mixed data, 'genetic' might be better but slower.
-        exp = dice_ml.Dice(d, m, method='random') 
-        
-        print("DiCE setup complete.")
-
-        # Select applicants for explanation: Find 'Reject' in test set
-        rejected_applicants_test = df_test_results[df_test_results['decision'] == 'Reject']
-        
-        if len(rejected_applicants_test) >= 3:
-            # Sample 3 rejected applicants (use their features)
-            applicants_to_explain_indices = rejected_applicants_test.sample(3, random_state=2025).index
-            applicants_to_explain = df_test_results.loc[applicants_to_explain_indices, modeling_features] # Use modeling_features
-            print(f"
-Selected {len(applicants_to_explain)} rejected applicants for counterfactuals:")
-            display(applicants_to_explain)
-            dice_setup_ok = True
-            
-    except ImportError:
-        print("Skipping counterfactual setup: dice-ml library not found.")
-        exp = None
-        applicants_to_explain = None
-    except Exception as e:
-        print(f"Error during DiCE setup: {e}")
-        exp = None
-        applicants_to_explain = None
-        import traceback
-        traceback.print_exc()
-        
-else:
-    print("Skipping counterfactual setup: Prerequisites not met (dice-ml, model, data).")
-    exp = None
-    applicants_to_explain = None
-    dice_setup_ok = False # Explicitly set flag
-
-# Add print statement outside the if block for clarity when eval=false
-if 'dice_ml' not in locals() or dice_ml is None:
-     print("Counterfactual setup cell skipped (dice-ml not installed or imported).")
-elif not dice_setup_ok:
-     print("Counterfactual setup cell skipped due to errors or missing prerequisites.")
-
-```
 
 ```{python}
 #| label: generate-counterfactuals
-#| code-summary: "Generate counterfactuals for sampled rejected applicants."
-#| eval: false # Skip evaluation if dice-ml might not be present
+#| code-summary: "Generate counterfactual explanations for rejected applicants using DiCE."
 
-if 'dice_setup_ok' in locals() and dice_setup_ok and exp is not None and applicants_to_explain is not None:
-    print("Generating counterfactuals...")
-    
-    # Desired outcome: Approve (which corresponds to the original class label 0)
-    desired_outcome_label = 0 
-    
-    for i, idx in enumerate(applicants_to_explain.index):
-        applicant_query = applicants_to_explain.loc[[idx]]
-        # Get original prediction probability for context
-        original_prob = df_test_results.loc[idx, 'pred_proba']
-        original_score = df_test_results.loc[idx, 'score']
-        print(f"\n--- Counterfactuals for Applicant {i+1} (Index: {idx}) ---")
-        print(f"Original Prediction: Reject (Prob={original_prob:.4f}, Score={original_score:.0f})")
-        print(f"Desired Outcome: Approve (Class Label={desired_outcome_label})")
-        
-        try:
-            # Generate counterfactuals (e.g., 3 examples)
-            dice_exp_results = exp.generate_counterfactuals(
-                applicant_query, 
-                total_CFs=3, 
-                desired_class=desired_outcome_label,
-                # Optional: Adjust proximity/diversity weights if needed
-                # proximity_weight=0.5, 
-                # diversity_weight=0.5,
-                # Optional: Specify features to vary
-                # features_to_vary=['dti', 'credit_score', 'loan_amnt'] 
-            )
-            
-            if dice_exp_results and dice_exp_results.cf_examples_list:
-                 # Display the counterfactuals showing only changes
-                 dice_exp_results.visualize_as_dataframe(show_only_changes=True)
-            else:
-                 print("No counterfactuals found for this applicant.")
-                 
-        except Exception as e:
-            print(f"Error generating counterfactuals for applicant {idx}: {e}")
-            import traceback
-            traceback.print_exc()
+# Check if dice_ml is imported and necessary data is available
+if dice_ml is not None and 'df_test_results' in locals() and df_test_results is not None and \
+    'ag_model_constrained_wrapped' in locals() and ag_model_constrained_wrapped is not None and \
+    'selected_threshold_prob' in locals() and 'modeling_features' in locals():
+
+     print("--- Generating Counterfactual Explanations ---")
+     dice_setup_ok = False
+     try:
+          # 1. Prepare data for DiCE
+          # DiCE needs features and the outcome ('decision')
+          dice_data = df_test_results[modeling_features + ['decision']].copy()
+          
+          # Define continuous features for DiCE
+          continuous_features_dice = modeling_features # All our modeling features are numeric
+
+          # 2. Create DiCE Data object
+          d = dice_ml.Data(dataframe=dice_data, 
+                                 continuous_features=continuous_features_dice, 
+                                 outcome_name='decision')
+
+          # 3. Create DiCE Model object using the wrapped AutoGluon model
+          # We need a predict function that outputs 'Approve'/'Reject' based on the threshold
+          def dice_predict_func(X):
+                # Ensure input is DataFrame with correct feature names
+                if isinstance(X, np.ndarray):
+                     X_df = pd.DataFrame(X, columns=modeling_features)
+                else:
+                     # Ensure columns are in the correct order if it's already a DataFrame
+                     X_df = X[modeling_features].copy() # Use copy to avoid warnings
+                
+                # Predict probabilities using the wrapped model
+                probabilities = ag_model_constrained_wrapped.predict_proba(X_df)[:, 1]
+                # Convert probabilities to decisions based on the selected threshold
+                decisions = np.where(probabilities < selected_threshold_prob, 'Approve', 'Reject')
+                 return decisions
+
+          # Wrap the prediction function for DiCE
+          # Provide a dummy model_path="" to avoid TypeError in dice-ml when func is used
+          m = dice_ml.Model(model_path="", 
+                                  backend='sklearn', # Use sklearn backend as wrapper is compatible
+                                  func=dice_predict_func) # Provide the custom prediction function
+
+          # 4. Initialize DiCE explainer
+          # Method 'random' is simple; 'kdtree' or 'genetic' can be more sophisticated
+          dice_explainer = dice_ml.Dice(d, m, method="random") 
+          print("DiCE explainer initialized.")
+
+          # 5. Select some rejected applicants to explain
+          rejected_applicants = df_test_results[df_test_results['decision'] == 'Reject']
+          
+          if not rejected_applicants.empty:
+                num_cf_examples = min(3, len(rejected_applicants)) # Explain up to 3
+                applicants_to_explain = rejected_applicants.sample(num_cf_examples, random_state=2025)[modeling_features]
+                print(f"Selected {num_cf_examples} rejected applicants for counterfactuals.")
+                display(applicants_to_explain)
+
+                # 6. Generate counterfactuals
+                # Ask for 3 diverse counterfactuals per applicant, aiming for 'Approve'
+                dice_exp = dice_explainer.generate_counterfactuals(
+                     applicants_to_explain, 
+                     total_CFs=3, 
+                     desired_class="Approve",
+                     # Optional: Specify feature ranges or permitted changes if needed
+                     # features_to_vary=['dti', 'credit_score'] # Example
+                )
+                
+                print("\nCounterfactual Explanations Generated:")
+                # Display the explanations
+                dice_exp.display_counterfactuals(show_only_changes=True) 
+                dice_setup_ok = True # Flag that setup and generation succeeded
+
+          else:
+                print("No rejected applicants found in the test set to generate counterfactuals for.")
+                applicants_to_explain = None # Ensure this is None if no applicants
+
+     except Exception as e:
+          print(f"Error generating counterfactual explanations: {e}")
+          import traceback
+          traceback.print_exc()
+          applicants_to_explain = None # Ensure this is None on error
 
 else:
-    print("Skipping counterfactual generation: Setup was not successful or no applicants selected.")
-
-# Add print statement outside the if block for clarity when eval=false
-if 'dice_ml' not in locals() or dice_ml is None:
-     print("Counterfactual generation cell skipped (dice-ml not installed or imported).")
-elif 'dice_setup_ok' not in locals() or not dice_setup_ok:
-     print("Counterfactual generation cell skipped (setup failed or prerequisites missing).")
+     print("Skipping counterfactual explanations: dice-ml not installed or prerequisite data/model not available.")
+     applicants_to_explain = None # Ensure this is None if skipped
 
 ```
 
