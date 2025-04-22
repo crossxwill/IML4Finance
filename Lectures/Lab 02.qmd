@@ -800,6 +800,12 @@ if df_accepted is not None and df_rejected is not None:
     df_accepted_calib, df_accepted_test, y_accepted_calib, y_accepted_test = train_test_split(
         df_accepted_temp, y_accepted_temp, test_size=test_size_rel_to_remaining, random_state=random_seed, stratify=y_accepted_temp
     )
+
+    # Ensure the splits are copies
+    df_accepted_train = df_accepted_train.copy()
+    df_accepted_calib = df_accepted_calib.copy()
+    df_accepted_test = df_accepted_test.copy()
+
     print(f"  Train shape: {df_accepted_train.shape}")
     print(f"  Calibration shape: {df_accepted_calib.shape}")
     print(f"  Test shape: {df_accepted_test.shape}")
@@ -818,12 +824,22 @@ if df_accepted is not None and df_rejected is not None:
     df_rejected_calib, df_rejected_test = train_test_split(
         df_rejected_temp, test_size=test_size_rel_to_remaining, random_state=random_seed
     )
+
+    # Ensure the splits are copies
+    df_rejected_train = df_rejected_train.copy()
+    df_rejected_calib = df_rejected_calib.copy()
+    df_rejected_test = df_rejected_test.copy()
+
     print(f"  Train shape: {df_rejected_train.shape}")
     print(f"  Calibration shape: {df_rejected_calib.shape}")
     print(f"  Test shape: {df_rejected_test.shape}")
-    
-    # Clean up temporary dataframes
+
+    # Clean up temporary dataframes and the original large dataframe
     del df_accepted_temp, y_accepted_temp, df_rejected_temp
+    del df_accepted
+    del df_rejected
+    print("\nRemoved original df_accepted and df_rejected to free up memory.")
+    gc.collect() # Call garbage collector
 
 else:
     print("Skipping train-test split due to data loading issues.")
@@ -1224,28 +1240,6 @@ modeling_features = ['loan_amnt', 'dti', 'credit_score', 'emp_length']
 print(f"Features selected for modeling: {modeling_features}")
 ```
 
-Remove `df_accepted` to free up memory.
-
-```{python}
-#| label: remove-accepted
-#| code-summary: "Remove df_accepted to free up memory."
-
-# Remove df_accepted to free up memory
-if 'df_accepted' in locals():
-    del df_accepted
-    print("Removed df_accepted to free up memory.")
-else:
-    print("df_accepted not found, nothing to remove.")
-
-# Call garbage collector
-
-gc.collect()
-
-# Explicitly check memory usage
-
-process = psutil.Process(os.getpid())
-print(f"Current memory usage: {process.memory_info().rss / 1024 ** 2:.2f} MB")
-```
 
 # 3. Reject Inference via Fuzzy Augmentation
 
