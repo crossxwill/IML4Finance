@@ -18,7 +18,7 @@ execute:
 
 The lab provides a hands-on guide to building and evaluating a credit scorecard using loan-level (accepts) and applicant-level (rejects) data from LendingClub (an unsecured lender). The primary goal is to develop a 3-digit score that ranks Through-the-Door (TTD) applicants based on their predicted credit risk. We will use Fuzzy Augmentation (a reject inference method) to incorporate data from rejected applicants, to reduce selection bias in the training data.
 
-We will cover data preparation, assessing feature relationships, reject inference using fuzzy augmentation, training models with AutoGluon, diagnosing model behavior with ICE/PDP, applying monotonic constraints, evaluating performance (KS statistic), selecting decision thresholds, generating adverse action reasons using counterfactual explanations, and interpreting predictions using SHAP.
+We will cover data preparation, assessing feature relationships, reject inference using fuzzy augmentation, training models with AutoGluon, diagnosing model behavior with ICE/PDP, applying monotonic constraints, evaluating performance using the KS statistic, selecting decision thresholds, generating adverse action reasons using counterfactual explanations, and interpreting predictions using SHAP.
 
 **Learning Objectives:**
 
@@ -32,8 +32,6 @@ We will cover data preparation, assessing feature relationships, reject inferenc
 *   Apply monotonic constraints to align models with business logic.
 *   Evaluate scorecard performance using the KS statistic.
 *   Select an optimal decision threshold based on business objectives.
-*   Generate counterfactual explanations for adverse action codes.
-*   Interpret model predictions locally and globally using SHAP.
 
 # Setup
 
@@ -90,11 +88,10 @@ try:
 except ImportError:
     print("""
     
-    dice-ml not found. Skipping counterfactual explanation section. You need to update your conda env by running one of the following commands:
+    dice-ml not found. You need to update your conda env by running:
     
-    conda env update --name env_AutoGluon_202502 -f conda_env_requirements_MacOS.yml
-    
-    conda env update --name env_AutoGluon_202502 -f conda_env_requirements.yml
+    conda activate env_AutoGluon_202502
+    conda install -c conda-forge dice-ml
     
     """)
     dice_ml = None
@@ -478,6 +475,30 @@ def calculate_score(prob_default, pdo=40, base_score=600):
     # Clip score to a reasonable range, e.g., 300-850
     return np.clip(score, 300, 850).astype(int)
 
+def score_to_probability(score, pdo=40, base_score=600):
+    """Converts a credit score back to probability of default.
+    
+    This is the inverse of calculate_score function.
+    
+    Parameters:
+        score (int or float): Credit score to convert
+        pdo (int): Points to Double the Odds, default 40
+        base_score (int): Base score, default 600
+    
+    Returns:
+        float: Probability of default [0, 1]
+    """
+    # Calculate factor same as in the score calculation
+    factor = pdo / np.log(2)
+    
+    # Calculate the odds_bad from the score
+    odds_bad = np.exp((score - base_score) / -factor)
+    
+    # Convert odds to probability
+    prob_default = odds_bad / (1 + odds_bad)
+    
+    return prob_default
+
 def parse_emp_length(x):
     """Convert employment length string to numeric years.
     
@@ -498,14 +519,6 @@ def parse_emp_length(x):
         return int(re.findall(r'\d+', str(x))[0])
     except:
         return -1  # Fallback for unexpected formats
-
-
-import pandas as pd
-import numpy as np
-from scipy import stats, special
-from sklearn.feature_selection import mutual_info_classif
-import matplotlib.pyplot as plt
-import re
 
 
 
@@ -679,12 +692,14 @@ def show_pdp(wrappedAGModel: BaseEstimator,
         ice_lines_kw = {"color": "tab:blue", "alpha": 0.2, "linewidth": 0.5} if show_ice else None
         pd_line_kw = {"color": "tab:red", "linestyle": "--", "linewidth": 2}
 
-        # Sample data for the main PDP calculation
-        X_sample = df.sample(min(sampSize, len(df)), random_state=2025)
+        # Get the expected feature order from the fitted model
+        feature_order = wrappedAGModel.feature_names_
+        # Sample data for the main PDP calculation, ensuring correct column order
+        X_sample = df[feature_order].sample(min(sampSize, len(df)), random_state=2025) # Reorder columns before sampling
 
         disp = PartialDependenceDisplay.from_estimator(
             estimator = wrappedAGModel,
-            X = X_sample, # Use the sampled data
+            X = X_sample, # Use the sampled data with correct column order
             features = [feature],
             categorical_features = list_categ_features,
             method = 'brute',
@@ -725,6 +740,260 @@ def show_pdp(wrappedAGModel: BaseEstimator,
 
         plt.show()
         plt.close('all')  # Prevent figure overload
+
+
+def generate_eda_report(df: pd.DataFrame, title: str, output_path: str, sample_frac: float = 0.1, random_state: int = 2025):
+    """Generates and saves a ydata-profiling report for a DataFrame."""
+    print(f"Generating EDA report: {title}...")
+    try:
+        profile = ProfileReport(
+            df.sample(frac=sample_frac, random_state=random_state) if sample_frac < 1.0 else df,
+            title=title,
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+        )
+        profile.to_file(output_path)
+        print(f"Report saved to: {output_path}")
+    except Exception as e:
+        print(f"Error generating report '{title}': {e}")
+
+def split_data(df: pd.DataFrame, target_col: str | None = None, train_size: float = 0.6, calib_size_rel: float = 0.5, random_state: int = 2025) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Splits data into train, calibration, and test sets."""
+    print(f"Splitting data (stratify={'Yes' if target_col else 'No'})...")
+    y = df[target_col] if target_col else None
+
+    if target_col:
+        stratify_param = y
+        # First split: Train and Temp (with stratification)
+        df_train, df_temp, y_train, y_temp = train_test_split(
+            df, y, train_size=train_size, random_state=random_state, stratify=stratify_param
+        )
+        # Second split: Temp into Calibration and Test (with stratification)
+        stratify_param_temp = y_temp
+        df_calib, df_test, y_calib, y_test = train_test_split(
+            df_temp, y_temp, test_size=calib_size_rel, random_state=random_state, stratify=stratify_param_temp
+        )
+    else:
+        # First split: Train and Temp (without stratification)
+        df_train, df_temp = train_test_split(
+            df, train_size=train_size, random_state=random_state, stratify=None
+        )
+        # Second split: Temp into Calibration and Test (without stratification)
+        df_calib, df_test = train_test_split(
+            df_temp, test_size=calib_size_rel, random_state=random_state, stratify=None
+        )
+        # Assign None to y splits as they don't exist
+        y_train, y_temp, y_calib, y_test = None, None, None, None
+
+
+    print(f"  Train shape: {df_train.shape}")
+    print(f"  Calibration shape: {df_calib.shape}")
+    print(f"  Test shape: {df_test.shape}")
+    if target_col:
+        print(f"  Train target mean: {y_train.mean():.4f}")
+        print(f"  Calibration target mean: {y_calib.mean():.4f}")
+        print(f"  Test target mean: {y_test.mean():.4f}")
+
+    # Return copies
+    return df_train.copy(), df_calib.copy(), df_test.copy()
+
+
+def train_autogluon_model(
+    df_train: pd.DataFrame,
+    label: str,
+    weight_col: str | None,
+    modeling_features: list[str],
+    model_folder: str,
+    predictor_args: dict,
+    fit_args: dict
+) -> AutoGluonSklearnWrapper:
+    """Trains an AutoGluon model using the Sklearn wrapper."""
+    print(f"--- Training AutoGluon Model in: {model_folder} ---")
+    remove_ag_folder(model_folder) # Clean up previous runs
+
+    print(f"Using features: {modeling_features}")
+    print(f"Training data shape: {df_train.shape}")
+    if weight_col:
+        print(f"Sum of weights in training data: {df_train[weight_col].sum():.2f}")
+
+    start_time = time.time()
+
+    # Prepare X, y, and weights for the wrapper's fit method
+    X_train_ag = df_train[modeling_features]
+    y_train_ag = df_train[label]
+    weights_train_ag = df_train[weight_col] if weight_col else None
+
+    # Update predictor_args with sample_weight if provided
+    if weight_col:
+        predictor_args['sample_weight'] = weight_col
+
+    ag_model_wrapped = AutoGluonSklearnWrapper(
+        label=label,
+        predictor_args=predictor_args,
+        fit_args=fit_args
+    )
+
+    # Fit the model
+    ag_model_wrapped.fit(X_train_ag, y_train_ag, sample_weight=weights_train_ag)
+
+    end_time = time.time()
+    print(f"AutoGluon training completed in {end_time - start_time:.2f} seconds.")
+
+    # Display leaderboard
+    ag_predictor = ag_model_wrapped.predictor
+    if ag_predictor:
+        print("\nAutoGluon Leaderboard:")
+        leaderboard = ag_predictor.leaderboard(silent=True)
+        display(leaderboard)
+    else:
+        print("Could not access underlying predictor to display leaderboard.")
+
+    return ag_model_wrapped
+
+def summarize_ttd_by_source(df_ttd: pd.DataFrame, target_col: str = 'default_flag', weight_col: str = 'sample_weight', source_col: str = 'source') -> pd.DataFrame:
+    """Calculates summary statistics (counts, weights, rates) for a TTD DataFrame grouped by source."""
+    print(f"\n--- Summarizing TTD Data by '{source_col}' ---")
+    # Step 1: Calculate standard aggregations
+    summary_stats = df_ttd.groupby(source_col).agg(
+        row_count=(target_col, 'size'),
+        sum_weights=(weight_col, 'sum'),
+        unweighted_default_rate=(target_col, 'mean')
+    ).reset_index()
+
+    # Step 2: Calculate weighted default rate separately using apply
+    weighted_rates = df_ttd.groupby(source_col).apply(
+        lambda x: np.average(x[target_col], weights=x[weight_col]) if x[weight_col].sum() > 0 else np.nan
+    ).reset_index(name='weighted_default_rate')
+
+    # Step 3: Merge the results
+    summary_df = pd.merge(summary_stats, weighted_rates, on=source_col)
+
+    # Display the summary
+    print("Summary of Default Rates by Source:")
+    display(summary_df[[source_col, 'row_count', 'unweighted_default_rate', 'sum_weights', 'weighted_default_rate']])
+    return summary_df
+
+def create_TTD_data(
+    ri_model: BaseEstimator | None,  # Modified to accept None
+    df_rejected: pd.DataFrame,
+    df_accepted: pd.DataFrame,
+    ri_features: list[str],
+    modeling_features: list[str],
+    target_col: str = 'default_flag',
+    clone_rejected: bool = True
+) -> pd.DataFrame:
+    """
+    Creates a Through-the-Door (TTD) dataset using Fuzzy Augmentation.
+
+    Applies a trained reject inference (RI) model to rejected applicants to estimate
+    their probability of default, then creates weighted copies of the rejected data
+    and combines them with the accepted data. Adds a 'source' column to indicate
+    origin ('Accepted' or 'Rejected').
+
+    If ri_model is None, skips fuzzy augmentation and uses weight=1 for all records.
+
+    Args:
+        ri_model: A trained scikit-learn compatible model used for reject inference.
+                    Must have a `predict_proba` method. If None, fuzzy augmentation
+                    is skipped and all weights are set to 1.
+        df_rejected: DataFrame containing rejected applicant data with common features.
+        df_accepted: DataFrame containing accepted applicant data with common features
+                        and the target variable.
+        ri_features: List of feature names used by the ri_model.
+        modeling_features: List of feature names to include in the final TTD dataset
+                            (should be present in both df_rejected and df_accepted).
+        target_col: Name of the target variable column in df_accepted.
+        clone_rejected: If True and using fuzzy augmentation, creates two copies of
+                        rejected data (one for each class). If False or not using
+                        fuzzy augmentation, only includes one copy of rejected data.
+
+    Returns:
+        A pandas DataFrame representing the augmented TTD dataset with features,
+        the target column, a 'sample_weight' column, and a 'source' column.
+    """
+    # Ensure dataframes are copies to avoid modifying originals
+    df_rejected_proc = df_rejected.copy()
+    df_accepted_proc = df_accepted.copy()
+
+    # Check if ri_model is None - skip fuzzy augmentation if so
+    if ri_model is None:
+        print("No RI model provided. Creating TTD data with uniform weights (sample_weight=1)...")
+        
+        # Prepare Accepted Data - select modeling features + target, assign weight = 1
+        df_accepted_weighted = df_accepted_proc[modeling_features + [target_col]].copy()
+        df_accepted_weighted['sample_weight'] = 1.0
+        df_accepted_weighted['source'] = 'Accepted'
+        
+        # Prepare Rejected Data - all assigned target_col = 1 (assume bad) with weight = 1
+        df_rejected_weighted = df_rejected_proc[modeling_features].copy()
+        df_rejected_weighted['sample_weight'] = 1.0
+        df_rejected_weighted[target_col] = None  # Target col does not exist for rejects
+        df_rejected_weighted['source'] = 'Rejected'
+        
+        # Define columns for the final TTD dataset
+        cols_for_ttd = modeling_features + [target_col, 'sample_weight', 'source']
+        
+        # Concatenate accepted and rejected data
+        df_ttd = pd.concat(
+            [df_accepted_weighted[cols_for_ttd], df_rejected_weighted[cols_for_ttd]],
+            ignore_index=True
+        )
+    else:
+        print("Applying RI model to rejected data and calculating weights...")
+        
+        # 1. Prepare Rejected Data for RI Prediction
+        X_rej_ri = df_rejected_proc[ri_features]
+        
+        # 2. Predict Probabilities for Rejected Applicants
+        prob_default_rejected = ri_model.predict_proba(X_rej_ri)[:, 1]
+        prob_good_rejected = 1.0 - prob_default_rejected  # P(default=0)
+        
+        # --- Fuzzy Augmentation Implementation ---
+        # 3. Create two weighted copies of rejected data
+        
+        # Copy 1: Assumed Bad (target_col = 1)
+        df_rejected_bad = df_rejected_proc[modeling_features].copy()
+        df_rejected_bad['sample_weight'] = prob_default_rejected  # Weight = P(default=1)
+        df_rejected_bad[target_col] = 1
+        df_rejected_bad['source'] = 'Rejected'
+        
+        # Copy 2: Assumed Good (target_col = 0)
+        df_rejected_good = df_rejected_proc[modeling_features].copy()
+        df_rejected_good['sample_weight'] = prob_good_rejected  # Weight = P(default=0)
+        df_rejected_good[target_col] = 0
+        df_rejected_good['source'] = 'Rejected'
+        
+        # 4. Prepare Accepted Data
+        # Select modeling features + target, assign weight = 1
+        df_accepted_weighted = df_accepted_proc[modeling_features + [target_col]].copy()
+        df_accepted_weighted['sample_weight'] = 1.0
+        df_accepted_weighted['source'] = 'Accepted'
+        
+        # 5. Define columns needed for the final TTD dataset
+        cols_for_ttd = modeling_features + [target_col, 'sample_weight', 'source']
+        
+        # 6. Concatenate accepted data and the weighted rejected datasets
+        if clone_rejected:
+            df_ttd = pd.concat(
+                [df_accepted_weighted[cols_for_ttd],
+                    df_rejected_bad[cols_for_ttd],
+                    df_rejected_good[cols_for_ttd]],
+                ignore_index=True
+            )
+        else:
+            # If not cloning, just use the bad copy
+            df_ttd = pd.concat(
+                [df_accepted_weighted[cols_for_ttd],
+                    df_rejected_bad[cols_for_ttd]],
+                ignore_index=True
+            )
+
+    print(f"TTD dataset created. Shape: {df_ttd.shape}")
+    print(f"Sum of weights in TTD dataset: {df_ttd['sample_weight'].sum():.2f}")
+    print(f"Source distribution:\n{df_ttd['source'].value_counts(normalize=True)}")
+
+    return df_ttd
 
 print("Helper functions and classes defined.")
 ```
@@ -771,25 +1040,23 @@ Create the binary `default_flag` (1 for default, 0 for non-default) based on the
 #| label: define-target
 #| code-summary: "Create the 'default_flag' target variable for accepted loans."
 
-if df_accepted is not None:
-    # Define default status based on 'loan_status'
-    default_statuses = [
-        "Charged Off", 
-        "Late (31-120 days)", 
-        "Does not meet the credit policy. Status:Charged Off", 
-        "Default"
-    ] 
-    df_accepted['default_flag'] = df_accepted['loan_status'].apply(lambda x: 1 if x in default_statuses else 0)
-    
-    print("Target variable 'default_flag' created.")
-    print("Default Flag Distribution (Accepted):")
-    print(df_accepted['default_flag'].value_counts(normalize=True))
-    
-    # Display loan status counts for context
-    print("\nLoan Status Distribution (Accepted):")
-    print(df_accepted['loan_status'].value_counts())
-else:
-    print("Skipping target variable definition as accepted data was not loaded.")
+# Define default status based on 'loan_status'
+default_statuses = [
+    "Charged Off", 
+    "Late (31-120 days)", 
+    "Does not meet the credit policy. Status:Charged Off", 
+    "Default"
+] 
+df_accepted['default_flag'] = df_accepted['loan_status'].apply(lambda x: 1 if x in default_statuses else 0)
+
+print("Target variable 'default_flag' created.")
+print("Default Flag Distribution (Accepted):")
+print(df_accepted['default_flag'].value_counts(normalize=True))
+
+# Display loan status counts for context
+print("\nLoan Status Distribution (Accepted):")
+print(df_accepted['loan_status'].value_counts())
+
 
 ```
 
@@ -801,69 +1068,39 @@ Split both accepted and rejected datasets into training (60%), calibration (20%)
 #| label: train-test-split
 #| code-summary: "Split accepted and rejected data into train, calibration, and test sets."
 
-if df_accepted is not None and df_rejected is not None:
-    # Define split proportions
-    train_size = 0.6
-    calib_size_rel_to_remaining = 0.5 # 0.5 * (1 - 0.6) = 0.2
-    test_size_rel_to_remaining = 0.5 # 0.5 * (1 - 0.6) = 0.2
-    random_seed = 2025
+# Define split proportions
+train_size = 0.6
+calib_size_rel_to_remaining = 0.5 # 0.5 * (1 - 0.6) = 0.2 -> test_size for split_data
+random_seed = 2025
+global_set_seed(random_seed) # Set global seed
 
-    # --- Split Accepted Data (Stratified) ---
-    print("Splitting Accepted Data...")
-    y_accepted = df_accepted['default_flag']
-    # First split: Train (60%) and Temp (40%)
-    df_accepted_train, df_accepted_temp, y_accepted_train, y_accepted_temp = train_test_split(
-        df_accepted, y_accepted, train_size=train_size, random_state=random_seed, stratify=y_accepted
-    )
-    # Second split: Temp (40%) into Calibration (20%) and Test (20%)
-    df_accepted_calib, df_accepted_test, y_accepted_calib, y_accepted_test = train_test_split(
-        df_accepted_temp, y_accepted_temp, test_size=test_size_rel_to_remaining, random_state=random_seed, stratify=y_accepted_temp
-    )
+# --- Split Accepted Data (Stratified) ---
+print("Splitting Accepted Data...")
+df_accepted_train, df_accepted_calib, df_accepted_test = split_data(
+    df=df_accepted,
+    target_col='default_flag',
+    train_size=train_size,
+    calib_size_rel=calib_size_rel_to_remaining, # This is test_size in split_data context
+    random_state=random_seed
+)
 
-    # Ensure the splits are copies
-    df_accepted_train = df_accepted_train.copy()
-    df_accepted_calib = df_accepted_calib.copy()
-    df_accepted_test = df_accepted_test.copy()
+# --- Split Rejected Data (Not Stratified) ---
+print("\nSplitting Rejected Data...")
+df_rejected_train, df_rejected_calib, df_rejected_test = split_data(
+    df=df_rejected,
+    target_col=None, # No stratification
+    train_size=train_size,
+    calib_size_rel=calib_size_rel_to_remaining, # This is test_size in split_data context
+    random_state=random_seed
+)
 
-    print(f"  Train shape: {df_accepted_train.shape}")
-    print(f"  Calibration shape: {df_accepted_calib.shape}")
-    print(f"  Test shape: {df_accepted_test.shape}")
-    print(f"  Train default rate: {y_accepted_train.mean():.4f}")
-    print(f"  Calibration default rate: {y_accepted_calib.mean():.4f}")
-    print(f"  Test default rate: {y_accepted_test.mean():.4f}")
+# Clean up the original large dataframes
+del df_accepted
+del df_rejected
+print("\nRemoved original df_accepted and df_rejected to free up memory.")
+gc.collect() # Call garbage collector
 
 
-    # --- Split Rejected Data (Not Stratified) ---
-    print("\nSplitting Rejected Data...")
-    # First split: Train (60%) and Temp (40%)
-    df_rejected_train, df_rejected_temp = train_test_split(
-        df_rejected, train_size=train_size, random_state=random_seed
-    )
-    # Second split: Temp (40%) into Calibration (20%) and Test (20%)
-    df_rejected_calib, df_rejected_test = train_test_split(
-        df_rejected_temp, test_size=test_size_rel_to_remaining, random_state=random_seed
-    )
-
-    # Ensure the splits are copies
-    df_rejected_train = df_rejected_train.copy()
-    df_rejected_calib = df_rejected_calib.copy()
-    df_rejected_test = df_rejected_test.copy()
-
-    print(f"  Train shape: {df_rejected_train.shape}")
-    print(f"  Calibration shape: {df_rejected_calib.shape}")
-    print(f"  Test shape: {df_rejected_test.shape}")
-
-    # Clean up temporary dataframes and the original large dataframe
-    del df_accepted_temp, y_accepted_temp, df_rejected_temp
-    del df_accepted
-    del df_rejected
-    print("\nRemoved original df_accepted and df_rejected to free up memory.")
-    gc.collect() # Call garbage collector
-
-else:
-    print("Skipping train-test split due to data loading issues.")
-    df_accepted_train, df_accepted_calib, df_accepted_test = None, None, None
-    df_rejected_train, df_rejected_calib, df_rejected_test = None, None, None
 ```
 
 ## 1.4. Exploratory Data Analysis (EDA)
@@ -874,55 +1111,35 @@ Perform initial EDA on the *training* portions of the accepted and rejected data
 #| label: eda-accepted-rejected
 #| code-summary: "Generate EDA reports for accepted and rejected training data."
 
-# Check if dataframes exist
-if 'df_accepted_train' in locals() and 'df_rejected_train' in locals() and df_accepted_train is not None and df_rejected_train is not None:
-    
-    if ProfileReport:
-        print("Generating EDA reports (this might take a while)...")
-        
-        # Define sampling fraction for large datasets
-        p_frac = 0.05 # Sample 5% for faster report generation
-        
-        # --- EDA for Accepted Training Data ---
-        print("Profiling Accepted Train Data...")
-        try:
-            accepted_train_profile = ProfileReport(
-                df_accepted_train.sample(frac=p_frac, random_state=2025), 
-                title="Accepted Train Data Profile",
-                progress_bar=False,
-                duplicates=None,
-                interactions=None
-            )
-            accepted_report_path = "Lab02_eda_report_accepted_train.html"
-            accepted_train_profile.to_file(accepted_report_path)
-            print(f"Accepted train data report saved to: {accepted_report_path}")
-        except Exception as e:
-            print(f"Error generating accepted train data profile: {e}")
+print("Generating EDA reports (this might take a while)...")
 
-        # --- EDA for Rejected Training Data ---
-        print("\nProfiling Rejected Train Data...")
-        try:
-            rejected_train_profile = ProfileReport(
-                df_rejected_train.sample(frac=p_frac, random_state=2025), 
-                title="Rejected Train Data Profile",
-                progress_bar=False,
-                duplicates=None,
-                interactions=None
-            )
-            rejected_report_path = "Lab02_eda_report_rejected_train.html"
-            rejected_train_profile.to_file(rejected_report_path)
-            print(f"Rejected train data report saved to: {rejected_report_path}")
-        except Exception as e:
-            print(f"Error generating rejected train data profile: {e}")
-            
-else:
-    print("Skipping EDA section because df_accepted_train or df_rejected_train is not available.")
+# Define sampling fraction for large datasets
+p_frac = 0.05 # Sample 5% for faster report generation
+
+# --- EDA for Accepted Training Data ---
+generate_eda_report(
+    df=df_accepted_train,
+    title="Accepted Train Data Profile",
+    output_path="Lab02_eda_report_accepted_train.html",
+    sample_frac=p_frac,
+    random_state=random_seed
+)
+
+# --- EDA for Rejected Training Data ---
+generate_eda_report(
+    df=df_rejected_train,
+    title="Rejected Train Data Profile",
+    output_path="Lab02_eda_report_rejected_train.html",
+    sample_frac=p_frac,
+    random_state=random_seed
+)
+    
 
 ```
 
 # 2. Feature Engineering & Monotonicity Check
 
-**Goal:** Process the raw data to create a set of common, meaningful features present in both accepted and rejected datasets. Then, analyze the relationship between these features and the default outcome (using accepted data) to check for expected monotonic trends.
+**Goal:** Process the raw data to create a set of common features present in both accepted and rejected datasets. Then, analyze the relationship between these features and the default outcome (using accepted data) to check for expected monotonic trends.
 
 ## 2.1. Identify and Process Common Features
 
@@ -1022,9 +1239,9 @@ def process_lending_data(df: pd.DataFrame,
             df_proc['credit_score'] = (df_proc['fico_range_low'] + df_proc['fico_range_high']) / 2
         else:
             df_proc['credit_score'] = np.nan
-        df_proc['credit_score'] = df_proc['credit_score'].fillna(fillMissing_credit_score).clip(lower=300)
+        df_proc['credit_score'] = df_proc['credit_score'].fillna(fillMissing_credit_score).clip(lower=300, upper=850)
     else:
-        df_proc['credit_score'] = pd.to_numeric(df_proc.get('credit_score'), errors='coerce').fillna(fillMissing_credit_score).clip(lower=300)
+        df_proc['credit_score'] = pd.to_numeric(df_proc.get('credit_score'), errors='coerce').fillna(fillMissing_credit_score).clip(lower=300, upper=850)
 
     # Target column for accepted
     if source_type == 'accepted':
@@ -1058,27 +1275,21 @@ df_rejected_train_common = process_lending_data(
     fillMissing_credit_score=rejected_train_p10_credit_score
 )
 
-if df_accepted_train_common is not None:
-    print(f"Accepted training data processed. Shape: {df_accepted_train_common.shape}")
-    # Verify common features are present
-    missing_acc = [f for f in common_feature_names if f not in df_accepted_train_common.columns]
-    if missing_acc: print(f"  Warning: Missing common features after processing accepted: {missing_acc}")
-else:
-    print("Accepted training data processing failed or skipped.")
+print(f"Accepted training data processed. Shape: {df_accepted_train_common.shape}")
+# Verify common features are present
+missing_acc = [f for f in common_feature_names if f not in df_accepted_train_common.columns]
+if missing_acc: print(f"  Warning: Missing common features after processing accepted: {missing_acc}")
 
-if df_rejected_train_common is not None:
-    print(f"Rejected training data processed. Shape: {df_rejected_train_common.shape}")
-    # Verify common features are present
-    missing_rej = [f for f in common_feature_names if f not in df_rejected_train_common.columns]
-    if missing_rej: print(f"  Warning: Missing common features after processing rejected: {missing_rej}")
-else:
-    print("Rejected training data processing failed or skipped.")
+
+print(f"Rejected training data processed. Shape: {df_rejected_train_common.shape}")
+# Verify common features are present
+missing_rej = [f for f in common_feature_names if f not in df_rejected_train_common.columns]
+if missing_rej: print(f"  Warning: Missing common features after processing rejected: {missing_rej}")
+
 
 print("\nCommon features expected:")
 print(common_feature_names)
 
-# Note: The original dataframes (df_accepted_train, df_rejected_train) are not modified.
-# The processed dataframes are df_accepted_train_common and df_rejected_train_common.
 
 ```
 
@@ -1283,68 +1494,61 @@ Train a Logistic Regression model on the *accepted training data* (`df_accepted_
 #| label: ri-train-logit
 #| code-summary: "Train a Logistic Regression model on accepted data for RI weighting."
 
-if df_accepted_train_common is not None:
-    # Select a small subset of common features for the simple weighting model
-    # Using only features selected for the main model for consistency in RI
-    ri_features = modeling_features # Use the globally defined modeling features
+# Select a small subset of common features for the simple weighting model
+# Using only features selected for the main model for consistency in RI
+ri_features = modeling_features # Use the globally defined modeling features
 
-    # Verify features exist
-    missing_in_accepted = [f for f in ri_features if f not in df_accepted_train_common.columns]
-    # Check rejected_common as well, although it's checked later, good to know early
-    missing_in_rejected = [f for f in ri_features if df_rejected_train_common is None or f not in df_rejected_train_common.columns]
-
-    if missing_in_accepted or missing_in_rejected:
-        print(f"Error: RI features missing. Accepted: {missing_in_accepted}, Rejected: {missing_in_rejected}")
-        ri_model = None
-    else:
-        print(f"Using RI features (same as modeling features): {ri_features}")
-
-        # Prepare data for Logistic Regression - use .copy() to avoid SettingWithCopyWarning
-        X_acc_ri = df_accepted_train_common[ri_features].copy()
-        y_acc_ri = df_accepted_train_common['default_flag'] # Target: default status within accepted
-
-        # Basic Preprocessing Pipeline for Logistic Regression
-        # All ri_features are numeric now
-        numeric_features_ri = ri_features # Use the selected features
-
-        # Define preprocessing steps
-        numeric_transformer_ri = Pipeline(steps=[
-            ('scaler', StandardScaler())
-        ])
-
-        # Create the preprocessor - Apply the numeric transformer to the numeric features
-        preprocessor_ri = ColumnTransformer(
-            transformers=[
-                ('num', numeric_transformer_ri, numeric_features_ri)
-            ],
-            remainder='passthrough' # Keep other columns if any (though there shouldn't be here)
-        )
+# Verify features exist
+missing_in_accepted = [f for f in ri_features if f not in df_accepted_train_common.columns]
+# Check rejected_common as well, although it's checked later, good to know early
+missing_in_rejected = [f for f in ri_features if df_rejected_train_common is None or f not in df_rejected_train_common.columns]
 
 
-        # Define LogisticRegressionCV with cross-validation parameters
-        logreg_cv = LogisticRegressionCV(
-            Cs=10,  # Try 10 C values on a logarithmic scale
-            cv=5,   # Use 5-fold cross-validation
-            penalty='l2', # Use L2 regularization
-            scoring='roc_auc', # Optimize for AUC
-            random_state=2025,
-            max_iter=1000, # Increase max iterations for convergence
-            solver='liblinear' # Suitable solver for this problem size and penalty
-        )
+print(f"Using RI features (same as modeling features): {ri_features}")
 
-        # Create the full pipeline with Logistic Regression CV
-        ri_model = Pipeline(steps=[('preprocessor', preprocessor_ri),
-                       ('classifier', logreg_cv)]) # Use LogisticRegressionCV
+# Prepare data for Logistic Regression - use .copy() to avoid SettingWithCopyWarning
+X_acc_ri = df_accepted_train_common[ri_features].copy()
+y_acc_ri = df_accepted_train_common['default_flag'] # Target: default status within accepted
 
-        print("Training Reject Inference Logistic Regression model...")
-        start_time = time.time()
-        ri_model.fit(X_acc_ri, y_acc_ri)
-        end_time = time.time()
-        print(f"RI model training completed in {end_time - start_time:.2f} seconds.")
+# Basic Preprocessing Pipeline for Logistic Regression
+# All ri_features are numeric now
+numeric_features_ri = ri_features # Use the selected features
 
-else:
-    print("Skipping RI model training due to data loading issues.")
-    ri_model = None
+# Define preprocessing steps
+numeric_transformer_ri = Pipeline(steps=[
+    ('scaler', StandardScaler())
+])
+
+# Create the preprocessor - Apply the numeric transformer to the numeric features
+preprocessor_ri = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer_ri, numeric_features_ri)
+    ],
+    remainder='passthrough' # Keep other columns if any (though there shouldn't be here)
+)
+
+
+# Define LogisticRegressionCV with cross-validation parameters
+logreg_cv = LogisticRegressionCV(
+    Cs=10,  # Try 10 C values on a logarithmic scale
+    cv=5,   # Use 5-fold cross-validation
+    penalty='l2', # Use L2 regularization
+    scoring='roc_auc', # Optimize for AUC
+    random_state=2025,
+    max_iter=1000, # Increase max iterations for convergence
+    solver='liblinear' # Suitable solver for this problem size and penalty
+)
+
+# Create the full pipeline with Logistic Regression CV
+ri_model = Pipeline(steps=[('preprocessor', preprocessor_ri),
+                ('classifier', logreg_cv)]) # Use LogisticRegressionCV
+
+print("Training Reject Inference Logistic Regression model...")
+start_time = time.time()
+ri_model.fit(X_acc_ri, y_acc_ri)
+end_time = time.time()
+print(f"RI model training completed in {end_time - start_time:.2f} seconds.")
+
 
 ```
 
@@ -1357,45 +1561,43 @@ Check the `ri_model` (also known as the KGB model) to ensure the coefficients ar
 ```{python}
 #| label: ri-model-coefficients
 #| code-summary: "Check coefficients of the RI model."
-if ri_model is not None:
-    print("\n--- RI Model Coefficients ---")
-    # Extract coefficients and intercept from the Logistic Regression model
-    if hasattr(ri_model.named_steps['classifier'], 'coef_') and \
-       hasattr(ri_model.named_steps['classifier'], 'intercept_'):
-        
-        coeffs = ri_model.named_steps['classifier'].coef_[0] # Get the coefficients
-        intercept = ri_model.named_steps['classifier'].intercept_[0] # Get the intercept
-        
-        # Get feature names from the preprocessor step if possible
-        try:
-            # Access the fitted ColumnTransformer to get output feature names
-            preprocessor = ri_model.named_steps['preprocessor']
-            # Get feature names after transformation (e.g., scaled numeric features)
-            # Note: This relies on the structure of the preprocessor
-            feature_names = preprocessor.get_feature_names_out()
-        except Exception:
-            # Fallback to original feature names if getting transformed names fails
-            print("Warning: Could not get transformed feature names. Using original RI feature names.")
-            feature_names = ri_features # Use the original input feature names
 
-        # Create DataFrame for coefficients
-        coeff_df = pd.DataFrame({'Feature': feature_names, 'Coefficient': coeffs})
+
+print("\n--- RI Model Coefficients ---")
+# Extract coefficients and intercept from the Logistic Regression model
+if hasattr(ri_model.named_steps['classifier'], 'coef_') and \
+    hasattr(ri_model.named_steps['classifier'], 'intercept_'):
+    
+    coeffs = ri_model.named_steps['classifier'].coef_[0] # Get the coefficients
+    intercept = ri_model.named_steps['classifier'].intercept_[0] # Get the intercept
+    
+    # Get feature names from the preprocessor step if possible
+    try:
+        # Access the fitted ColumnTransformer to get output feature names
+        preprocessor = ri_model.named_steps['preprocessor']
+        # Get feature names after transformation (e.g., scaled numeric features)
+        # Note: This relies on the structure of the preprocessor
+        feature_names = preprocessor.get_feature_names_out()
+    except Exception:
+        # Fallback to original feature names if getting transformed names fails
+        print("Warning: Could not get transformed feature names. Using original RI feature names.")
+        feature_names = ri_features # Use the original input feature names
+
+    # Create DataFrame for coefficients
+    coeff_df = pd.DataFrame({'Feature': feature_names, 'Coefficient': coeffs})
+    
+    # Add the intercept as a separate row
+    intercept_df = pd.DataFrame({'Feature': ['Intercept'], 'Coefficient': [intercept]})
+    
+    # Combine coefficients and intercept
+    full_coeff_df = pd.concat([intercept_df, coeff_df], ignore_index=True)
+    
+    # Sort by absolute coefficient value might be more informative, but sorting by value is fine
+    # full_coeff_df.sort_values(by='Coefficient', ascending=False, inplace=True) 
+    
+    print(full_coeff_df)
         
-        # Add the intercept as a separate row
-        intercept_df = pd.DataFrame({'Feature': ['Intercept'], 'Coefficient': [intercept]})
-        
-        # Combine coefficients and intercept
-        full_coeff_df = pd.concat([intercept_df, coeff_df], ignore_index=True)
-        
-        # Sort by absolute coefficient value might be more informative, but sorting by value is fine
-        # full_coeff_df.sort_values(by='Coefficient', ascending=False, inplace=True) 
-        
-        print(full_coeff_df)
-        
-    else:
-        print("Error: Coefficients or intercept not found in the RI model.")
-else:
-    print("Skipping coefficient check as RI model is not available.")
+
 
 ```
 
@@ -1409,88 +1611,26 @@ Apply the trained `ri_model` to the *rejected training data* (`df_rejected_train
 #| label: ri-apply-weights
 #| code-summary: "Apply RI model, calculate weights, create TTD training dataset."
 
-if ri_model is not None and df_rejected_train_common is not None and df_accepted_train_common is not None:
-    print("Applying RI model to rejected training data and calculating weights...")
-    # Ensure ri_features are available in rejected data
-    missing_rej_ri = [f for f in ri_features if f not in df_rejected_train_common.columns]
-    if missing_rej_ri:
-         print(f"Error: RI features {missing_rej_ri} not found in rejected data. Cannot apply weights.")
-         df_ttd_train = None # Prevent further steps
-    else:
-        X_rej_ri = df_rejected_train_common[ri_features].copy() # Use the same features, add .copy()
+print("Applying RI model to rejected training data and calculating weights...")
 
-        # Predict P(default=1) for rejected applicants using the RI model
-        prob_default_rejected = ri_model.predict_proba(X_rej_ri)[:, 1]
-        prob_good_rejected = 1.0 - prob_default_rejected # P(default=0)
+# Create df_ttd_train with the source column
+df_ttd_train = create_TTD_data( # Renamed variable
+    ri_model=ri_model,
+    df_rejected=df_rejected_train_common,
+    df_accepted=df_accepted_train_common,
+    ri_features=ri_features,
+    modeling_features=modeling_features,
+    target_col=target_col
+)
 
-        # --- Fuzzy Augmentation Implementation ---
-        # Create two copies of rejected data with weights based on predicted probabilities
+# Calculate and display summary statistics by source using helper function
+summary_default_rates = summarize_ttd_by_source(
+    df_ttd=df_ttd_train,
+    target_col=target_col,
+    weight_col='sample_weight',
+    source_col='source'
+)
 
-        # Copy 1: Assumed Bad (default_flag = 1)
-        df_rejected_bad = df_rejected_train_common[modeling_features].copy()
-        df_rejected_bad['sample_weight'] = prob_default_rejected # Weight = P(default=1)
-        df_rejected_bad['default_flag'] = 1
-
-        # Copy 2: Assumed Good (default_flag = 0)
-        df_rejected_good = df_rejected_train_common[modeling_features].copy()
-        df_rejected_good['sample_weight'] = prob_good_rejected # Weight = P(default=0)
-        df_rejected_good['default_flag'] = 0
-
-        # Prepare accepted data with only modeling features + weight + target
-        df_accepted_weighted = df_accepted_train_common[modeling_features + [target_col]].copy()
-        df_accepted_weighted['sample_weight'] = 1.0 # Accepted get weight 1
-
-        # Define columns needed for the final TTD dataset
-        cols_for_ttd = modeling_features + ['default_flag', 'sample_weight']
-
-        # Concatenate accepted data and the two weighted rejected datasets
-        df_ttd_train = pd.concat(
-             [df_accepted_weighted[cols_for_ttd], 
-              df_rejected_bad[cols_for_ttd], 
-              df_rejected_good[cols_for_ttd]], 
-             ignore_index=True
-        )
-
-        # Add a column to indicate the source of each row
-        df_accepted_weighted['source'] = 'accepted'
-        df_rejected_bad['source'] = 'rejected'
-        df_rejected_good['source'] = 'rejected'
-
-        # Create df_ttd_train_accepted_rejected with the source column
-        df_ttd_train_accepted_rejected = pd.concat(
-            [df_accepted_weighted[cols_for_ttd + ['source']],
-             df_rejected_bad[cols_for_ttd + ['source']],
-             df_rejected_good[cols_for_ttd + ['source']]],
-            ignore_index=True
-        )
-
-        # Calculate summary statistics by source
-        # Step 1: Calculate standard aggregations
-        summary_stats = df_ttd_train_accepted_rejected.groupby('source').agg(
-            row_count=('default_flag', 'size'),
-            sum_weights=('sample_weight', 'sum'),
-            unweighted_default_rate=('default_flag', 'mean')
-        ).reset_index()
-
-        # Step 2: Calculate weighted default rate separately using apply
-        weighted_rates = df_ttd_train_accepted_rejected.groupby('source').apply(
-            lambda x: np.average(x['default_flag'], weights=x['sample_weight']) if x['sample_weight'].sum() > 0 else np.nan
-        ).reset_index(name='weighted_default_rate')
-
-        # Step 3: Merge the results
-        summary_default_rates = pd.merge(summary_stats, weighted_rates, on='source')
-
-        # Display the summary
-        print("Summary of Default Rates by Source:")
-        display(summary_default_rates[['source', 'row_count', 'unweighted_default_rate', 'sum_weights', 'weighted_default_rate']])
-        
-        # Clean up intermediate dataframes
-        del df_accepted_weighted, df_rejected_bad, df_rejected_good
-        del X_rej_ri, prob_default_rejected, prob_good_rejected
-
-else:
-    print("Skipping TTD dataset creation due to previous errors.")
-    df_ttd_train = None
 
 ```
 
@@ -1514,88 +1654,66 @@ display(df_sample)
 
 Set up AutoGluon to train on the TTD data, specifying the label (`default_flag`), sample weight column, and excluding complex models like Neural Networks to favor interpretability.
 
+Sample weights are used only during the fit() process to influence how the model learns from the training data. Once the model is trained, predictions are made based solely on the input features the model learned from. You only need to provide the feature columns in the DataFrame passed to `predict()` or `predict_proba()`.
+
 ```{python}
 #| label: ttd-modeling-initial
 #| code-summary: "Configure and train the initial AutoGluon model on weighted TTD data using Sklearn Wrapper."
 
-if 'df_ttd_train' in locals() and df_ttd_train is not None:
-    label = 'default_flag'
-    weight_col = 'sample_weight'
-    
-    # Features are all columns except label and weight
-    features = [col for col in df_ttd_train.columns if col not in [label, weight_col]] 
-    
-    # Verify features match expected modeling_features
-    if set(features) != set(modeling_features):
-         print(f"Warning: Features derived for AutoGluon {features} do not match expected modeling_features {modeling_features}. Check TTD dataset creation.")
-         # Proceeding with derived features, but flag potential issue
-         
-    print(f"Using features for AutoGluon: {features}")
-    print(f"Training data shape: {df_ttd_train.shape}")
-    print(f"Sum of weights in training data: {df_ttd_train[weight_col].sum():.2f}")
+label = 'default_flag'
+weight_col = 'sample_weight'
 
-    # --- AutoGluon Configuration ---
-    model_folder_ttd_initial = 'Lab02_ag_models_TTD_Initial'
-    remove_ag_folder(model_folder_ttd_initial) # Clean up previous runs
+# Features are all columns except label and weight
+features = [col for col in df_ttd_train.columns if col not in [label, weight_col, 'source']] # Exclude source too
 
-    # Hyperparameters: Limit tree depth for simplicity and interpretability
-    custom_hyperparameters = {
-       'GBM': {'num_boost_round': 10000, 'num_leaves': 4},
-       'CAT': {'iterations': 10000, 'depth': 2}
-    }
-
-    excluded_model_types = ['NN_TORCH', 'FASTAI', 'KNN'] 
-
-    custom_preset = {'holdout_frac': 0.2,
-                    'excluded_model_types': excluded_model_types,
-                    'hyperparameters': custom_hyperparameters, 
-                    'time_limit': 300}
-
-    # Arguments for TabularPredictor initialization (passed via wrapper)
-    predictor_args = {
-        'problem_type': 'binary',
-        'eval_metric': 'roc_auc', 
-        'path': model_folder_ttd_initial,
-        'sample_weight': weight_col
+# Verify features match expected modeling_features
+if set(features) != set(modeling_features):
+        print(f"Warning: Features derived for AutoGluon {features} do not match expected modeling_features {modeling_features}. Check TTD dataset creation.")
+        # Proceeding with derived features, but flag potential issue
         
+# --- AutoGluon Configuration ---
+model_folder_ttd_initial = 'Lab02_ag_models_TTD_Initial'
+
+# Hyperparameters: Limit tree depth for simplicity and interpretability
+custom_hyperparameters = {
+    'GBM': {'num_boost_round': 10000, 'num_leaves': 4},
+    'CAT': {'iterations': 10000, 'depth': 2}
+}
+excluded_model_types = ['NN_TORCH', 'FASTAI', 'KNN'] 
+
+# Arguments for TabularPredictor initialization (passed via wrapper)
+predictor_args = {
+    'problem_type': 'binary',
+    'eval_metric': 'roc_auc', 
+    'path': model_folder_ttd_initial,
+    'sample_weight': weight_col         # key parameter for Fuzz Augmentation
+}
+
+# Arguments for TabularPredictor.fit (passed via wrapper)
+fit_args = {
+    'presets': {
+        'holdout_frac': 0.2,
+        'excluded_model_types': excluded_model_types,
+        'hyperparameters': custom_hyperparameters, 
+        'time_limit': 300
     }
+}
 
-    fit_args={'presets': custom_preset}
-    
-    start_time = time.time()
+# Train model using the helper function
+ag_model_initial_wrapped = train_autogluon_model(
+    df_train=df_ttd_train,
+    label=label,
+    weight_col=weight_col,
+    modeling_features=features, # Use derived features list
+    model_folder=model_folder_ttd_initial,
+    predictor_args=predictor_args,
+    fit_args=fit_args
+)
 
-    # Prepare X, y, and weights separately for the wrapper's fit method
-    X_train_ag = df_ttd_train[features]
-    y_train_ag = df_ttd_train[label]
-    weights_train_ag = df_ttd_train[weight_col]
+# Access the underlying predictor for leaderboard etc. (optional, as helper prints it)
+ag_predictor_initial = ag_model_initial_wrapped.predictor
 
-    ag_model_initial_wrapped = AutoGluonSklearnWrapper(
-        label=label,
-        predictor_args=predictor_args,
-        fit_args=fit_args
-    )
 
-    # Only pass X, y, and sample_weight as a column (not as a fit argument)
-    ag_model_initial_wrapped.fit(X_train_ag, y_train_ag, sample_weight=weights_train_ag)
-
-    end_time = time.time()
-    print(f"Initial AutoGluon TTD training (wrapped) completed in {end_time - start_time:.2f} seconds.")
-
-    # Access the underlying predictor for leaderboard etc.
-    ag_predictor_initial = ag_model_initial_wrapped.predictor
-
-    # Display leaderboard
-    if ag_predictor_initial:
-        print("\nAutoGluon Leaderboard (Initial Model):")
-        leaderboard_initial = ag_predictor_initial.leaderboard(silent=True)
-        display(leaderboard_initial)
-    else:
-        print("Could not access underlying predictor to display leaderboard.")
-
-else:
-    print("Skipping initial TTD modeling: df_ttd_train not available.")
-    ag_model_initial_wrapped = None
-    ag_predictor_initial = None 
 ```
 
 # 5. Initial Model Diagnostics (PDP/ICE)
@@ -1654,55 +1772,56 @@ Specify the desired monotonic relationship for key features using AutoGluon's `f
 ```{python}
 #| label: monotonic-constraints-setup-train
 # Updated to use custom_hyperparameters with monotonic constraints and Sklearn wrapper consistent with Section 4
-if 'df_ttd_train' in locals() and df_ttd_train is not None:
-    display(all_features)
-    print("Training constrained AutoGluon model with monotonic constraints via hyperparameters...")
-    # Define monotonic constraints for boosting models
-    monotone_constraints = {'loan_amnt': 1, 'dti': 1, 'credit_score': -1, 'emp_length': -1}
 
-    monotone_constraints_ordered = [1, 1, -1, -1]
+# Get features from the initial model's wrapper
+all_features = ag_model_initial_wrapped.feature_names_ # Use fitted feature names
+display(all_features)
 
-    # Update hyperparameters to include monotonic constraints
-    custom_hyperparameters_constrained = {
-        'GBM': {**custom_hyperparameters['GBM'], 'monotone_constraints': monotone_constraints_ordered},
-        'CAT': {**custom_hyperparameters['CAT'], 'monotone_constraints': monotone_constraints}
+print("Training constrained AutoGluon model with monotonic constraints via hyperparameters...")
+# Define monotonic constraints for boosting models
+# Ensure the order matches 'all_features' if using list for GBM
+# Assuming order: ['loan_amnt', 'dti', 'credit_score', 'emp_length'] based on previous definition
+monotone_constraints_dict = {'loan_amnt': 1, 'dti': 1, 'credit_score': -1, 'emp_length': -1}
+# Create ordered list based on actual feature order from the wrapper
+monotone_constraints_ordered = [monotone_constraints_dict.get(f, 0) for f in all_features] # Default to 0 if feature not in dict
+
+# Update hyperparameters to include monotonic constraints
+custom_hyperparameters_constrained = {
+    'GBM': {**custom_hyperparameters['GBM'], 'monotone_constraints': monotone_constraints_ordered},
+    'CAT': {**custom_hyperparameters['CAT'], 'monotone_constraints': monotone_constraints_dict} # CatBoost uses dict
+}
+
+# Clean up previous model folder
+model_folder_ttd_constrained = 'Lab02_ag_models_TTD_Constrained'
+
+# Prepare predictor and fit arguments (reuse from initial, update path and hyperparameters)
+predictor_args_constrained = predictor_args.copy()
+predictor_args_constrained['path'] = model_folder_ttd_constrained
+
+fit_args_constrained = {
+    'presets': {
+        'hyperparameters': custom_hyperparameters_constrained,
+        'excluded_model_types': excluded_model_types,
+        'holdout_frac': 0.2,
+        'time_limit': 300
     }
-    # Clean up previous model folder
-    model_folder_ttd_constrained = 'Lab02_ag_models_TTD_Constrained'
-    remove_ag_folder(model_folder_ttd_constrained)
-    # Prepare predictor and fit arguments
-    predictor_args_constrained = {
-        'problem_type': 'binary',
-        'eval_metric': 'roc_auc',
-        'path': model_folder_ttd_constrained,
-        'sample_weight': weight_col
-    }
-    fit_args_constrained = {
-        'presets': {
-            'hyperparameters': custom_hyperparameters_constrained,
-            'excluded_model_types': excluded_model_types,
-            'holdout_frac': 0.2,
-            'time_limit': 300
-        }
-    }
-    # Train constrained model using wrapper
-    ag_model_constrained_wrapped = AutoGluonSklearnWrapper(
-        label=label,
-        predictor_args=predictor_args_constrained,
-        fit_args=fit_args_constrained
-    )
-    start_time = time.time()
-    ag_model_constrained_wrapped.fit(X_train_ag, y_train_ag, sample_weight=weights_train_ag)
-    end_time = time.time()
-    print(f"Constrained AutoGluon TTD training completed in {end_time - start_time:.2f} seconds.")
-    # Display leaderboard
-    ag_predictor_constrained = ag_model_constrained_wrapped.predictor
-    print("\nAutoGluon Leaderboard (Constrained Model):")
-    display(ag_predictor_constrained.leaderboard(silent=True))
-else:
-    print("Skipping constrained TTD modeling: df_ttd_train not available.")
-    ag_model_constrained_wrapped = None
-    ag_predictor_constrained = None
+}
+
+# Train constrained model using the helper function
+ag_model_constrained_wrapped = train_autogluon_model(
+    df_train=df_ttd_train,
+    label=label,
+    weight_col=weight_col,
+    modeling_features=all_features, # Use features from initial model
+    model_folder=model_folder_ttd_constrained,
+    predictor_args=predictor_args_constrained,
+    fit_args=fit_args_constrained
+)
+
+# Access the underlying predictor (optional, as helper prints leaderboard)
+ag_predictor_constrained = ag_model_constrained_wrapped.predictor
+
+
 ```
 
 # 7. Verifying Constraints (PDP/ICE)
@@ -1712,24 +1831,24 @@ else:
 ```{python}
 #| label: plot-pdp-ice-constrained
 #| code-summary: "Generate PDP/ICE plots for the constrained TTD model using the wrapper."
-if 'ag_model_constrained_wrapped' in locals() and ag_model_constrained_wrapped is not None:
-    print("Generating PDP/ICE plots for the constrained model to verify monotonic behavior...")
-    # Extract feature lists from the constrained predictor
-    all_features_constrained = ag_model_constrained_wrapped.predictor.features()
-    categorical_features_constrained = ag_model_constrained_wrapped.predictor.feature_metadata.get_features(valid_raw_types=['category'])
-    # Prepare DataFrame for plotting (drop label and weight)
-    plot_df_constrained = df_ttd_train.drop(columns=[label, weight_col])
-    # Display PDP/ICE using the helper
-    show_pdp(
-        wrappedAGModel=ag_model_constrained_wrapped,
-        list_features=all_features_constrained,
-        list_categ_features=categorical_features_constrained if categorical_features_constrained else None,
-        df=plot_df_constrained,
-        show_ice=True,
-        sampSize=25_000
-    )
-else:
-    print("Skipping constrained PDP/ICE plots: Constrained AutoGluon wrapper not available.")
+
+
+print("Generating PDP/ICE plots for the constrained model to verify monotonic behavior...")
+# Extract feature lists from the constrained predictor
+all_features_constrained = ag_model_constrained_wrapped.predictor.features()
+categorical_features_constrained = ag_model_constrained_wrapped.predictor.feature_metadata.get_features(valid_raw_types=['category'])
+# Prepare DataFrame for plotting (drop label and weight)
+plot_df_constrained = df_ttd_train.drop(columns=[label, weight_col])
+# Display PDP/ICE using the helper
+show_pdp(
+    wrappedAGModel=ag_model_constrained_wrapped,
+    list_features=all_features_constrained,
+    list_categ_features=categorical_features_constrained if categorical_features_constrained else None,
+    df=plot_df_constrained,
+    show_ice=True,
+    sampSize=25_000
+)
+
 ```
 
 **Interpretation:** Carefully examine the PDP curves (red dashed lines) for `loan_amnt`, `dti`, and `credit_score`. They should now exhibit the enforced monotonic behavior: non-decreasing for `loan_amnt` and `dti`, and non-increasing for `credit_score`. If the curves are flat or follow the expected trend without reversals, the constraints have been successfully applied.
@@ -1761,10 +1880,6 @@ df_accepted_test_common = process_lending_data(
 
 # 2. Process Rejected Test Data
 print("Processing rejected test data...")
-# Remove non-numeric chars from dti in df_rejected_test before processing
-df_rejected_test['Debt-To-Income Ratio'] = df_rejected_test['Debt-To-Income Ratio'].astype(str).str.replace(r'[^0-9\.\-]', '', regex=True)
-df_rejected_test['Debt-To-Income Ratio'] = pd.to_numeric(df_rejected_test['Debt-To-Income Ratio'], errors='coerce')
-
 df_rejected_test_common = process_lending_data(
     df=df_rejected_test,
     source_type='rejected',
@@ -1774,94 +1889,49 @@ df_rejected_test_common = process_lending_data(
     fillMissing_credit_score=rejected_train_p10_credit_score
 )
 
-
-
-# 3. Calculate Weights for Rejected Test Data
-print("Calculating weights for rejected test data using RI model...")
-
-X_rej_test_ri = df_rejected_test_common[ri_features].copy()
-weights_bad = ri_model.predict_proba(X_rej_test_ri)[:, 1]
-weights_good = 1.0 - weights_bad
-
-# 4. Create two copies of the rejected test data set and assign weights
-
-# Copy 1: Assumed Bad (default_flag = 1)
-df_rejected_test_bad = df_rejected_test_common[modeling_features].copy()
-df_rejected_test_bad['sample_weight'] = weights_bad
-df_rejected_test_bad['default_flag'] = 1
-df_rejected_test_bad['original_source'] = 'Rejected' # Track original source
-
-# Copy 2: Assumed Good (default_flag = 0)
-df_rejected_test_good = df_rejected_test_common[modeling_features].copy()
-df_rejected_test_good['sample_weight'] = weights_good
-df_rejected_test_good['default_flag'] = 0
-df_rejected_test_good['original_source'] = 'Rejected' # Track original source
-
-# 5. Prepare Accepted Test Data with Weight and Source
-df_accepted_test_weighted = df_accepted_test_common[modeling_features + [target_col]].copy()
-df_accepted_test_weighted['sample_weight'] = 1.0
-df_accepted_test_weighted['original_source'] = 'Accepted' # Track original source
-
-# 6. Concatenate to create the full TTD test set for evaluation
-cols_for_ttd_test = modeling_features + ['default_flag', 'sample_weight', 'original_source']
-df_ttd_test_full = pd.concat(
-    [df_accepted_test_weighted[cols_for_ttd_test],
-     df_rejected_test_bad[cols_for_ttd_test],
-     df_rejected_test_good[cols_for_ttd_test]],
-    ignore_index=True
+# 3. Create TTD Test Set using Fuzzy Augmentation
+print("Creating TTD test set using RI model and Fuzzy Augmentation...")
+df_ttd_test_full = create_TTD_data(
+    ri_model=ri_model,
+    df_rejected=df_rejected_test_common,
+    df_accepted=df_accepted_test_common,
+    ri_features=ri_features, # Features used by ri_model
+    modeling_features=modeling_features, # Features to keep in the final TTD set
+    target_col=target_col
 )
 
 print(f"TTD test set created. Shape: {df_ttd_test_full.shape}")
 
-# 7. Summarize the TTD Test Set by Source
-if 'df_ttd_test_full' in locals() and df_ttd_test_full is not None:
-    print("\n--- Summary of TTD Test Set by Original Source ---")
-    # Step 1: Calculate standard aggregations
-    summary_stats_test = df_ttd_test_full.groupby('original_source').agg(
-        row_count=('default_flag', 'size'),
-        sum_weights=('sample_weight', 'sum'),
-        unweighted_default_rate=('default_flag', 'mean')
-    ).reset_index()
+# 4. Summarize the TTD Test Set by Source using helper function
+summary_default_rates_test = summarize_ttd_by_source(
+    df_ttd=df_ttd_test_full,
+    target_col=target_col,
+    weight_col='sample_weight',
+    source_col='source'
+)
 
-    # Step 2: Calculate weighted default rate separately using apply
-    weighted_rates_test = df_ttd_test_full.groupby('original_source').apply(
-        lambda x: np.average(x['default_flag'], weights=x['sample_weight']) if x['sample_weight'].sum() > 0 else np.nan
-    ).reset_index(name='weighted_default_rate')
+# 5. Evaluate the Constrained Model on the TTD Test Set
+print("\n--- Evaluating Constrained Model on TTD Test Set ---")
 
-    # Step 3: Merge the results
-    summary_default_rates_test = pd.merge(summary_stats_test, weighted_rates_test, on='original_source')
+# Prepare features for prediction - use the features the model was trained on
+X_test_ttd = df_ttd_test_full[ag_model_constrained_wrapped.feature_names_] 
+y_true_ttd = df_ttd_test_full['default_flag']
+weights_test_ttd = df_ttd_test_full['sample_weight']
 
-    # Display the summary
-    print("Summary of Default Rates by Original Source (Test Set):")
-    display(summary_default_rates_test[['original_source', 'row_count', 'unweighted_default_rate', 'sum_weights', 'weighted_default_rate']])
-else:
-    print("Skipping TTD test set summary: df_ttd_test_full not available.")
+# Predict probabilities using the wrapped model
+pred_proba_ttd = ag_model_constrained_wrapped.predict_proba(X_test_ttd)[:, 1]
 
+# Create results DataFrame
+df_test_results = df_ttd_test_full.copy()
+df_test_results['pred_proba'] = pred_proba_ttd
 
-# 8. Evaluate the Constrained Model on the TTD Test Set
-if 'ag_model_constrained_wrapped' in locals() and ag_model_constrained_wrapped is not None and \
-   'df_ttd_test_full' in locals() and df_ttd_test_full is not None:
-    print("\n--- Evaluating Constrained Model on TTD Test Set ---")
-    
-    # Prepare features for prediction
-    X_test_ttd = df_ttd_test_full[modeling_features]
-    y_true_ttd = df_ttd_test_full['default_flag']
-    weights_test_ttd = df_ttd_test_full['sample_weight']
+# Calculate weighted AUC for the entire TTD test set
+auc_ttd_weighted = roc_auc_score(y_true_ttd, pred_proba_ttd, sample_weight=weights_test_ttd)
+print(f"Weighted AUC on entire TTD Test Set: {auc_ttd_weighted:.4f}")
 
-    # Predict probabilities using the wrapped model
-    pred_proba_ttd = ag_model_constrained_wrapped.predict_proba(X_test_ttd)[:, 1]
-
-    # Create results DataFrame
-    df_test_results = df_ttd_test_full.copy()
-    df_test_results['pred_proba'] = pred_proba_ttd
-
-    # Calculate weighted AUC for the entire TTD test set
-    auc_ttd_weighted = roc_auc_score(y_true_ttd, pred_proba_ttd, sample_weight=weights_test_ttd)
-    print(f"Weighted AUC on entire TTD Test Set: {auc_ttd_weighted:.4f}")
-
-    # Calculate unweighted AUC for the entire TTD test set
-    auc_ttd_unweighted = roc_auc_score(y_true_ttd, pred_proba_ttd)
-    print(f"Unweighted AUC on entire TTD Test Set: {auc_ttd_unweighted:.4f}")
+# Calculate unweighted AUC for the entire TTD test set
+auc_ttd_unweighted = roc_auc_score(y_true_ttd, pred_proba_ttd)
+print(f"Unweighted AUC on entire TTD Test Set: {auc_ttd_unweighted:.4f}")
 
 ```
 
@@ -1884,36 +1954,38 @@ $Factor = \frac{PDO}{\ln(2)}$.
 #| label: convert-pd-to-score
 #| code-summary: "Convert predicted probabilities to 3-digit scores."
 
-if df_test_results is not None and 'pred_proba' in df_test_results.columns:
-    print("Converting predicted probabilities to scores...")
-    # Use the defined helper function
-    df_test_results['score'] = calculate_score(
-        df_test_results['pred_proba'], 
-        pdo=40, 
-        base_score=680
-    )
-    
-    print("Scores calculated and added to test results.")
-    print("\nScore Distribution Summary:")
-    print(df_test_results['score'].describe())
-    
-    # Plot score distribution
-    plt.figure(figsize=(10, 5))
-    sns.histplot(df_test_results['score'], bins=50, kde=True)
-    plt.title('Distribution of Calculated Scores (TTD Test Set)')
-    plt.xlabel('Score')
-    plt.ylabel('Frequency')
-    plt.grid(axis='y', alpha=0.5)
-    plt.show()
-    
-else:
-    print("Skipping score conversion: Test results or probabilities not available.")
+user_pdo = 40
+user_basescore = 680
+
+print("Converting predicted probabilities to scores...")
+# Use the defined helper function
+df_test_results['score'] = calculate_score(
+    df_test_results['pred_proba'], 
+    pdo=user_pdo, 
+    base_score=user_basescore
+)
+
+print("Scores calculated and added to test results.")
+print("\nScore Distribution Summary:")
+print(df_test_results['score'].describe())
+
+# Plot score distribution
+plt.figure(figsize=(10, 5))
+sns.histplot(df_test_results['score'], bins=50, kde=True)
+plt.title('Distribution of Calculated Scores (TTD Test Set)')
+plt.xlabel('Score')
+plt.ylabel('Frequency')
+plt.grid(axis='y', alpha=0.5)
+plt.show()
+
 
 ```
 
 ## 8.3. Build KS Table
 
-**Concept:** The Kolmogorov-Smirnov (KS) statistic measures how well the scorecard separates "goods" (non-defaults) from "bads" (defaults). It finds the maximum difference between the cumulative distribution of goods and bads across score bins. A higher KS indicates better separation.
+**Concept:** In credit scorecards, the Kolmogorov-Smirnov (KS) statistic measures how well the scorecard separates "goods" (non-defaults) from "bads" (defaults). It quantifies the maximum difference between the cumulative distribution functions of the scores for the good and bad populations across different score ranges (bins). A higher KS value indicates better separation power of the scorecard.
+
+A model with high KS would generate high PD predictions for defaulted loans and low PD predictions for non-defaulted loans. Ideally, the PD predictions from the two target classes should not overlap. While perfect separation is rarely achieved in practice, a high KS signifies the model is closer to this ideal.
 
 ```{python}
 #| label: build-ks-table
@@ -1921,19 +1993,17 @@ else:
 #| tbl-number: true
 #| code-summary: "Generate a KS table based on scores for the TTD test data."
 
-if df_test_results is not None and 'score' in df_test_results.columns and 'sample_weight' in df_test_results.columns:
-    print("Generating KS table using scores and sample weights...")
-    ks_results_table = ks_table(
-        data=df_test_results,
-        y_true_col='default_flag',
-        y_pred_col='score',
-        n_bins=20,
-        is_score=True,
-        sample_weight_col='sample_weight'
-    )
-    display(ks_results_table)
-else:
-    print("Skipping KS table generation: Required columns not available in df_test_results.")
+
+print("Generating KS table using scores and sample weights...")
+ks_results_table = ks_table(
+    data=df_test_results,
+    y_true_col='default_flag',
+    y_pred_col='score',
+    n_bins=20,
+    is_score=True,
+    sample_weight_col='sample_weight'
+)
+display(ks_results_table)
 
 ```
 
@@ -1942,481 +2012,198 @@ Plot cumulative bad rates and good rates to visualize the KS statistic.
 ```{python}
 #| label: plot-cumulative-rates
 #| #| code-summary: "Plot cumulative bad rates and good rates to visualize the KS statistic."
-if ks_results_table is not None and not ks_results_table.empty:
-    print("Plotting cumulative bad rates and good rates to visualize the KS statistic...")
-    
-    plt.figure(figsize=(10, 6))
-    plt.plot(ks_results_table['cum_bads_pct'], label='Cumulative Bad Rate (%)', color='red', marker='o')
-    plt.plot(ks_results_table['cum_goods_pct'], label='Cumulative Good Rate (%)', color='blue', marker='o')
-    plt.fill_between(range(len(ks_results_table)), 
-                     ks_results_table['cum_bads_pct'], 
-                     ks_results_table['cum_goods_pct'], 
-                     color='gray', alpha=0.2, label='KS Gap')
-    
-    # Highlight the maximum KS point
-    max_ks_idx = ks_results_table['ks'].idxmax()
-    max_ks_value = ks_results_table.loc[max_ks_idx, 'ks']
-    plt.axvline(x=max_ks_idx, color='green', linestyle='--', label=f'Max KS = {max_ks_value:.2f}')
-    
-    # Set x-ticks to average score from each bin
-    avg_scores = ks_results_table['avg_score']
-    plt.xticks(ticks=range(len(avg_scores)), labels=[f"{score:.0f}" for score in avg_scores], rotation=45)
-    
-    plt.title('Cumulative Bad and Good Rates with KS Statistic')
-    plt.xlabel('Average Score (per Bin)')
-    plt.ylabel('Cumulative Percentage (%)')
-    plt.legend(loc='best')
-    plt.grid(alpha=0.5)
-    plt.tight_layout()
-    plt.show()
-else:
-    print("Skipping cumulative rates plot: KS results table is not available.")
+
+
+print("Plotting cumulative bad rates and good rates to visualize the KS statistic...")
+
+plt.figure(figsize=(10, 6))
+plt.plot(ks_results_table['cum_bads_pct'], label='Cumulative Bad Rate (%)', color='red', marker='o')
+plt.plot(ks_results_table['cum_goods_pct'], label='Cumulative Good Rate (%)', color='blue', marker='o')
+plt.fill_between(range(len(ks_results_table)), 
+                    ks_results_table['cum_bads_pct'], 
+                    ks_results_table['cum_goods_pct'], 
+                    color='gray', alpha=0.2, label='KS Gap')
+
+# Highlight the maximum KS point
+max_ks_idx = ks_results_table['ks'].idxmax()
+max_ks_value = ks_results_table.loc[max_ks_idx, 'ks']
+plt.axvline(x=max_ks_idx, color='green', linestyle='--', label=f'Max KS = {max_ks_value:.2f}')
+
+# Set x-ticks to average score from each bin
+avg_scores = ks_results_table['avg_score']
+plt.xticks(ticks=range(len(avg_scores)), labels=[f"{score:.0f}" for score in avg_scores], rotation=45)
+
+plt.title('Cumulative Bad and Good Rates with KS Statistic')
+plt.xlabel('Average Score (per Bin)')
+plt.ylabel('Cumulative Percentage (%)')
+plt.legend(loc='best')
+plt.grid(alpha=0.5)
+plt.tight_layout()
+plt.show()
+
 ```
 
 **Interpretation:** A KS > 30 is often acceptable, > 40 good, > 50 excellent.
 
 # 9. Decision Threshold Selection
 
-**Goal:** Determine an appropriate score cutoff (or probability threshold) to approve or reject loan applications based on the model and business objectives. We explore thresholds derived from maximizing KS, F1-score, and a simple profit estimation.
+## 9.1. KS Threshold Selection
 
-## 9.1. Compare Candidate Cutoffs
+There are multiple methods to estimate the optimal decision threshold for binary classification. We explored some of those methods in previous lectures and labs:
 
-Calculate potential thresholds using different optimization criteria on the *TTD test data*.
+1. Maximizing F1 score
+2. Maximizing Profit
 
-```{python}
-#| label: compare-thresholds
-#| code-summary: "Calculate potential thresholds based on KS, F1, and profit."
+In this lab, we will use the score associated with the KS statistic.
 
-if df_test_results is not None and 'score' in df_test_results.columns and \
-   'ks_results_table' in locals() and ks_results_table is not None and not ks_results_table.empty:
-    
-    print("Calculating candidate decision thresholds...")
-    
-    # --- Threshold from Max KS ---
-    max_ks_row = ks_results_table.loc[ks_results_table['ks'].idxmax()]
-    # The threshold is typically the minimum score in the bin *after* the max KS bin,
-    # or the maximum score in the max KS bin itself. Let's use the max score of the max KS bin.
-    threshold_ks_score = max_ks_row['max_score'] 
-    # Find corresponding probability (approximate)
-    threshold_ks_prob = df_test_results.loc[df_test_results['score'] <= threshold_ks_score, 'pred_proba'].max()
-    print(f"  Threshold from Max KS: Score <= {threshold_ks_score:.0f} (Approx Prob >= {threshold_ks_prob:.4f})")
+We will use the calibration data set to estimate the threshold.
 
-    # --- Threshold from Max F1-Score ---
-    # Calculate F1 for various probability thresholds on accepted data
-    df_accepted_test_results = df_test_results[df_test_results['original_source'] == 'Accepted'].copy()
-    y_true_f1 = df_accepted_test_results['default_flag']
-    y_prob_f1 = df_accepted_test_results['pred_proba']
-    
-    thresholds = np.linspace(0.01, 0.99, 100)
-    f1_scores = [f1_score(y_true_f1, (y_prob_f1 >= t).astype(int)) for t in thresholds]
-    best_f1_idx = np.argmax(f1_scores)
-    threshold_f1_prob = thresholds[best_f1_idx]
-    # Find corresponding score (approximate)
-    threshold_f1_score = df_test_results.loc[df_test_results['pred_proba'] >= threshold_f1_prob, 'score'].min()
-    print(f"  Threshold from Max F1: Prob >= {threshold_f1_prob:.4f} (Approx Score <= {threshold_f1_score:.0f}), Max F1 = {f1_scores[best_f1_idx]:.4f}")
-
-    # --- Threshold from Simple Profit Maximization ---
-    # Define hypothetical profit/loss values (EXAMPLE ONLY)
-    profit_good_loan = 1000  # Profit if loan is repaid
-    loss_bad_loan = -5000 # Loss if loan defaults (principal loss, costs, etc.)
-    
-    profits = []
-    for t in thresholds:
-        pred_approve = (y_prob_f1 < t) # Approve if PD < threshold
-        
-        # Calculate profit only on predicted approvals
-        true_pos = np.sum((pred_approve == 1) & (y_true_f1 == 0)) # Correctly approved good loans
-        false_pos = np.sum((pred_approve == 1) & (y_true_f1 == 1)) # Incorrectly approved bad loans
-        
-        total_profit = (true_pos * profit_good_loan) + (false_pos * loss_bad_loan)
-        profits.append(total_profit)
-        
-    best_profit_idx = np.argmax(profits)
-    threshold_profit_prob = thresholds[best_profit_idx]
-    # Find corresponding score (approximate)
-    threshold_profit_score = df_test_results.loc[df_test_results['pred_proba'] >= threshold_profit_prob, 'score'].min()
-    print(f"  Threshold from Max Profit: Prob >= {threshold_profit_prob:.4f} (Approx Score <= {threshold_profit_score:.0f}), Max Profit = ${profits[best_profit_idx]:,.0f}")
-
-    # Store chosen thresholds for later use
-    selected_threshold_prob = threshold_profit_prob # Example: Choose profit-based
-    selected_threshold_score = threshold_profit_score
-
-else:
-    print("Skipping threshold comparison: Prerequisite data not available.")
-    selected_threshold_prob = 0.5 # Default fallback
-    selected_threshold_score = df_test_results['score'].median() if df_test_results is not None else 500 # Default fallback
-
-```
-
-## 9.2. Choose and Document Optimal Threshold
-
-Select the final threshold based on the analysis and business priorities (e.g., risk tolerance vs. profit). Document the chosen threshold and its rationale.
-
-**Decision:** For this lab, we will select the threshold that maximized the simple profit calculation, as it provides a concrete business-oriented objective. *In practice, this requires careful validation and consideration of multiple factors.*
+First, we need to construct the TTD data for the calibration data.
 
 ```{python}
-#| label: select-threshold
-#| code-summary: "Select and document the final decision threshold."
+df_accepted_calib_common = process_lending_data(
+    df=df_accepted_calib,
+    source_type='accepted',
+    fillMissing_loanamnt=rejected_train_median_loan_amnt, # Use values derived from training
+    fillMising_emp_length=rejected_train_median_emp_length,
+    fillMissing_dti=rejected_train_p90_dti,
+    fillMissing_credit_score=rejected_train_p10_credit_score
+)
 
-print(f"--- Final Decision Threshold Selection ---")
-print(f"Selected Threshold based on Profit Maximization (Example):")
-print(f"  Approve if Predicted Probability < {selected_threshold_prob:.4f}")
-print(f"  Equivalent to: Approve if Score > {selected_threshold_score:.0f}") 
-# Note: Approval is typically score > threshold, Reject is score <= threshold
-print(f"  Reject if Predicted Probability >= {selected_threshold_prob:.4f}")
-print(f"  Equivalent to: Reject if Score <= {selected_threshold_score:.0f}")
+df_rejected_calib_common = process_lending_data(
+    df=df_rejected_calib,
+    source_type='rejected',
+    fillMissing_loanamnt=rejected_train_median_loan_amnt, # Use values derived from training
+    fillMising_emp_length=rejected_train_median_emp_length,
+    fillMissing_dti=rejected_train_p90_dti,
+    fillMissing_credit_score=rejected_train_p10_credit_score
+)
 
-# Apply the chosen threshold to the test results dataframe
-if df_test_results is not None:
-     df_test_results['decision'] = np.where(df_test_results['pred_proba'] < selected_threshold_prob, 'Approve', 'Reject')
-     print("\nDecision distribution on TTD Test Set:")
-     print(df_test_results['decision'].value_counts(normalize=True))
-else:
-     print("Could not apply final decision to test results.")
-
+# Create TTD Calibration Set using Fuzzy Augmentation
+print("Creating TTD calibration set using RI model and Fuzzy Augmentation...")
+df_ttd_calib_full = create_TTD_data(
+    ri_model=ri_model,
+    df_rejected=df_rejected_calib_common,
+    df_accepted=df_accepted_calib_common,
+    ri_features=ri_features, # Features used by ri_model
+    modeling_features=modeling_features, # Features to keep in the final TTD set
+    target_col=target_col
+)
+print(f"TTD calibration set created. Shape: {df_ttd_calib_full.shape}")
+# Summarize the TTD Calibration Set by Source using helper function
+summary_default_rates_calib = summarize_ttd_by_source(
+    df_ttd=df_ttd_calib_full,
+    target_col=target_col,
+    weight_col='sample_weight',
+    source_col='source'
+)
 ```
 
-# 10. Adverse Action & Counterfactual Explanations
-
-**Concept:** When rejecting an applicant (Score <= Threshold), regulations often require providing reasons (adverse action notice). Counterfactual Explanations identify the *minimal changes* to the applicant's features that *would* have resulted in approval (Score > Threshold). This provides actionable feedback. Libraries like `dice-ml` help generate these.
-
-**Goal:** Use `dice-ml` (if installed) to generate counterfactuals for a few applicants predicted as 'Reject' by our chosen threshold.
-
-**Note:** This section requires the `dice-ml` library. If not installed, the cells will be skipped.
-
+Second, predict each applicant's PD and convert to a score.
 
 ```{python}
-#| label: generate-counterfactuals
-#| code-summary: "Generate counterfactual explanations for rejected applicants using DiCE."
+df_ttd_calib_full['pred_proba'] = ag_model_constrained_wrapped.predict_proba(
+    df_ttd_calib_full[ag_model_constrained_wrapped.feature_names_]
+)[:, 1]
 
-# Check if dice_ml is imported and necessary data is available
-if dice_ml is not None and 'df_test_results' in locals() and df_test_results is not None and \
-    'ag_model_constrained_wrapped' in locals() and ag_model_constrained_wrapped is not None and \
-    'selected_threshold_prob' in locals() and 'modeling_features' in locals():
-
-     print("--- Generating Counterfactual Explanations ---")
-     dice_setup_ok = False
-     try:
-          # 1. Prepare data for DiCE
-          # DiCE needs features and the outcome ('decision')
-          dice_data = df_test_results[modeling_features + ['decision']].copy()
-          
-          # Define continuous features for DiCE
-          continuous_features_dice = modeling_features # All our modeling features are numeric
-
-          # 2. Create DiCE Data object
-          d = dice_ml.Data(dataframe=dice_data, 
-                                 continuous_features=continuous_features_dice, 
-                                 outcome_name='decision')
-
-          # 3. Create DiCE Model object using the wrapped AutoGluon model
-          # We need a predict function that outputs 'Approve'/'Reject' based on the threshold
-          def dice_predict_func(X):
-                # Ensure input is DataFrame with correct feature names
-                if isinstance(X, np.ndarray):
-                     X_df = pd.DataFrame(X, columns=modeling_features)
-                else:
-                     # Ensure columns are in the correct order if it's already a DataFrame
-                     X_df = X[modeling_features].copy() # Use copy to avoid warnings
-                
-                # Predict probabilities using the wrapped model
-                probabilities = ag_model_constrained_wrapped.predict_proba(X_df)[:, 1]
-                # Convert probabilities to decisions based on the selected threshold
-                decisions = np.where(probabilities < selected_threshold_prob, 'Approve', 'Reject')
-                 return decisions
-
-          # Wrap the prediction function for DiCE
-          # Provide a dummy model_path="" to avoid TypeError in dice-ml when func is used
-          m = dice_ml.Model(model_path="", 
-                                  backend='sklearn', # Use sklearn backend as wrapper is compatible
-                                  func=dice_predict_func) # Provide the custom prediction function
-
-          # 4. Initialize DiCE explainer
-          # Method 'random' is simple; 'kdtree' or 'genetic' can be more sophisticated
-          dice_explainer = dice_ml.Dice(d, m, method="random") 
-          print("DiCE explainer initialized.")
-
-          # 5. Select some rejected applicants to explain
-          rejected_applicants = df_test_results[df_test_results['decision'] == 'Reject']
-          
-          if not rejected_applicants.empty:
-                num_cf_examples = min(3, len(rejected_applicants)) # Explain up to 3
-                applicants_to_explain = rejected_applicants.sample(num_cf_examples, random_state=2025)[modeling_features]
-                print(f"Selected {num_cf_examples} rejected applicants for counterfactuals.")
-                display(applicants_to_explain)
-
-                # 6. Generate counterfactuals
-                # Ask for 3 diverse counterfactuals per applicant, aiming for 'Approve'
-                dice_exp = dice_explainer.generate_counterfactuals(
-                     applicants_to_explain, 
-                     total_CFs=3, 
-                     desired_class="Approve",
-                     # Optional: Specify feature ranges or permitted changes if needed
-                     # features_to_vary=['dti', 'credit_score'] # Example
-                )
-                
-                print("\nCounterfactual Explanations Generated:")
-                # Display the explanations
-                dice_exp.display_counterfactuals(show_only_changes=True) 
-                dice_setup_ok = True # Flag that setup and generation succeeded
-
-          else:
-                print("No rejected applicants found in the test set to generate counterfactuals for.")
-                applicants_to_explain = None # Ensure this is None if no applicants
-
-     except Exception as e:
-          print(f"Error generating counterfactual explanations: {e}")
-          import traceback
-          traceback.print_exc()
-          applicants_to_explain = None # Ensure this is None on error
-
-else:
-     print("Skipping counterfactual explanations: dice-ml not installed or prerequisite data/model not available.")
-     applicants_to_explain = None # Ensure this is None if skipped
-
+df_ttd_calib_full['score'] = calculate_score(
+    df_ttd_calib_full['pred_proba'], 
+    pdo=user_pdo, 
+    base_score=user_basescore
+)
 ```
 
-**Interpretation:** For each rejected applicant, the output shows alternative feature values (the counterfactuals) that would have led to an 'Approve' decision. This highlights the key factors driving the rejection and provides concrete suggestions for the applicant (e.g., "If your DTI had been X instead of Y, you might have been approved").
-
-# 11. Model Interpretability with SHAP
-
-**Concept:** SHAP (SHapley Additive exPlanations) explains individual predictions by assigning each feature an "importance value" (SHAP value) representing its contribution to pushing the prediction away from a baseline (average prediction). Positive SHAP values increase the probability of default, negative values decrease it.
-
-**Goal:** Use SHAP to explain predictions locally (for specific applicants) and globally (overall feature importance) for the final *constrained* model.
-
-## 11.1. Setup SHAP Explainer
-
-Initialize the SHAP explainer using the constrained model and a background dataset (usually a sample of the training data) to represent the baseline.
+Finally, find the optimal threshold using the KS statistic.
 
 ```{python}
-#| label: setup-shap
-#| code-summary: "Set up SHAP explainer for the constrained model."
+ks_calibration = ks_table(
+    data=df_ttd_calib_full,
+    y_true_col='default_flag',
+    y_pred_col='score',
+    n_bins=20,
+    is_score=True,
+    sample_weight_col='sample_weight'
+)
 
-if 'shap' in locals() and 'ag_predictor_constrained' in locals() and ag_predictor_constrained is not None and \
-   'train_data_ag' in locals() and train_data_ag is not None:
-    
-    print("Setting up SHAP explainer...")
-    shap_setup_ok = False
-    try:
-        # SHAP needs a prediction function. For Explainer, it's often best to provide
-        # a function that returns raw model outputs (e.g., probabilities for the positive class).
-        def shap_predict_proba(X):
-            # Ensure input is DataFrame with correct feature names
-            if isinstance(X, np.ndarray):
-                X_df = pd.DataFrame(X, columns=modeling_features) # Use modeling_features
-            else:
-                # Ensure columns are in the correct order if it's already a DataFrame
-                X_df = X[modeling_features]
-            # Return probability of the positive class (default=1)
-            return ag_predictor_constrained.predict_proba(X_df, as_pandas=False)[:, 1]
-
-        # Use a background dataset (sample of training data) for expected value calculation
-        num_background_samples = min(100, len(train_data_ag)) # Use 100 samples or fewer
-        # Ensure background data is a DataFrame with correct columns
-        background_data_sample = train_data_ag[modeling_features].sample(num_background_samples, random_state=2025) 
-
-        # Create Explainer object using the prediction function and background data
-        # shap.Explainer automatically selects an appropriate explainer (like TreeExplainer if applicable)
-        explainer = shap.Explainer(shap_predict_proba, background_data_sample) 
-        
-        print(f"SHAP Explainer initialized (likely using TreeExplainer or similar) with {num_background_samples} background samples.")
-        
-        # Select the same applicants used for counterfactuals (if available)
-        if 'applicants_to_explain' in locals() and applicants_to_explain is not None:
-             # Ensure applicants_to_explain uses modeling_features and is a DataFrame
-             shap_applicants = applicants_to_explain[modeling_features].copy() 
-             print(f"Using the same {len(shap_applicants)} applicants for SHAP explanations.")
-        elif 'df_test_results' in locals() and df_test_results is not None:
-             # Fallback: sample 3 from test set if CF applicants aren't available
-             shap_applicants = df_test_results.sample(min(3, len(df_test_results)), random_state=2025)[modeling_features].copy() # Use modeling_features
-             print(f"Sampled {len(shap_applicants)} applicants from test set for SHAP explanations.")
-        else:
-             shap_applicants = None
-             print("Warning: No applicants available for SHAP local explanations.")
-
-        shap_setup_ok = True
-        
-    except ImportError:
-        print("Skipping SHAP setup: shap library not found.")
-        explainer = None
-        shap_applicants = None
-    except Exception as e:
-        print(f"Error during SHAP setup: {e}")
-        explainer = None
-        shap_applicants = None
-        import traceback
-        traceback.print_exc()
-
-else:
-    print("Skipping SHAP setup: Prerequisites not met (shap, model, data).")
-    explainer = None
-    shap_applicants = None
-    shap_setup_ok = False
+display(ks_calibration)
 ```
 
-## 11.2. Local Interpretability (Waterfall Plots)
+The optimal threshold is 767 (i.e., approve all applicants with the score >= 767, reject all applicants with the score < 767).
 
-Calculate SHAP values for the selected individual applicants and visualize them using waterfall plots to see how each feature contributes to their specific prediction.
+In order to simplify model predictions, we will convert the score of 767 into a probability and set the threshold inside AutoGluon.
 
 ```{python}
-#| label: calculate-local-shap
-#| code-summary: "Calculate and plot local SHAP explanations (waterfall)."
+score_threshold = 767
 
-if 'shap_setup_ok' in locals() and shap_setup_ok and explainer is not None and shap_applicants is not None:
-    print("Calculating SHAP values for selected applicants...")
-    
-    try:
-        # Calculate SHAP values for the selected applicants
-        # explainer(data) returns an Explanation object
-        shap_explanation_local = explainer(shap_applicants) 
-        shap_values_local = shap_explanation_local.values # Get the raw numpy array of SHAP values
-        
-        print("SHAP values calculated. Generating waterfall plots...")
+PD_threshold = score_to_probability(
+    score=score_threshold, 
+    pdo=user_pdo, 
+    base_score=user_basescore
+)
 
-        # Ensure shap_values_local has the expected shape (instances, features)
-        # If the explainer outputs values for multiple classes, select the positive class (index 1)
-        if len(shap_values_local.shape) == 3: # Check if it has a class dimension
-             shap_values_local = shap_values_local[:, :, 1] # Assuming index 1 is the positive class
-
-        # Create waterfall plots for each applicant
-        for i in range(len(shap_applicants)):
-            print(f"\n--- SHAP Waterfall Plot for Applicant {i+1} (Index: {shap_applicants.index[i]}) ---")
-            # Use the Explanation object directly for plotting if possible, or reconstruct
-            # Reconstructing Explanation for a single instance for clarity:
-            exp_obj_single = shap.Explanation(
-                values=shap_explanation_local.values[i], 
-                base_values=shap_explanation_local.base_values[i], # Use base value for this instance
-                data=shap_explanation_local.data[i], 
-                feature_names=modeling_features # Use the correct feature names
-            )
-            shap.waterfall_plot(exp_obj_single, max_display=15, show=True) # Show top 15 features
-
-    except Exception as e:
-        print(f"Error calculating or plotting local SHAP values: {e}")
-        import traceback
-        traceback.print_exc()
-        shap_values_local = None # Indicate failure
-
-else:
-    print("Skipping local SHAP calculation/plotting: Setup failed or no applicants.")
-    shap_values_local = None
+ag_model_constrained_wrapped.predictor.set_decision_threshold(PD_threshold)
 ```
 
-**Interpretation:** Each waterfall plot starts from the baseline prediction (E\[f(X)]) and shows how each feature's SHAP value (red=increase risk, blue=decrease risk) pushes the prediction to its final value (f(x)) for that specific applicant. This reveals the key drivers for individual decisions.
+## 9.2. Evaluating the Threshold
 
-## 11.3. Global Interpretability (Summary Plots)
+We will evalulate the threshold using the test set. Up until now, we have used sample weights in the training, calibration, and test data sets. The weights were needed because the rejected population did not have a target outcome.
 
-Aggregate SHAP values across a larger sample (e.g., the test set or a sample of training data) to understand overall feature importance and effects.
+When we use the TTD model and the threshold in production, we are predicting the target outcome. The prediction does not need to know the true label.
+
+Hence, to evaluate how the model will accept or reject applicants, we will use the test set without sample weights (setting all sample weights to 1) and without cloning the rejects.
 
 ```{python}
-#| label: plot-global-shap
-#| code-summary: "Calculate and visualize global feature importance using SHAP."
+df_ttd_test_noCloning = create_TTD_data(
+    ri_model=None,
+    df_rejected=df_rejected_test_common,
+    df_accepted=df_accepted_test_common,
+    ri_features=None,
+    modeling_features=modeling_features,
+    target_col=target_col,
+    clone_rejected=False
+)
 
-if 'shap_setup_ok' in locals() and shap_setup_ok and explainer is not None and \
-   'df_test_results' in locals() and df_test_results is not None:
-    
-    print("Calculating SHAP values for global analysis (using test set sample)...")
-    
-    # Use a sample of the test set for global analysis (e.g., 500 points)
-    num_global_samples = min(500, len(df_test_results))
-    global_sample_df = df_test_results.sample(num_global_samples, random_state=2025)
-    X_global_sample = global_sample_df[modeling_features] # Use modeling_features
-    
-    try:
-        # Calculate SHAP values for the global sample
-        shap_values_global = explainer.shap_values(X_global_sample.to_numpy())
-        
-        # Ensure correct shape if multi-class output
-        if isinstance(shap_values_global, list) and len(shap_values_global) == 2:
-             shap_values_global = shap_values_global[1]
-
-        print("Global SHAP values calculated. Generating summary plots...")
-
-        # Create Explanation object for global plots
-        exp_global = shap.Explanation(
-            values=shap_values_global, 
-            base_values=explainer.expected_value, 
-            data=X_global_sample.to_numpy(), 
-            feature_names=modeling_features # Use modeling_features
-        )
-
-        # --- Bar Plot (Mean Absolute SHAP) ---
-        print("\n--- Global Feature Importance (Mean |SHAP value|) ---")
-        plt.figure() # Create a new figure context for the bar plot
-        shap.summary_plot(shap_values_global, X_global_sample, plot_type="bar", show=True)
-        # plt.show() # Explicit show might be needed depending on environment
-
-        # --- Summary Plot (Beeswarm) ---
-        print("\n--- SHAP Summary Plot (Beeswarm) ---")
-        plt.figure() # Create a new figure context for the beeswarm plot
-        shap.summary_plot(shap_values_global, X_global_sample, plot_type="dot", show=True) # 'dot' is beeswarm
-        # plt.show() # Explicit show
-
-    except Exception as e:
-        print(f"Error calculating or plotting global SHAP values: {e}")
-        import traceback
-        traceback.print_exc()
-
-else:
-    print("Skipping global SHAP analysis: Setup failed or test data sample unavailable.")
-
+display(df_ttd_test_noCloning.sample(100).head())
 ```
 
-**Interpretation:**
-*   **Bar Plot:** Ranks features by their average impact (mean absolute SHAP value) across the sample. Higher bars mean more influence overall.
-*   **Summary (Beeswarm) Plot:** Shows each feature's SHAP value distribution. Each point is one instance. Color indicates the feature's value (high/low). This reveals not just importance but also the *direction* of the effect (e.g., high `credit_score` (red points) have negative SHAP values, decreasing default probability).
-
-## 11.4. SHAP Dependence Plots (Optional)
-
-Explore how a feature's impact (SHAP value) changes with its value, potentially colored by an interacting feature.
+We can score the applicants in the test set and determine how many applicants are accepted or rejected by the TTD model.
 
 ```{python}
-#| label: plot-shap-dependence
-#| code-summary: "Generate SHAP dependence plots for key features."
+df_ttd_test_noCloning['model_decision'] = ag_model_constrained_wrapped.predict(
+    df_ttd_test_noCloning[ag_model_constrained_wrapped.feature_names_]
+)
 
-if 'shap_setup_ok' in locals() and shap_setup_ok and 'shap_values_global' in locals() and \
-   shap_values_global is not None and 'X_global_sample' in locals() and X_global_sample is not None:
-    
-    print("Generating SHAP dependence plots...")
-    features_for_dependence = ['dti', 'credit_score', 'loan_amnt'] # Choose key features
-    
-    for feature in features_for_dependence:
-        if feature in X_global_sample.columns:
-            print(f"\n--- SHAP Dependence Plot for: {feature} ---")
-            try:
-                plt.figure() # Ensure new plot context
-                shap.dependence_plot(
-                    feature, 
-                    shap_values_global, 
-                    X_global_sample, 
-                    interaction_index="auto", # Automatically find interacting feature
-                    show=True
-                )
-                # plt.show() # Explicit show
-            except Exception as e:
-                print(f"Error generating dependence plot for {feature}: {e}")
-        else:
-            print(f"Skipping dependence plot for {feature}: Not in sample data.")
+df_ttd_test_noCloning['model_decision'] = df_ttd_test_noCloning['model_decision'].apply(lambda x: 'Model_Reject' if x==1 else 'Model_Approve')
 
-else:
-    print("Skipping SHAP dependence plots: Prerequisite SHAP values or data not available.")
+# Compare model decisions to actual outcomes
+print("\n--- Comparing Model Decisions to Actual Outcomes ---")
+
+# Create a cross-tabulation of model decision vs actual outcome
+comparison = pd.crosstab(
+    df_ttd_test_noCloning['model_decision'],
+    df_ttd_test_noCloning['source'],
+    margins=True,
+    margins_name='Total'
+)
+
+print("\nCount of model decisions vs. actual outcomes:")
+display(comparison)
 
 ```
-
-**Interpretation:** These plots show the relationship between a feature's value (x-axis) and its SHAP value (y-axis). The vertical spread, often colored by an interacting feature, highlights how the feature's impact might depend on other factors.
 
 # Conclusion
 
-This lab provided a step-by-step guide to building a credit scorecard using LendingClub data, emphasizing the importance of reject inference, model interpretability, and business logic alignment. Key steps included:
+In this lab, we built a credit scorecard using LendingClub data. We went through the entire process, from preparing the data to evaluating the final model and choosing a cutoff score. A key part was using data from rejected applications to make the model representative of the full applicant pool (this is called reject inference).
 
-1.  **Data Preparation:** Loading, cleaning, and splitting accepted/rejected data.
-2.  **Feature Engineering:** Creating common features and assessing initial monotonicity.
-3.  **Reject Inference:** Using Fuzzy Augmentation to create a weighted TTD dataset.
-4.  **Modeling:** Training an initial AutoGluon model and diagnosing its behavior (PDP/ICE).
-5.  **Constraints:** Applying monotonic constraints to enforce business rules and retraining.
-6.  **Evaluation:** Assessing the constrained model's performance (AUC, KS) on a test set.
-7.  **Scoring:** Converting probabilities to 3-digit scores.
-8.  **Decisioning:** Selecting an operational threshold.
-9.  **Interpretability:** Generating counterfactuals for adverse action and using SHAP for local/global explanations.
+**Key steps and takeaways:**
 
-By incorporating rejected applicant data and ensuring model behavior aligns with domain knowledge through constraints and diagnostics, we can build more robust and trustworthy credit risk models. Techniques like SHAP and counterfactuals further enhance transparency and allow for actionable insights.
+*   **Preparing Data:** We loaded data for both approved and rejected loans, created useful features, and processed both datasets consistently.
+*   **Checking Feature Trends:** We verified that features like Debt-to-Income (DTI) and credit score behaved as expected (e.g., higher credit score means lower risk). This ensures the model makes business sense.
+*   **Using Rejected Data (Reject Inference):** We trained a simple model on approved loans to predict risk for rejected applicants. We then combined the approved and rejected data, assigning weights to the rejected applicants based on their predicted risk. This helps the main model learn from all applicants (Through-the-Door).
+*   **Training the Scorecard Model:** We used AutoGluon to build the main model. We trained it twice: once normally, and a second time forcing it to follow the expected feature trends (monotonic constraints).
+*   **Understanding the Model:** We used plots (PDP/ICE) to visualize how the model made predictions and to confirm it followed the trends we enforced.
+*   **Checking Performance:** We tested the final model on data it hadn't seen before, using metrics like AUC and the KS statistic. We also converted its risk predictions into easy-to-understand 3-digit scores.
+*   **Choosing a Cutoff Score:** We used the KS statistic on a separate 'calibration' dataset to determine the minimum score needed for loan approval. We then checked how this cutoff performed on the test data.
+
+**Summary:**
+This lab demonstrated a complete process for building a practical credit scorecard. By carefully preparing the data, checking feature relationships, including information from rejected applicants, and using tools like AutoGluon with constraints, we created a model that predicts risk accurately and aligns with business logic. These techniques are valuable for credit risk modeling and other areas where fairness and model understanding are crucial.
