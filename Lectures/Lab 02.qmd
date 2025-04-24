@@ -1398,9 +1398,6 @@ if 'df_accepted_train_common' in locals() and df_accepted_train_common is not No
     for feature in features_to_plot:
         if feature in df_accepted_train_common.columns:
             print(f"\nPlotting for feature: {feature}")
-            # Explicitly tell the function if a feature is continuous or categorical
-            # Based on our common feature processing:
-            is_continuous = feature in ['loan_amnt', 'dti', 'credit_score'] 
             
             output = binned_prob_plot(
                 data=df_accepted_train_common, 
