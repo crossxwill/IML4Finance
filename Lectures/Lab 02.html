@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.6.41">
+<meta name="generator" content="quarto-1.6.42">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -63,10 +63,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="Lab 02_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="Lab 02_files/libs/quarto-html/anchor.min.js"></script>
 <link href="Lab 02_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="Lab 02_files/libs/quarto-html/quarto-syntax-highlighting-48ffa3e5b9d089919c6712c39e5b00f2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="Lab 02_files/libs/quarto-html/quarto-syntax-highlighting-2f5df379a58b258e96c21c0638c20c03.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="Lab 02_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="Lab 02_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="Lab 02_files/libs/bootstrap/bootstrap-b29227339076a9cddc7448887e597caa.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="Lab 02_files/libs/bootstrap/bootstrap-2cdb6c447a9b70e5e1f1f0acec0d17a0.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" integrity="sha512-c3Nl8+7g4LMSTdrm621y7kf9v3SDPnhxLNhcjFJbKECVnmZHTdo+IRO05sNLTH/D3vA6u1X32ehoLC7WFVdheg==" crossorigin="anonymous"></script>
 
 <script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
@@ -2010,7 +2010,7 @@ Feature: addr_state
 <div class="cell-output cell-output-stdout">
 <pre><code>Using RI features (same as modeling features): ['loan_amnt', 'dti', 'credit_score', 'emp_length']
 Training Reject Inference Logistic Regression model...
-RI model training completed in 29.12 seconds.</code></pre>
+RI model training completed in 49.10 seconds.</code></pre>
 </div>
 </div>
 </section>
@@ -2407,7 +2407,7 @@ Training data shape: (1956420, 7)
 Sum of weights in training data: 1656420.00</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>AutoGluon training completed in 13.61 seconds.
+<pre><code>AutoGluon training completed in 15.13 seconds.
 
 AutoGluon Leaderboard:</code></pre>
 </div>
@@ -2443,10 +2443,10 @@ Table&nbsp;5: Leaderboard for initial TTD Model
 <td>LightGBM</td>
 <td>0.735284</td>
 <td>roc_auc</td>
-<td>0.078502</td>
-<td>4.857153</td>
-<td>0.078502</td>
-<td>4.857153</td>
+<td>0.098208</td>
+<td>5.276903</td>
+<td>0.098208</td>
+<td>5.276903</td>
 <td>1</td>
 <td>True</td>
 <td>1</td>
@@ -2456,10 +2456,10 @@ Table&nbsp;5: Leaderboard for initial TTD Model
 <td>WeightedEnsemble_L2</td>
 <td>0.735284</td>
 <td>roc_auc</td>
-<td>0.115924</td>
-<td>6.783924</td>
-<td>0.037422</td>
-<td>1.926771</td>
+<td>0.134998</td>
+<td>7.218831</td>
+<td>0.036790</td>
+<td>1.941928</td>
 <td>2</td>
 <td>True</td>
 <td>3</td>
@@ -2467,12 +2467,12 @@ Table&nbsp;5: Leaderboard for initial TTD Model
 <tr class="odd">
 <td data-quarto-table-cell-role="th">2</td>
 <td>CatBoost</td>
-<td>0.733252</td>
+<td>0.732403</td>
 <td>roc_auc</td>
-<td>0.010841</td>
-<td>5.162839</td>
-<td>0.010841</td>
-<td>5.162839</td>
+<td>0.020522</td>
+<td>5.573667</td>
+<td>0.020522</td>
+<td>5.573667</td>
 <td>1</td>
 <td>True</td>
 <td>2</td>
@@ -2644,7 +2644,7 @@ Training data shape: (1956420, 7)
 Sum of weights in training data: 1656420.00</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>AutoGluon training completed in 9.97 seconds.
+<pre><code>AutoGluon training completed in 11.98 seconds.
 
 AutoGluon Leaderboard:</code></pre>
 </div>
@@ -2680,10 +2680,10 @@ Table&nbsp;6: Leaderboard for constrained TTD Model
 <td>LightGBM</td>
 <td>0.734591</td>
 <td>roc_auc</td>
-<td>0.059015</td>
-<td>1.382974</td>
-<td>0.059015</td>
-<td>1.382974</td>
+<td>0.087573</td>
+<td>1.540853</td>
+<td>0.087573</td>
+<td>1.540853</td>
 <td>1</td>
 <td>True</td>
 <td>1</td>
@@ -2693,10 +2693,10 @@ Table&nbsp;6: Leaderboard for constrained TTD Model
 <td>WeightedEnsemble_L2</td>
 <td>0.734591</td>
 <td>roc_auc</td>
-<td>0.093082</td>
-<td>3.183926</td>
-<td>0.034067</td>
-<td>1.800952</td>
+<td>0.122677</td>
+<td>3.380202</td>
+<td>0.035104</td>
+<td>1.839350</td>
 <td>2</td>
 <td>True</td>
 <td>3</td>
@@ -2704,12 +2704,12 @@ Table&nbsp;6: Leaderboard for constrained TTD Model
 <tr class="odd">
 <td data-quarto-table-cell-role="th">2</td>
 <td>CatBoost</td>
-<td>0.733427</td>
+<td>0.732820</td>
 <td>roc_auc</td>
-<td>0.010605</td>
-<td>5.106507</td>
-<td>0.010605</td>
-<td>5.106507</td>
+<td>0.019738</td>
+<td>6.367814</td>
+<td>0.019738</td>
+<td>6.367814</td>
 <td>1</td>
 <td>True</td>
 <td>2</td>
@@ -3335,7 +3335,7 @@ Table&nbsp;8: KS Table for Constrained Model on TTD Test Set
 <td>0.048456</td>
 <td>100.000000</td>
 <td>100.000000</td>
-<td>2.842171e-14</td>
+<td>4.263256e-14</td>
 </tr>
 </tbody>
 </table>
@@ -3840,7 +3840,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.047526</td>
 <td>100.000000</td>
 <td>100.000000</td>
-<td>1.421085e-14</td>
+<td>2.842171e-14</td>
 </tr>
 </tbody>
 </table>
@@ -3864,7 +3864,9 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <span id="cb62-6"><a href="#cb62-6"></a>    base_score<span class="op">=</span>user_basescore</span>
 <span id="cb62-7"><a href="#cb62-7"></a>)</span>
 <span id="cb62-8"><a href="#cb62-8"></a></span>
-<span id="cb62-9"><a href="#cb62-9"></a>ag_model_constrained_wrapped.predictor.set_decision_threshold(PD_threshold)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb62-9"><a href="#cb62-9"></a>ag_model_constrained_wrapped.predictor.set_decision_threshold(PD_threshold)</span>
+<span id="cb62-10"><a href="#cb62-10"></a></span>
+<span id="cb62-11"><a href="#cb62-11"></a>ag_model_constrained_wrapped.predictor.save() <span class="co"># Save the model with the new threshold</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>
@@ -6708,79 +6710,81 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 <span id="cb67-2209"><a href="#cb67-2209"></a>)</span>
 <span id="cb67-2210"><a href="#cb67-2210"></a></span>
 <span id="cb67-2211"><a href="#cb67-2211"></a>ag_model_constrained_wrapped.predictor.set_decision_threshold(PD_threshold)</span>
-<span id="cb67-2212"><a href="#cb67-2212"></a><span class="in">```</span></span>
-<span id="cb67-2213"><a href="#cb67-2213"></a></span>
-<span id="cb67-2214"><a href="#cb67-2214"></a><span class="fu">## Evaluate Model Decisions</span></span>
+<span id="cb67-2212"><a href="#cb67-2212"></a></span>
+<span id="cb67-2213"><a href="#cb67-2213"></a>ag_model_constrained_wrapped.predictor.save() <span class="co"># Save the model with the new threshold</span></span>
+<span id="cb67-2214"><a href="#cb67-2214"></a><span class="in">```</span></span>
 <span id="cb67-2215"><a href="#cb67-2215"></a></span>
-<span id="cb67-2216"><a href="#cb67-2216"></a>Now let's evaluate the threshold using the test set in a way that matches how the model would be used in production. </span>
+<span id="cb67-2216"><a href="#cb67-2216"></a><span class="fu">## Evaluate Model Decisions</span></span>
 <span id="cb67-2217"><a href="#cb67-2217"></a></span>
-<span id="cb67-2218"><a href="#cb67-2218"></a>During training and calibration, we used sample weights and cloned the rejected applicants to correct for selection bias (since we don't know their true outcomes). However, when scoring **new** applicants, we do not know their outcomes and do not use sample weights or cloning.</span>
+<span id="cb67-2218"><a href="#cb67-2218"></a>Now let's evaluate the threshold using the test set in a way that matches how the model would be used in production. </span>
 <span id="cb67-2219"><a href="#cb67-2219"></a></span>
-<span id="cb67-2220"><a href="#cb67-2220"></a>Therefore, to simulate production scoring, we will evaluate the model on the test set by setting all sample weights to 1 and including each applicant only once (no cloning of rejects).</span>
+<span id="cb67-2220"><a href="#cb67-2220"></a>During training and calibration, we used sample weights and cloned the rejected applicants to correct for selection bias (since we don't know their true outcomes). However, when scoring **new** applicants, we do not know their outcomes and do not use sample weights or cloning.</span>
 <span id="cb67-2221"><a href="#cb67-2221"></a></span>
-<span id="cb67-2222"><a href="#cb67-2222"></a>Note that this evaluation differs from the weighted KS calculation in Section 8. There, we assessed the model's ability to separate goods and bads according to the weighted distribution it was trained on. Here, we are simulating the practical application of the chosen score threshold (767) to new, individual applicants (without weighting or cloning) to see the resulting approval/rejection rates.</span>
+<span id="cb67-2222"><a href="#cb67-2222"></a>Therefore, to simulate production scoring, we will evaluate the model on the test set by setting all sample weights to 1 and including each applicant only once (no cloning of rejects).</span>
 <span id="cb67-2223"><a href="#cb67-2223"></a></span>
-<span id="cb67-2226"><a href="#cb67-2226"></a><span class="in">```{python}</span></span>
-<span id="cb67-2227"><a href="#cb67-2227"></a><span class="co">#| label: tbl-ttd-data-noCloning</span></span>
-<span id="cb67-2228"><a href="#cb67-2228"></a><span class="co">#| tbl-cap: "Sample of TTD Test Data (No Cloning)"</span></span>
-<span id="cb67-2229"><a href="#cb67-2229"></a></span>
-<span id="cb67-2230"><a href="#cb67-2230"></a>df_ttd_test_noCloning <span class="op">=</span> create_TTD_data(</span>
-<span id="cb67-2231"><a href="#cb67-2231"></a>    ri_model<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb67-2232"><a href="#cb67-2232"></a>    df_rejected<span class="op">=</span>df_rejected_test_common,</span>
-<span id="cb67-2233"><a href="#cb67-2233"></a>    df_accepted<span class="op">=</span>df_accepted_test_common,</span>
-<span id="cb67-2234"><a href="#cb67-2234"></a>    ri_features<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb67-2235"><a href="#cb67-2235"></a>    modeling_features<span class="op">=</span>modeling_features,</span>
-<span id="cb67-2236"><a href="#cb67-2236"></a>    target_col<span class="op">=</span>target_col,</span>
-<span id="cb67-2237"><a href="#cb67-2237"></a>    clone_rejected<span class="op">=</span><span class="va">False</span></span>
-<span id="cb67-2238"><a href="#cb67-2238"></a>)</span>
-<span id="cb67-2239"><a href="#cb67-2239"></a></span>
-<span id="cb67-2240"><a href="#cb67-2240"></a>display(df_ttd_test_noCloning.sample(<span class="dv">100</span>).head())</span>
-<span id="cb67-2241"><a href="#cb67-2241"></a><span class="in">```</span></span>
-<span id="cb67-2242"><a href="#cb67-2242"></a></span>
-<span id="cb67-2243"><a href="#cb67-2243"></a>We can score the applicants in the test set and determine how many applicants are accepted or rejected by the TTD model.</span>
+<span id="cb67-2224"><a href="#cb67-2224"></a>Note that this evaluation differs from the weighted KS calculation in Section 8. There, we assessed the model's ability to separate goods and bads according to the weighted distribution it was trained on. Here, we are simulating the practical application of the chosen score threshold (767) to new, individual applicants (without weighting or cloning) to see the resulting approval/rejection rates.</span>
+<span id="cb67-2225"><a href="#cb67-2225"></a></span>
+<span id="cb67-2228"><a href="#cb67-2228"></a><span class="in">```{python}</span></span>
+<span id="cb67-2229"><a href="#cb67-2229"></a><span class="co">#| label: tbl-ttd-data-noCloning</span></span>
+<span id="cb67-2230"><a href="#cb67-2230"></a><span class="co">#| tbl-cap: "Sample of TTD Test Data (No Cloning)"</span></span>
+<span id="cb67-2231"><a href="#cb67-2231"></a></span>
+<span id="cb67-2232"><a href="#cb67-2232"></a>df_ttd_test_noCloning <span class="op">=</span> create_TTD_data(</span>
+<span id="cb67-2233"><a href="#cb67-2233"></a>    ri_model<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb67-2234"><a href="#cb67-2234"></a>    df_rejected<span class="op">=</span>df_rejected_test_common,</span>
+<span id="cb67-2235"><a href="#cb67-2235"></a>    df_accepted<span class="op">=</span>df_accepted_test_common,</span>
+<span id="cb67-2236"><a href="#cb67-2236"></a>    ri_features<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb67-2237"><a href="#cb67-2237"></a>    modeling_features<span class="op">=</span>modeling_features,</span>
+<span id="cb67-2238"><a href="#cb67-2238"></a>    target_col<span class="op">=</span>target_col,</span>
+<span id="cb67-2239"><a href="#cb67-2239"></a>    clone_rejected<span class="op">=</span><span class="va">False</span></span>
+<span id="cb67-2240"><a href="#cb67-2240"></a>)</span>
+<span id="cb67-2241"><a href="#cb67-2241"></a></span>
+<span id="cb67-2242"><a href="#cb67-2242"></a>display(df_ttd_test_noCloning.sample(<span class="dv">100</span>).head())</span>
+<span id="cb67-2243"><a href="#cb67-2243"></a><span class="in">```</span></span>
 <span id="cb67-2244"><a href="#cb67-2244"></a></span>
-<span id="cb67-2247"><a href="#cb67-2247"></a><span class="in">```{python}</span></span>
-<span id="cb67-2248"><a href="#cb67-2248"></a><span class="co">#| label: tbl-ttd-model-decisions</span></span>
-<span id="cb67-2249"><a href="#cb67-2249"></a><span class="co">#| tbl-cap: "Model Decisions on TTD Test Set (No Cloning)"</span></span>
-<span id="cb67-2250"><a href="#cb67-2250"></a></span>
-<span id="cb67-2251"><a href="#cb67-2251"></a>df_ttd_test_noCloning[<span class="st">'model_decision'</span>] <span class="op">=</span> ag_model_constrained_wrapped.predict(</span>
-<span id="cb67-2252"><a href="#cb67-2252"></a>    df_ttd_test_noCloning[ag_model_constrained_wrapped.feature_names_]</span>
-<span id="cb67-2253"><a href="#cb67-2253"></a>)</span>
-<span id="cb67-2254"><a href="#cb67-2254"></a></span>
-<span id="cb67-2255"><a href="#cb67-2255"></a>df_ttd_test_noCloning[<span class="st">'model_decision'</span>] <span class="op">=</span> df_ttd_test_noCloning[<span class="st">'model_decision'</span>].<span class="bu">apply</span>(<span class="kw">lambda</span> x: <span class="st">'Model_Reject'</span> <span class="cf">if</span> x<span class="op">==</span><span class="dv">1</span> <span class="cf">else</span> <span class="st">'Model_Approve'</span>)</span>
+<span id="cb67-2245"><a href="#cb67-2245"></a>We can score the applicants in the test set and determine how many applicants are accepted or rejected by the TTD model.</span>
+<span id="cb67-2246"><a href="#cb67-2246"></a></span>
+<span id="cb67-2249"><a href="#cb67-2249"></a><span class="in">```{python}</span></span>
+<span id="cb67-2250"><a href="#cb67-2250"></a><span class="co">#| label: tbl-ttd-model-decisions</span></span>
+<span id="cb67-2251"><a href="#cb67-2251"></a><span class="co">#| tbl-cap: "Model Decisions on TTD Test Set (No Cloning)"</span></span>
+<span id="cb67-2252"><a href="#cb67-2252"></a></span>
+<span id="cb67-2253"><a href="#cb67-2253"></a>df_ttd_test_noCloning[<span class="st">'model_decision'</span>] <span class="op">=</span> ag_model_constrained_wrapped.predict(</span>
+<span id="cb67-2254"><a href="#cb67-2254"></a>    df_ttd_test_noCloning[ag_model_constrained_wrapped.feature_names_]</span>
+<span id="cb67-2255"><a href="#cb67-2255"></a>)</span>
 <span id="cb67-2256"><a href="#cb67-2256"></a></span>
-<span id="cb67-2257"><a href="#cb67-2257"></a><span class="co"># Compare model decisions to actual outcomes</span></span>
-<span id="cb67-2258"><a href="#cb67-2258"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">--- Comparing Model Decisions to Actual Outcomes ---"</span>)</span>
-<span id="cb67-2259"><a href="#cb67-2259"></a></span>
-<span id="cb67-2260"><a href="#cb67-2260"></a><span class="co"># Create a cross-tabulation of model decision vs actual outcome</span></span>
-<span id="cb67-2261"><a href="#cb67-2261"></a>comparison <span class="op">=</span> pd.crosstab(</span>
-<span id="cb67-2262"><a href="#cb67-2262"></a>    df_ttd_test_noCloning[<span class="st">'model_decision'</span>],</span>
-<span id="cb67-2263"><a href="#cb67-2263"></a>    df_ttd_test_noCloning[<span class="st">'source'</span>],</span>
-<span id="cb67-2264"><a href="#cb67-2264"></a>    margins<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb67-2265"><a href="#cb67-2265"></a>    margins_name<span class="op">=</span><span class="st">'Total'</span></span>
-<span id="cb67-2266"><a href="#cb67-2266"></a>)</span>
-<span id="cb67-2267"><a href="#cb67-2267"></a></span>
-<span id="cb67-2268"><a href="#cb67-2268"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Count of model decisions vs. actual outcomes:"</span>)</span>
-<span id="cb67-2269"><a href="#cb67-2269"></a>display(comparison)</span>
-<span id="cb67-2270"><a href="#cb67-2270"></a></span>
-<span id="cb67-2271"><a href="#cb67-2271"></a><span class="in">```</span></span>
+<span id="cb67-2257"><a href="#cb67-2257"></a>df_ttd_test_noCloning[<span class="st">'model_decision'</span>] <span class="op">=</span> df_ttd_test_noCloning[<span class="st">'model_decision'</span>].<span class="bu">apply</span>(<span class="kw">lambda</span> x: <span class="st">'Model_Reject'</span> <span class="cf">if</span> x<span class="op">==</span><span class="dv">1</span> <span class="cf">else</span> <span class="st">'Model_Approve'</span>)</span>
+<span id="cb67-2258"><a href="#cb67-2258"></a></span>
+<span id="cb67-2259"><a href="#cb67-2259"></a><span class="co"># Compare model decisions to actual outcomes</span></span>
+<span id="cb67-2260"><a href="#cb67-2260"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">--- Comparing Model Decisions to Actual Outcomes ---"</span>)</span>
+<span id="cb67-2261"><a href="#cb67-2261"></a></span>
+<span id="cb67-2262"><a href="#cb67-2262"></a><span class="co"># Create a cross-tabulation of model decision vs actual outcome</span></span>
+<span id="cb67-2263"><a href="#cb67-2263"></a>comparison <span class="op">=</span> pd.crosstab(</span>
+<span id="cb67-2264"><a href="#cb67-2264"></a>    df_ttd_test_noCloning[<span class="st">'model_decision'</span>],</span>
+<span id="cb67-2265"><a href="#cb67-2265"></a>    df_ttd_test_noCloning[<span class="st">'source'</span>],</span>
+<span id="cb67-2266"><a href="#cb67-2266"></a>    margins<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb67-2267"><a href="#cb67-2267"></a>    margins_name<span class="op">=</span><span class="st">'Total'</span></span>
+<span id="cb67-2268"><a href="#cb67-2268"></a>)</span>
+<span id="cb67-2269"><a href="#cb67-2269"></a></span>
+<span id="cb67-2270"><a href="#cb67-2270"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Count of model decisions vs. actual outcomes:"</span>)</span>
+<span id="cb67-2271"><a href="#cb67-2271"></a>display(comparison)</span>
 <span id="cb67-2272"><a href="#cb67-2272"></a></span>
-<span id="cb67-2273"><a href="#cb67-2273"></a><span class="fu"># Conclusion</span></span>
+<span id="cb67-2273"><a href="#cb67-2273"></a><span class="in">```</span></span>
 <span id="cb67-2274"><a href="#cb67-2274"></a></span>
-<span id="cb67-2275"><a href="#cb67-2275"></a>In this lab, we built a credit scorecard using LendingClub data. We went through the entire process, from preparing the data to evaluating the final model and choosing a cutoff score. A key part was using data from rejected applications to make the model representative of the full applicant pool (this is called reject inference).</span>
+<span id="cb67-2275"><a href="#cb67-2275"></a><span class="fu"># Conclusion</span></span>
 <span id="cb67-2276"><a href="#cb67-2276"></a></span>
-<span id="cb67-2277"><a href="#cb67-2277"></a>**Key steps and takeaways:**</span>
+<span id="cb67-2277"><a href="#cb67-2277"></a>In this lab, we built a credit scorecard using LendingClub data. We went through the entire process, from preparing the data to evaluating the final model and choosing a cutoff score. A key part was using data from rejected applications to make the model representative of the full applicant pool (this is called reject inference).</span>
 <span id="cb67-2278"><a href="#cb67-2278"></a></span>
-<span id="cb67-2279"><a href="#cb67-2279"></a><span class="ss">*   </span>**Preparing Data:** We loaded data for both approved and rejected loans, created useful features, and processed both datasets consistently.</span>
-<span id="cb67-2280"><a href="#cb67-2280"></a><span class="ss">*   </span>**Checking Feature Trends:** We verified that features like Debt-to-Income (DTI) and credit score behaved as expected (e.g., higher credit score means lower risk). This ensures the model makes business sense.</span>
-<span id="cb67-2281"><a href="#cb67-2281"></a><span class="ss">*   </span>**Using Rejected Data (Reject Inference):** We trained a simple model on approved loans to predict risk for rejected applicants. We then combined the approved and rejected data, assigning weights to the rejected applicants based on their predicted risk. This helps the main model learn from all applicants (Through-the-Door).</span>
-<span id="cb67-2282"><a href="#cb67-2282"></a><span class="ss">*   </span>**Training the Scorecard Model:** We used AutoGluon to build the main model. We trained it twice: once normally, and a second time forcing it to follow the expected feature trends (monotonic constraints).</span>
-<span id="cb67-2283"><a href="#cb67-2283"></a><span class="ss">*   </span>**Understanding the Model:** We used plots (PDP/ICE) to visualize how the model made predictions and to confirm it followed the trends we enforced.</span>
-<span id="cb67-2284"><a href="#cb67-2284"></a><span class="ss">*   </span>**Checking Performance:** We tested the final model on data it hadn't seen before, using metrics like AUC and the KS statistic. We also converted its risk predictions into easy-to-understand 3-digit scores.</span>
-<span id="cb67-2285"><a href="#cb67-2285"></a><span class="ss">*   </span>**Choosing a Cutoff Score:** We used the KS statistic on a separate 'calibration' dataset to determine the minimum score needed for loan approval. We then checked how this cutoff performed on the test data.</span>
-<span id="cb67-2286"><a href="#cb67-2286"></a></span>
-<span id="cb67-2287"><a href="#cb67-2287"></a>**Summary:**</span>
-<span id="cb67-2288"><a href="#cb67-2288"></a>This lab demonstrated a complete process for building a practical credit scorecard. By carefully preparing the data, checking feature relationships, including information from rejected applicants, and using tools like AutoGluon with constraints, we created a model that predicts risk accurately and aligns with business logic. These techniques are valuable for credit risk modeling and other areas where fairness and model understanding are crucial.</span>
+<span id="cb67-2279"><a href="#cb67-2279"></a>**Key steps and takeaways:**</span>
+<span id="cb67-2280"><a href="#cb67-2280"></a></span>
+<span id="cb67-2281"><a href="#cb67-2281"></a><span class="ss">*   </span>**Preparing Data:** We loaded data for both approved and rejected loans, created useful features, and processed both datasets consistently.</span>
+<span id="cb67-2282"><a href="#cb67-2282"></a><span class="ss">*   </span>**Checking Feature Trends:** We verified that features like Debt-to-Income (DTI) and credit score behaved as expected (e.g., higher credit score means lower risk). This ensures the model makes business sense.</span>
+<span id="cb67-2283"><a href="#cb67-2283"></a><span class="ss">*   </span>**Using Rejected Data (Reject Inference):** We trained a simple model on approved loans to predict risk for rejected applicants. We then combined the approved and rejected data, assigning weights to the rejected applicants based on their predicted risk. This helps the main model learn from all applicants (Through-the-Door).</span>
+<span id="cb67-2284"><a href="#cb67-2284"></a><span class="ss">*   </span>**Training the Scorecard Model:** We used AutoGluon to build the main model. We trained it twice: once normally, and a second time forcing it to follow the expected feature trends (monotonic constraints).</span>
+<span id="cb67-2285"><a href="#cb67-2285"></a><span class="ss">*   </span>**Understanding the Model:** We used plots (PDP/ICE) to visualize how the model made predictions and to confirm it followed the trends we enforced.</span>
+<span id="cb67-2286"><a href="#cb67-2286"></a><span class="ss">*   </span>**Checking Performance:** We tested the final model on data it hadn't seen before, using metrics like AUC and the KS statistic. We also converted its risk predictions into easy-to-understand 3-digit scores.</span>
+<span id="cb67-2287"><a href="#cb67-2287"></a><span class="ss">*   </span>**Choosing a Cutoff Score:** We used the KS statistic on a separate 'calibration' dataset to determine the minimum score needed for loan approval. We then checked how this cutoff performed on the test data.</span>
+<span id="cb67-2288"><a href="#cb67-2288"></a></span>
+<span id="cb67-2289"><a href="#cb67-2289"></a>**Summary:**</span>
+<span id="cb67-2290"><a href="#cb67-2290"></a>This lab demonstrated a complete process for building a practical credit scorecard. By carefully preparing the data, checking feature relationships, including information from rejected applicants, and using tools like AutoGluon with constraints, we created a model that predicts risk accurately and aligns with business logic. These techniques are valuable for credit risk modeling and other areas where fairness and model understanding are crucial.</span>
 </code><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></pre></div>
 </div></div></div></div></div>
 </div> <!-- /content -->

@@ -2151,6 +2151,8 @@ PD_threshold = score_to_probability(
 )
 
 ag_model_constrained_wrapped.predictor.set_decision_threshold(PD_threshold)
+
+ag_model_constrained_wrapped.predictor.save() # Save the model with the new threshold
 ```
 
 ## Evaluate Model Decisions
