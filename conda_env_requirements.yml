@@ -1,4 +1,4 @@
-name: env_AutoGluon_202502
+name: C:\Users\chiuw\miniforge3\envs\env_AutoGluon_202502
 channels:
   - conda-forge
 dependencies:
@@ -61,7 +61,7 @@ dependencies:
   - bzip2=1.0.8=h2466b09_7
   - c-ares=1.34.4=h2466b09_0
   - c-blosc2=2.15.2=h9e57077_1
-  - ca-certificates=2025.1.31=h56e8100_0
+  - ca-certificates=2025.4.26=h4c7d964_0
   - cached-property=1.5.2=hd8ed1ab_1
   - cached_property=1.5.2=pyha770c72_1
   - cachetools=5.5.1=pyhd8ed1ab_0
@@ -101,6 +101,7 @@ dependencies:
   - defusedxml=0.7.1=pyhd8ed1ab_0
   - deno=1.46.3=h8d7d278_0
   - deno-dom=0.1.41=h1a6af48_0
+  - dice-ml=0.9=pyhd8ed1ab_0
   - dill=0.3.9=pyhd8ed1ab_1
   - distlib=0.3.9=pyhd8ed1ab_1
   - dnspython=2.7.0=pyhff2d567_1
@@ -155,7 +156,9 @@ dependencies:
   - gts=0.7.6=h6b5321d_4
   - h11=0.14.0=pyhd8ed1ab_1
   - h2=4.2.0=pyhd8ed1ab_0
+  - h5py=3.13.0=nompi_py310h2b0be38_100
   - harfbuzz=10.2.0=h885c0d4_0
+  - hdf5=1.14.3=nompi_hb2c4d47_109
   - hpack=4.1.0=pyhd8ed1ab_0
   - htmlmin=0.1.12=pyhca7485f_2
   - httpcore=1.0.7=pyh29332c3_1
@@ -313,7 +316,7 @@ dependencies:
   - openh264=2.5.0=ha9db3cd_0
   - openjpeg=2.5.3=h4d64b90_0
   - openmim=0.3.7=pyhd8ed1ab_1
-  - openssl=3.4.1=ha4e3fda_0
+  - openssl=3.5.0=ha4e3fda_0
   - optuna=4.2.0=pyhd8ed1ab_0
   - orc=2.0.3=haf104fe_2
   - ordered-set=4.1.0=pyhd8ed1ab_1
