@@ -1,0 +1,832 @@
+---
+title: "Lab 03: Counterfactuals & SHAP"
+format: 
+    html:
+        toc: true
+        code-fold: true
+        code-tools: true
+        code-line-numbers: true
+        page-layout: full
+number-sections: true
+number-figures: true
+number-tables: true
+execute:
+    warning: false
+    message: false
+---
+
+# Introduction
+
+The lab will examine two interpretability techniques:
+
+1. Counterfactual Explanations
+2. SHAP (SHapley Additive exPlanations)
+
+We will use counterfactual explanations to provide actionable feedback to applicants whose applications were rejected by the model. This is a requirement in the US for credit decisions.
+
+We will use SHAP for both local (individual applicant) and global (overall feature importance) model explanations. SHAP values are versatile, offering alternatives to methods like permutation feature importance, partial dependence plots, ICE plots, and ALE plots.
+
+Furthermore, this lab addresses severe class imbalance, a common challenge in fields like fraud detection. While methods like resampling (undersampling, oversampling, SMOTE) exist, they can introduce issues such as poor probability calibration and overfitting. We will instead use AutoGluon, using class weights (cost-sensitive learning) to build a model that handles imbalance directly during training, mitigating these potential problems.
+
+
+```{python}
+#| label: setup-imports
+#| message: false
+
+# System utilities
+import os
+import shutil
+import random
+import warnings
+import time
+import gc
+import psutil
+
+# Data manipulation and visualization
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from IPython.display import display # Explicit import for display
+from scipy import stats, special
+from sklearn.feature_selection import mutual_info_classif
+import re
+import duckdb
+
+# Machine learning - scikit-learn
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.metrics import roc_auc_score, f1_score, confusion_matrix, classification_report
+from sklearn.preprocessing import LabelEncoder, StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.inspection import PartialDependenceDisplay
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
+from sklearn import set_config
+
+# Specialized ML libraries
+from autogluon.tabular import TabularPredictor, TabularDataset
+from autogluon.common.features.feature_metadata import FeatureMetadata # For monotonic constraints
+import shap
+from ydata_profiling import ProfileReport
+
+# Counterfactual Explanations (optional, install if needed: pip install dice-ml)
+try:
+    import dice_ml
+    from dice_ml.utils import helpers # Helper functions for DICE
+except ImportError:
+    print("""
+    
+    dice-ml not found. You need to update your conda env by running:
+    
+    conda activate env_AutoGluon_202502
+    conda install -c conda-forge dice-ml
+    
+    """)
+    dice_ml = None
+
+# Settings
+pd.set_option('display.max_columns', 50)
+pd.set_option('display.max_rows', 100)
+warnings.filterwarnings('ignore', category=FutureWarning) # Suppress specific FutureWarnings
+set_config(transform_output="pandas") # Set sklearn output to pandas
+
+print("Libraries imported successfully.")
+
+
+
+```
+
+
+```{python}
+#| label: helper-functions
+
+class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
+    """
+    Scikit-learn compatible wrapper for AutoGluon TabularPredictor
+    
+    Inherits from scikit-learn's BaseEstimator and ClassifierMixin to provide
+    full compatibility with scikit-learn tools like PartialDependenceDisplay().
+    
+    Parameters
+    ----------
+    label : str
+        Name of the target column
+
+    **predictor_args : dict
+        Additional arguments passed to TabularPredictor()
+        (e.g., problem_type, eval_metric, path)
+
+    **fit_args : dict
+        Additional arguments passed to TabularPredictor.fit() method
+        (e.g., holdout_frac, presets, time_limit, excluded_model_types)
+
+
+    Attributes
+    ----------
+    predictor : TabularPredictor
+        The trained AutoGluon predictor
+
+    classes_ : ndarray
+        Class labels (for classification tasks)
+
+    n_features_in_ : int
+        Number of features seen during fit
+
+    feature_names_ : list
+        Feature names inferred during fitting
+
+    is_fitted_ : bool
+        Whether the estimator has been fitted
+    """
+    
+    def __init__(self, label, predictor_args=None, fit_args=None):
+        self.label = label
+        self.predictor_args = predictor_args if predictor_args else {}
+        self.fit_args = fit_args if fit_args else {}
+        self.predictor = None
+        self.classes_ = None
+        self.n_features_in_ = None
+        self.feature_names_ = None
+        self.is_fitted_ = False
+
+    def __sklearn_is_fitted__(self):
+        """Official scikit-learn API for checking fitted status"""
+        return self.is_fitted_
+
+    def fit(self, X, y, sample_weight=None):
+        """
+        Fit AutoGluon model using scikit-learn interface.
+        If sample_weight is provided, it is added as a column to X for AutoGluon.
+        """
+        self._check_feature_names(X, reset=True)
+        self._check_n_features(X, reset=True)
+
+        # Convert to DataFrame with preserved feature names
+        train_data = pd.DataFrame(X, columns=self.feature_names_)
+        train_data[self.label] = y
+
+        # If sample_weight is provided, add it as a column (name must match predictor_args['sample_weight'])
+        weight_col_name = self.predictor_args.get('sample_weight', None)
+        if sample_weight is not None:
+            if weight_col_name:
+                train_data[weight_col_name] = sample_weight
+            else:
+                print("Warning: sample_weight provided to fit, but 'sample_weight' key not found in predictor_args. Weights will be ignored by AutoGluon.")
+
+        train_data = TabularDataset(train_data)
+
+        # Remove sample_weight from fit_args if present (TabularPredictor.fit does not accept it)
+        fit_args_clean = {k: v for k, v in self.fit_args.items() if k != 'sample_weight'}
+
+        self.predictor = TabularPredictor(
+            label=self.label,
+            **self.predictor_args
+        ).fit(train_data, **fit_args_clean)
+
+        if self.predictor.problem_type in ['binary', 'multiclass']:
+            self.classes_ = np.array(self.predictor.class_labels)
+
+        self.is_fitted_ = True
+        return self
+
+    def predict(self, X):
+        """
+        Make class predictions
+        
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Input data
+            
+        Returns
+        -------
+        y_pred : ndarray of shape (n_samples,)
+            Predicted class labels
+        """
+        check_is_fitted(self)
+        self._check_feature_names(X)
+        self._check_n_features(X)
+
+        df = pd.DataFrame(X, columns=self.feature_names_)
+        df = TabularDataset(df)
+
+        return self.predictor.predict(df).values
+
+    def predict_proba(self, X):
+        """
+        Predict class probabilities
+        
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Input data
+            
+        Returns
+        -------
+        proba : ndarray of shape (n_samples, n_classes)
+            Class probabilities
+        """
+        check_is_fitted(self)
+        self._check_feature_names(X)
+        self._check_n_features(X)
+
+        df = pd.DataFrame(X, columns=self.feature_names_)
+        df = TabularDataset(df)
+
+        return self.predictor.predict_proba(df).values
+
+    def get_params(self, deep=True):
+        """Get parameters for this estimator"""
+        return {
+            'label': self.label,
+            'predictor_args': self.predictor_args,
+            'fit_args': self.fit_args
+        }
+
+    def set_params(self, **params):
+        """Set parameters for this estimator"""
+        for param, value in params.items():
+            if param == 'label':
+                self.label = value
+            else:
+                self.predictor_args[param] = value
+        return self
+
+    def _check_n_features(self, X, reset=False):
+        """Validate number of features"""
+        n_features = X.shape[1]
+        if reset:
+            self.n_features_in_ = n_features
+        elif n_features != self.n_features_in_:
+            raise ValueError(f"Expected {self.n_features_in_} features, got {n_features}")
+
+    def _check_feature_names(self, X, reset=False):
+        """Validate feature names (AutoGluon requirement)"""
+        if reset:
+            if isinstance(X, np.ndarray):
+                self.feature_names_ = [f'feat_{i}' for i in range(X.shape[1])]
+            else:
+                self.feature_names_ = X.columns.tolist()
+        elif hasattr(X, 'columns'):
+            if list(X.columns) != self.feature_names_:
+                raise ValueError("Feature names mismatch between fit and predict")
+
+def load_autogluon(folder_path: str, persist_model: bool = False) -> AutoGluonSklearnWrapper:
+    """
+    Loads a pre-trained AutoGluon TabularPredictor from a specified path
+    into an AutoGluonSklearnWrapper instance.
+
+    Parameters
+    ----------
+    folder_path : str
+        The path to the directory containing the saved AutoGluon predictor.
+    persist_model : bool, default=False
+        If True, calls predictor.persist() after loading to potentially
+        speed up future predictions by loading models into memory.
+
+    Returns
+    -------
+    AutoGluonSklearnWrapper
+        An instance of the wrapper containing the loaded predictor and its metadata.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the specified folder_path does not exist or doesn't contain a valid predictor.
+    Exception
+        If any other error occurs during loading or processing.
+    """
+    try:
+        print(f"Loading AutoGluon predictor from: {folder_path}")
+        predictor = TabularPredictor.load(folder_path)
+        print("Predictor loaded successfully.")
+
+        # Extract metadata from the loaded predictor
+        label = predictor.label
+        feature_names = predictor.feature_metadata_in.get_features() # Get feature names used during training
+        n_features = len(feature_names)
+        classes = None
+        if predictor.problem_type in ['binary', 'multiclass']:
+            classes = np.array(predictor.class_labels)
+
+        # Instantiate the wrapper
+        # Note: predictor_args and fit_args used during original training aren't easily accessible
+        # We initialize them as empty dicts here.
+        wrapper = AutoGluonSklearnWrapper(label=label, predictor_args={}, fit_args={})
+
+        # Assign the loaded predictor and metadata to the wrapper
+        wrapper.predictor = predictor
+        wrapper.classes_ = classes
+        wrapper.n_features_in_ = n_features
+        wrapper.feature_names_ = feature_names
+        wrapper.is_fitted_ = True # Mark as fitted
+
+        # Optionally persist the model
+        if persist_model:
+            print("Persisting predictor models in memory...")
+            # This loads models into memory for faster predictions, requires sufficient RAM
+            wrapper.predictor.persist()
+            print("Predictor models persisted.")
+
+        print("AutoGluonSklearnWrapper created and populated successfully.")
+        return wrapper
+
+    except FileNotFoundError:
+        print(f"Error: Predictor directory not found at {folder_path}")
+        raise
+    except Exception as e:
+        print(f"An error occurred while loading the predictor or creating the wrapper: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+
+```
+
+# Load Data and AutoGluon Model
+
+```{python}
+#| label: load-data
+
+df_ttd_train = pd.read_parquet("../Data/lendingclub/lendingclub_ttd_train.parquet")
+df_ttd_test = pd.read_parquet("../Data/lendingclub/lendingclub_ttd_test_cloning.parquet")
+df_ttd_test_noCloning = pd.read_parquet("../Data/lendingclub/lendingclub_ttd_test_noCloning.parquet")
+
+```
+
+```{python}
+#| label: load-model
+
+model_path = "Lab02_ag_models_TTD_Constrained"
+
+AutoGluon_TTD_model = load_autogluon(
+    folder_path=model_path,
+    persist_model=True
+)
+```
+
+# Counterfactual Explanations
+
+## Overview
+
+**Concept:** Counterfactual explanations provide insights into model decisions by identifying the minimal changes needed to alter a prediction. For example, if an applicant is rejected, a counterfactual explanation would suggest how their features could be adjusted to achieve approval.
+
+First, we need to score the training and test sets to identify the applicants that were accepted and rejected by the model. Note that this is different than the default flag, which is the target variable. The model decision is based on the **predicted** probability of default (PD) and a threshold.
+
+Also keep in mind that `model_rejection = 1` means the applicant was rejected by the model, while `model_rejection = 0` means the applicant was accepted.
+
+```{python}
+#| label: score-data
+
+df_ttd_train['model_rejection'] = AutoGluon_TTD_model.predict(
+    df_ttd_train[AutoGluon_TTD_model.feature_names_]
+)
+
+df_ttd_test['model_rejection'] = AutoGluon_TTD_model.predict(
+    df_ttd_test[AutoGluon_TTD_model.feature_names_]
+)
+```
+
+```{python}
+#| label: tbl-training-decisions
+
+keep_cols = AutoGluon_TTD_model.feature_names_ + ['model_rejection']
+
+display(df_ttd_train[keep_cols].sample(20, random_state=2024).head(10))
+```
+
+```{python}
+#| label: tbl-test-decisions
+
+display(df_ttd_test[keep_cols].sample(20, random_state=2024).head(10))
+
+```
+
+Second, we randomly select 1 rejected applicant from the test set to explain. This applicant will be used to demonstrate the counterfactual explanation process.
+
+```{python}
+#| label: tbl-sample-applicant
+
+sample_reject = df_ttd_test[keep_cols][df_ttd_test.model_rejection == 1].sample(1, random_state=2025)
+
+display(sample_reject)
+```
+
+## Counterfactual Explainer
+
+Setup an `dice-explainer` using the `dice_ml` library. The explainer will be used to generate counterfactuals for the rejected applicant.
+
+The explainer needs two objects:
+
+1. Data with the predicted labels (`model_rejection`).
+2. The trained model used to generate prediction labels.
+
+```{python}
+#| label: setup-counterfactuals
+
+dice_data = dice_ml.Data(
+    dataframe=df_ttd_train[keep_cols],
+    continuous_features=AutoGluon_TTD_model.feature_names_,
+    outcome_name="model_rejection"
+)
+
+dice_model = dice_ml.Model(
+    model=AutoGluon_TTD_model,
+    backend='sklearn'
+)
+
+dice_explainer = dice_ml.Dice(
+    data_interface=dice_data,
+    model_interface=dice_model,
+    method="kdtree"
+)
+
+```
+
+## Counterfactual Explanations
+
+```{python}
+#| label: generate-counterfactuals
+
+threshold = AutoGluon_TTD_model.predictor.decision_threshold # Use decision_threshold
+
+user_permitted_range = {
+    'loan_amnt': [500, sample_reject['loan_amnt'].iloc[0]],
+    'dti': [0, sample_reject['dti'].iloc[0]],
+    'credit_score': [sample_reject['credit_score'].iloc[0], 850],
+    'emp_length': [sample_reject['emp_length'].iloc[0], 10]
+}
+
+dice_exp = dice_explainer.generate_counterfactuals(
+    query_instances=sample_reject[AutoGluon_TTD_model.feature_names_],
+    total_CFs=5,
+    permitted_range=user_permitted_range
+    )
+
+# Extract the counterfactual features (scaled)
+df_counterfactuals = dice_exp.cf_examples_list[0].final_cfs_df
+
+```
+
+```{python}
+#| label: tbl-rejected-applicant
+#| tbl-cap: "Rejected applicant"
+
+display(sample_reject)
+
+```
+
+
+```{python}
+#| label: tbl-counterfactuals
+#| tbl-cap: "Counterfactuals for rejected applicant"
+
+
+display(df_counterfactuals)
+```
+
+Verify that the counterfactuals provided would have generated an approval by the TTD model.
+
+```{python}
+#| label: tbl-verify-counterfactuals
+#| tbl-cap: "Verify counterfactuals"
+
+df_counterfactuals['verify_model_rejection'] = AutoGluon_TTD_model.predict(
+    df_counterfactuals[AutoGluon_TTD_model.feature_names_]
+)
+
+display(df_counterfactuals)
+```
+
+
+**Interpretation:** The output shows alternative feature values (the counterfactuals) that would have led to an 'Approve' decision. This highlights the key factors driving the rejection and provides concrete suggestions for the applicant.
+
+# Draft Generate Adverse Action Codes
+
+The script below generates a list of adverse action codes based on differences between `sample_reject` and `df_counterfactuals`. It does this by comparing the values of selected features, and whenever a value differs between the two datasets, it appends a predefined message to the adverse action codes list.
+
+By comparing each feature of the original sample against the counterfactual, the code effectively identifies which factors (such as a too-high loan amount or a low credit score) contributed to the adverse decision and communicates those reasons clearly.
+
+
+```{python}
+#| label: adverse-action-codes
+#| tbl-cap: "Adverse Action Codes"
+
+def generate_adverse_action_codes(df_rejected, df_counterfactuals, dict_feature_to_action, list_features_to_compare):
+    """
+    Generate adverse action codes based on differences between a rejected applicant and its counterfactual.
+
+    Args:
+        df_rejected (DataFrame): DataFrame with the rejected applicant's data (assumed to be a single row).
+        df_counterfactuals (DataFrame): DataFrame containing counterfactual data (first row is used).
+        dict_feature_to_action (dict): Mapping from feature names to their corresponding adverse action message.
+        list_features_to_compare (list): List of feature names to compare between the rejected and counterfactual data.
+
+    Returns:
+        list: A list of adverse action codes as strings.
+    """
+    adverse_action_codes = []
+    for feature in list_features_to_compare:
+        original_value = df_rejected[feature].iloc[0]
+        counterfactual_value = df_counterfactuals[feature].iloc[0]
+        if original_value != counterfactual_value:
+            adverse_action_codes.append(dict_feature_to_action[feature])
+    return adverse_action_codes
+```
+
+```{python}
+#| label: adverse-action-codes-example
+feature_to_action_code = {
+    'loan_amnt': "Loan amount too high",
+    'dti': "Debt-to-income ratio too high",
+    'credit_score': "Credit score too low",
+    'emp_length': "Employment length too short"
+}
+
+action_codes = generate_adverse_action_codes(
+    sample_reject, 
+    df_counterfactuals, 
+    feature_to_action_code, 
+    AutoGluon_TTD_model.feature_names_
+)
+
+print("Adverse Action Codes:")
+for code in action_codes:
+    print(f"- {code}")
+```
+
+# Improved Adverse Action Codes
+
+A major drawback of this approach is that the order of the generated codes depends on the order of the features in the list `AutoGluon_TTD_model.feature_names_`. Ideally (and legally), the order should be based on the importance of the features in the model. 
+
+We can re-order the elements in the list based on permutation feature importance (PFI) scores. The code below generates the PFI scores and re-orders the adverse action codes based on the PFI scores.
+
+```{python}
+#| label: permutation-feature-importance
+
+pfi = AutoGluon_TTD_model.predictor.feature_importance(
+    df_ttd_test[AutoGluon_TTD_model.feature_names_ + ['default_flag']],
+    silent=True
+)
+
+important_features = pfi.index.tolist()
+```
+
+```{python}
+#| label: improved-adverse-action-codes
+
+improved_action_codes = generate_adverse_action_codes(
+    sample_reject, 
+    df_counterfactuals, 
+    feature_to_action_code, 
+    important_features
+)
+
+print("Improved Adverse Action Codes:")
+for code in improved_action_codes:
+    print(f"- {code}")
+```
+
+Permutation feature importance provides a global ranking of feature impacts in the model. By ordering the adverse action codes according to this ranking, we ensure that the most important features are highlighted first. This is crucial for effective communication with applicants, as it emphasizes the most significant factors influencing their application outcome.
+
+However, global ranking of feature impacts are not always equal to the local ranking of feature impacts. For example, the most important feature for the model may not be the most important feature for a specific applicant. This is a limitation of this approach. SHAP values can be used to generate local rankings of feature impacts.
+
+# SHAP Values
+
+**Concept:** SHAP (SHapley Additive exPlanations) explains individual predictions by assigning each feature an "importance value" (SHAP value) representing its contribution to pushing the prediction away from a baseline (average prediction). Positive SHAP values increase the probability of default, negative values decrease it.
+
+**Goal:** Use SHAP to explain predictions locally (for specific applicants) and globally (overall feature importance) for the final *constrained* model.
+
+## Setup SHAP Explainer
+
+Initialize the SHAP explainer using the constrained model and a background dataset (usually a sample of the training data) to represent the baseline.
+
+```{python}
+#| label: setup-shap
+#| code-summary: "Set up SHAP explainer for the constrained model."
+
+if 'shap' in locals() and 'ag_predictor_constrained' in locals() and ag_predictor_constrained is not None and \
+   'train_data_ag' in locals() and train_data_ag is not None:
+    
+    print("Setting up SHAP explainer...")
+    shap_setup_ok = False
+    try:
+        # SHAP needs a prediction function. For Explainer, it's often best to provide
+        # a function that returns raw model outputs (e.g., probabilities for the positive class).
+        def shap_predict_proba(X):
+            # Ensure input is DataFrame with correct feature names
+            if isinstance(X, np.ndarray):
+                X_df = pd.DataFrame(X, columns=modeling_features) # Use modeling_features
+            else:
+                # Ensure columns are in the correct order if it's already a DataFrame
+                X_df = X[modeling_features]
+            # Return probability of the positive class (default=1)
+            return ag_predictor_constrained.predict_proba(X_df, as_pandas=False)[:, 1]
+
+        # Use a background dataset (sample of training data) for expected value calculation
+        num_background_samples = min(100, len(train_data_ag)) # Use 100 samples or fewer
+        # Ensure background data is a DataFrame with correct columns
+        background_data_sample = train_data_ag[modeling_features].sample(num_background_samples, random_state=2025) 
+
+        # Create Explainer object using the prediction function and background data
+        # shap.Explainer automatically selects an appropriate explainer (like TreeExplainer if applicable)
+        explainer = shap.Explainer(shap_predict_proba, background_data_sample) 
+        
+        print(f"SHAP Explainer initialized (likely using TreeExplainer or similar) with {num_background_samples} background samples.")
+        
+        # Select the same applicants used for counterfactuals (if available)
+        if 'applicants_to_explain' in locals() and applicants_to_explain is not None:
+             # Ensure applicants_to_explain uses modeling_features and is a DataFrame
+             shap_applicants = applicants_to_explain[modeling_features].copy() 
+             print(f"Using the same {len(shap_applicants)} applicants for SHAP explanations.")
+        elif 'df_test_results' in locals() and df_test_results is not None:
+             # Fallback: sample 3 from test set if CF applicants aren't available
+             shap_applicants = df_test_results.sample(min(3, len(df_test_results)), random_state=2025)[modeling_features].copy() # Use modeling_features
+             print(f"Sampled {len(shap_applicants)} applicants from test set for SHAP explanations.")
+        else:
+             shap_applicants = None
+             print("Warning: No applicants available for SHAP local explanations.")
+
+        shap_setup_ok = True
+        
+    except ImportError:
+        print("Skipping SHAP setup: shap library not found.")
+        explainer = None
+        shap_applicants = None
+    except Exception as e:
+        print(f"Error during SHAP setup: {e}")
+        explainer = None
+        shap_applicants = None
+        import traceback
+        traceback.print_exc()
+
+else:
+    print("Skipping SHAP setup: Prerequisites not met (shap, model, data).")
+    explainer = None
+    shap_applicants = None
+    shap_setup_ok = False
+```
+
+## Local Interpretability (Waterfall Plots)
+
+Calculate SHAP values for the selected individual applicants and visualize them using waterfall plots to see how each feature contributes to their specific prediction.
+
+```{python}
+#| label: calculate-local-shap
+#| code-summary: "Calculate and plot local SHAP explanations (waterfall)."
+
+if 'shap_setup_ok' in locals() and shap_setup_ok and explainer is not None and shap_applicants is not None:
+    print("Calculating SHAP values for selected applicants...")
+    
+    try:
+        # Calculate SHAP values for the selected applicants
+        # explainer(data) returns an Explanation object
+        shap_explanation_local = explainer(shap_applicants) 
+        shap_values_local = shap_explanation_local.values # Get the raw numpy array of SHAP values
+        
+        print("SHAP values calculated. Generating waterfall plots...")
+
+        # Ensure shap_values_local has the expected shape (instances, features)
+        # If the explainer outputs values for multiple classes, select the positive class (index 1)
+        if len(shap_values_local.shape) == 3: # Check if it has a class dimension
+             shap_values_local = shap_values_local[:, :, 1] # Assuming index 1 is the positive class
+
+        # Create waterfall plots for each applicant
+        for i in range(len(shap_applicants)):
+            print(f"\n--- SHAP Waterfall Plot for Applicant {i+1} (Index: {shap_applicants.index[i]}) ---")
+            # Use the Explanation object directly for plotting if possible, or reconstruct
+            # Reconstructing Explanation for a single instance for clarity:
+            exp_obj_single = shap.Explanation(
+                values=shap_explanation_local.values[i], 
+                base_values=shap_explanation_local.base_values[i], # Use base value for this instance
+                data=shap_explanation_local.data[i], 
+                feature_names=modeling_features # Use the correct feature names
+            )
+            shap.waterfall_plot(exp_obj_single, max_display=15, show=True) # Show top 15 features
+
+    except Exception as e:
+        print(f"Error calculating or plotting local SHAP values: {e}")
+        import traceback
+        traceback.print_exc()
+        shap_values_local = None # Indicate failure
+
+else:
+    print("Skipping local SHAP calculation/plotting: Setup failed or no applicants.")
+    shap_values_local = None
+```
+
+**Interpretation:** Each waterfall plot starts from the baseline prediction (E\[f(X)]) and shows how each feature's SHAP value (red=increase risk, blue=decrease risk) pushes the prediction to its final value (f(x)) for that specific applicant. This reveals the key drivers for individual decisions.
+
+# Local Adverse Action Codes
+
+The code below generates adverse action codes for the selected applicants based on the SHAP values. It uses the same logic as before, but now it uses the SHAP values to determine which features are most important for each applicant.
+
+```{python}
+
+```
+
+# Other Uses of SHAP Values
+
+## Global Interpretability (Summary Plots)
+
+Aggregate SHAP values across a larger sample (e.g., the test set or a sample of training data) to understand overall feature importance and effects.
+
+```{python}
+#| label: plot-global-shap
+#| code-summary: "Calculate and visualize global feature importance using SHAP."
+
+if 'shap_setup_ok' in locals() and shap_setup_ok and explainer is not None and \
+   'df_test_results' in locals() and df_test_results is not None:
+    
+    print("Calculating SHAP values for global analysis (using test set sample)...")
+    
+    # Use a sample of the test set for global analysis (e.g., 500 points)
+    num_global_samples = min(500, len(df_test_results))
+    global_sample_df = df_test_results.sample(num_global_samples, random_state=2025)
+    X_global_sample = global_sample_df[modeling_features] # Use modeling_features
+    
+    try:
+        # Calculate SHAP values for the global sample
+        shap_values_global = explainer.shap_values(X_global_sample.to_numpy())
+        
+        # Ensure correct shape if multi-class output
+        if isinstance(shap_values_global, list) and len(shap_values_global) == 2:
+             shap_values_global = shap_values_global[1]
+
+        print("Global SHAP values calculated. Generating summary plots...")
+
+        # Create Explanation object for global plots
+        exp_global = shap.Explanation(
+            values=shap_values_global, 
+            base_values=explainer.expected_value, 
+            data=X_global_sample.to_numpy(), 
+            feature_names=modeling_features # Use modeling_features
+        )
+
+        # --- Bar Plot (Mean Absolute SHAP) ---
+        print("\n--- Global Feature Importance (Mean |SHAP value|) ---")
+        plt.figure() # Create a new figure context for the bar plot
+        shap.summary_plot(shap_values_global, X_global_sample, plot_type="bar", show=True)
+        # plt.show() # Explicit show might be needed depending on environment
+
+        # --- Summary Plot (Beeswarm) ---
+        print("\n--- SHAP Summary Plot (Beeswarm) ---")
+        plt.figure() # Create a new figure context for the beeswarm plot
+        shap.summary_plot(shap_values_global, X_global_sample, plot_type="dot", show=True) # 'dot' is beeswarm
+        # plt.show() # Explicit show
+
+    except Exception as e:
+        print(f"Error calculating or plotting global SHAP values: {e}")
+        import traceback
+        traceback.print_exc()
+
+else:
+    print("Skipping global SHAP analysis: Setup failed or test data sample unavailable.")
+
+```
+
+**Interpretation:**
+*   **Bar Plot:** Ranks features by their average impact (mean absolute SHAP value) across the sample. Higher bars mean more influence overall.
+*   **Summary (Beeswarm) Plot:** Shows each feature's SHAP value distribution. Each point is one instance. Color indicates the feature's value (high/low). This reveals not just importance but also the *direction* of the effect (e.g., high `credit_score` (red points) have negative SHAP values, decreasing default probability).
+
+## SHAP Dependence Plots (Optional)
+
+Explore how a feature's impact (SHAP value) changes with its value, potentially colored by an interacting feature.
+
+```{python}
+#| label: plot-shap-dependence
+#| code-summary: "Generate SHAP dependence plots for key features."
+
+if 'shap_setup_ok' in locals() and shap_setup_ok and 'shap_values_global' in locals() and \
+   shap_values_global is not None and 'X_global_sample' in locals() and X_global_sample is not None:
+    
+    print("Generating SHAP dependence plots...")
+    features_for_dependence = ['dti', 'credit_score', 'loan_amnt'] # Choose key features
+    
+    for feature in features_for_dependence:
+        if feature in X_global_sample.columns:
+            print(f"\n--- SHAP Dependence Plot for: {feature} ---")
+            try:
+                plt.figure() # Ensure new plot context
+                shap.dependence_plot(
+                    feature, 
+                    shap_values_global, 
+                    X_global_sample, 
+                    interaction_index="auto", # Automatically find interacting feature
+                    show=True
+                )
+                # plt.show() # Explicit show
+            except Exception as e:
+                print(f"Error generating dependence plot for {feature}: {e}")
+        else:
+            print(f"Skipping dependence plot for {feature}: Not in sample data.")
+
+else:
+    print("Skipping SHAP dependence plots: Prerequisite SHAP values or data not available.")
+
+```
+
+**Interpretation:** These plots show the relationship between a feature's value (x-axis) and its SHAP value (y-axis). The vertical spread, often colored by an interacting feature, highlights how the feature's impact might depend on other factors.
