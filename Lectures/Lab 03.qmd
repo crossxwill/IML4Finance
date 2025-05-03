@@ -19,15 +19,14 @@ execute:
 
 The lab will examine two interpretability techniques:
 
-1. Counterfactual Explanations
-2. SHAP (SHapley Additive exPlanations)
+1.  Counterfactual Explanations
+2.  SHAP (SHapley Additive exPlanations)
 
 We will use counterfactual explanations to provide actionable feedback to applicants whose applications were rejected by the model. This is a requirement in the US for credit decisions.
 
 We will use SHAP for both local (individual applicant) and global (overall feature importance) model explanations. SHAP values are versatile, offering alternatives to methods like permutation feature importance, partial dependence plots, ICE plots, and ALE plots.
 
 Furthermore, this lab addresses severe class imbalance, a common challenge in fields like fraud detection. While methods like resampling (undersampling, oversampling, SMOTE) exist, they can introduce issues such as poor probability calibration and overfitting. We will instead use AutoGluon, using class weights (cost-sensitive learning) to build a model that handles imbalance directly during training, mitigating these potential problems.
-
 
 ```{python}
 #| label: setup-imports
@@ -65,6 +64,7 @@ from sklearn.inspection import PartialDependenceDisplay
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
 from sklearn import set_config
+import torch
 
 # Specialized ML libraries
 from autogluon.tabular import TabularPredictor, TabularDataset
@@ -93,12 +93,18 @@ pd.set_option('display.max_rows', 100)
 warnings.filterwarnings('ignore', category=FutureWarning) # Suppress specific FutureWarnings
 set_config(transform_output="pandas") # Set sklearn output to pandas
 
+def global_set_seed(seed_value=2025):
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+
+global_set_seed(2025)
+
 print("Libraries imported successfully.")
 
 
 
 ```
-
 
 ```{python}
 #| label: helper-functions
@@ -346,7 +352,7 @@ def load_autogluon(folder_path: str, persist_model: bool = False) -> AutoGluonSk
 
 ```
 
-# Load Data and AutoGluon Model
+# Load Data and Pre-trained Model
 
 ```{python}
 #| label: load-data
@@ -372,7 +378,7 @@ AutoGluon_TTD_model = load_autogluon(
 
 ## Overview
 
-**Concept:** Counterfactual explanations provide insights into model decisions by identifying the minimal changes needed to alter a prediction. For example, if an applicant is rejected, a counterfactual explanation would suggest how their features could be adjusted to achieve approval.
+**Concept:** Counterfactual explanations identify the minimal changes needed to alter a predicted label. For example, if an applicant is rejected, a counterfactual explanation would suggest how their features could be adjusted to achieve approval.
 
 First, we need to score the training and test sets to identify the applicants that were accepted and rejected by the model. Note that this is different than the default flag, which is the target variable. The model decision is based on the **predicted** probability of default (PD) and a threshold.
 
@@ -380,6 +386,8 @@ Also keep in mind that `model_rejection = 1` means the applicant was rejected by
 
 ```{python}
 #| label: score-data
+
+# append predicted labels to the training and test sets
 
 df_ttd_train['model_rejection'] = AutoGluon_TTD_model.predict(
     df_ttd_train[AutoGluon_TTD_model.feature_names_]
@@ -410,7 +418,7 @@ Second, we randomly select 1 rejected applicant from the test set to explain. Th
 ```{python}
 #| label: tbl-sample-applicant
 
-sample_reject = df_ttd_test[keep_cols][df_ttd_test.model_rejection == 1].sample(1, random_state=2025)
+sample_reject = df_ttd_test[keep_cols][df_ttd_test.model_rejection == 1].sample(1, random_state=2022)
 
 display(sample_reject)
 ```
@@ -421,8 +429,8 @@ Setup an `dice-explainer` using the `dice_ml` library. The explainer will be use
 
 The explainer needs two objects:
 
-1. Data with the predicted labels (`model_rejection`).
-2. The trained model used to generate prediction labels.
+1.  Data with the predicted labels (`model_rejection`).
+2.  The trained model used to generate prediction labels.
 
 ```{python}
 #| label: setup-counterfactuals
@@ -479,7 +487,6 @@ display(sample_reject)
 
 ```
 
-
 ```{python}
 #| label: tbl-counterfactuals
 #| tbl-cap: "Counterfactuals for rejected applicant"
@@ -501,15 +508,13 @@ df_counterfactuals['verify_model_rejection'] = AutoGluon_TTD_model.predict(
 display(df_counterfactuals)
 ```
 
-
 **Interpretation:** The output shows alternative feature values (the counterfactuals) that would have led to an 'Approve' decision. This highlights the key factors driving the rejection and provides concrete suggestions for the applicant.
 
-# Draft Generate Adverse Action Codes
+# Generate Adverse Action Codes
 
-The script below generates a list of adverse action codes based on differences between `sample_reject` and `df_counterfactuals`. It does this by comparing the values of selected features, and whenever a value differs between the two datasets, it appends a predefined message to the adverse action codes list.
+The script below generates a list of adverse action codes based on differences between `sample_reject` and `df_counterfactuals`. It does this by comparing the values of each feature, and if a value differs between the two datasets, it appends a predefined message to the adverse action codes list.
 
-By comparing each feature of the original sample against the counterfactual, the code effectively identifies which factors (such as a too-high loan amount or a low credit score) contributed to the adverse decision and communicates those reasons clearly.
-
+By comparing each feature of the original sample against the counterfactual, the code effectively identifies which factors (such as a too-high loan amount or a low credit score) contributed to the adverse decision and communicates those reasons clearly to the applicant.
 
 ```{python}
 #| label: adverse-action-codes
@@ -529,11 +534,13 @@ def generate_adverse_action_codes(df_rejected, df_counterfactuals, dict_feature_
         list: A list of adverse action codes as strings.
     """
     adverse_action_codes = []
+
     for feature in list_features_to_compare:
         original_value = df_rejected[feature].iloc[0]
         counterfactual_value = df_counterfactuals[feature].iloc[0]
         if original_value != counterfactual_value:
             adverse_action_codes.append(dict_feature_to_action[feature])
+
     return adverse_action_codes
 ```
 
@@ -560,7 +567,7 @@ for code in action_codes:
 
 # Improved Adverse Action Codes
 
-A major drawback of this approach is that the order of the generated codes depends on the order of the features in the list `AutoGluon_TTD_model.feature_names_`. Ideally (and legally), the order should be based on the importance of the features in the model. 
+A major drawback of this approach is that the order of the generated codes depends on the order of the features in the list `AutoGluon_TTD_model.feature_names_`. Ideally (and legally), the order should be based on the importance of the features in the model decision.
 
 We can re-order the elements in the list based on permutation feature importance (PFI) scores. The code below generates the PFI scores and re-orders the adverse action codes based on the PFI scores.
 
@@ -592,241 +599,187 @@ for code in improved_action_codes:
 
 Permutation feature importance provides a global ranking of feature impacts in the model. By ordering the adverse action codes according to this ranking, we ensure that the most important features are highlighted first. This is crucial for effective communication with applicants, as it emphasizes the most significant factors influencing their application outcome.
 
-However, global ranking of feature impacts are not always equal to the local ranking of feature impacts. For example, the most important feature for the model may not be the most important feature for a specific applicant. This is a limitation of this approach. SHAP values can be used to generate local rankings of feature impacts.
+However, global ranking of feature impacts are not always equal to the local ranking of feature impacts. For example, the most important feature for the model may not be the most important feature for a specific applicant. This is a limitation of the PFI approach. SHAP values can be used to generate local rankings of feature impacts.
 
 # SHAP Values
 
-**Concept:** SHAP (SHapley Additive exPlanations) explains individual predictions by assigning each feature an "importance value" (SHAP value) representing its contribution to pushing the prediction away from a baseline (average prediction). Positive SHAP values increase the probability of default, negative values decrease it.
+## Concept
 
-**Goal:** Use SHAP to explain predictions locally (for specific applicants) and globally (overall feature importance) for the final *constrained* model.
+The difference between the predicted probability of default ($\widehat{PD_i}$) for an applicant ($i$) and the average predicted PD ($\overline{PD}$) for a given data set can be decomposed into the contributions of each feature. The contributions are called SHAP values.
+
+Suppose a credit scorecard model had 4 features. Then, for applicant $i$, there would be 4 SHAP values, one for each feature. The SHAP values can be interpreted as the contribution of each feature to the difference between the predicted PD and the average PD.
+
+$\widehat{PD_i} - \overline{PD} = S(i,DTI) + S(i,CreditScore) + S(i,EmpLength) + S(i,LoanAmnt)$
+
+For a given data set (e.g., training set), $\overline{PD}$ is constant. Therefore, the SHAP values can be interpreted as the contribution of each feature to the predicted PD.
+
+$\widehat{PD_i} = \overline{PD} + S(i,DTI) + S(i,CreditScore) + S(i,EmpLength) + S(i,LoanAmnt)$
+
+SHAP values could be negative or positive. A negative SHAP value means that the feature decreases the predicted PD, while a positive SHAP value means that the feature increases the predicted PD.
 
 ## Setup SHAP Explainer
 
-Initialize the SHAP explainer using the constrained model and a background dataset (usually a sample of the training data) to represent the baseline.
+Initialize the SHAP explainer using the constrained model and a background dataset (usually a sample of the training data) to represent the baseline prediction.
+
+Notice that the background dataset does not contain the true label. The SHAP explainer uses the background dataset to calculate the expected value of the model's predictions. This is important because the SHAP values are calculated as the difference between the predicted value and the expected value.
 
 ```{python}
 #| label: setup-shap
-#| code-summary: "Set up SHAP explainer for the constrained model."
 
-if 'shap' in locals() and 'ag_predictor_constrained' in locals() and ag_predictor_constrained is not None and \
-   'train_data_ag' in locals() and train_data_ag is not None:
-    
-    print("Setting up SHAP explainer...")
-    shap_setup_ok = False
-    try:
-        # SHAP needs a prediction function. For Explainer, it's often best to provide
-        # a function that returns raw model outputs (e.g., probabilities for the positive class).
-        def shap_predict_proba(X):
-            # Ensure input is DataFrame with correct feature names
-            if isinstance(X, np.ndarray):
-                X_df = pd.DataFrame(X, columns=modeling_features) # Use modeling_features
-            else:
-                # Ensure columns are in the correct order if it's already a DataFrame
-                X_df = X[modeling_features]
-            # Return probability of the positive class (default=1)
-            return ag_predictor_constrained.predict_proba(X_df, as_pandas=False)[:, 1]
+background_data_sample = df_ttd_train[AutoGluon_TTD_model.feature_names_].sample(60_000, random_state=2025)
 
-        # Use a background dataset (sample of training data) for expected value calculation
-        num_background_samples = min(100, len(train_data_ag)) # Use 100 samples or fewer
-        # Ensure background data is a DataFrame with correct columns
-        background_data_sample = train_data_ag[modeling_features].sample(num_background_samples, random_state=2025) 
+shap_explainer = shap.Explainer(lambda x: AutoGluon_TTD_model.predict_proba(x)[:, 1], background_data_sample)
 
-        # Create Explainer object using the prediction function and background data
-        # shap.Explainer automatically selects an appropriate explainer (like TreeExplainer if applicable)
-        explainer = shap.Explainer(shap_predict_proba, background_data_sample) 
-        
-        print(f"SHAP Explainer initialized (likely using TreeExplainer or similar) with {num_background_samples} background samples.")
-        
-        # Select the same applicants used for counterfactuals (if available)
-        if 'applicants_to_explain' in locals() and applicants_to_explain is not None:
-             # Ensure applicants_to_explain uses modeling_features and is a DataFrame
-             shap_applicants = applicants_to_explain[modeling_features].copy() 
-             print(f"Using the same {len(shap_applicants)} applicants for SHAP explanations.")
-        elif 'df_test_results' in locals() and df_test_results is not None:
-             # Fallback: sample 3 from test set if CF applicants aren't available
-             shap_applicants = df_test_results.sample(min(3, len(df_test_results)), random_state=2025)[modeling_features].copy() # Use modeling_features
-             print(f"Sampled {len(shap_applicants)} applicants from test set for SHAP explanations.")
-        else:
-             shap_applicants = None
-             print("Warning: No applicants available for SHAP local explanations.")
-
-        shap_setup_ok = True
-        
-    except ImportError:
-        print("Skipping SHAP setup: shap library not found.")
-        explainer = None
-        shap_applicants = None
-    except Exception as e:
-        print(f"Error during SHAP setup: {e}")
-        explainer = None
-        shap_applicants = None
-        import traceback
-        traceback.print_exc()
-
-else:
-    print("Skipping SHAP setup: Prerequisites not met (shap, model, data).")
-    explainer = None
-    shap_applicants = None
-    shap_setup_ok = False
 ```
 
 ## Local Interpretability (Waterfall Plots)
 
-Calculate SHAP values for the selected individual applicants and visualize them using waterfall plots to see how each feature contributes to their specific prediction.
+Calculate SHAP values for the 1 rejected applicant and plot the SHAP values using a waterfall plot. The waterfall plot shows the contribution of each feature to the predicted PD for that specific applicant.
 
 ```{python}
 #| label: calculate-local-shap
-#| code-summary: "Calculate and plot local SHAP explanations (waterfall)."
 
-if 'shap_setup_ok' in locals() and shap_setup_ok and explainer is not None and shap_applicants is not None:
-    print("Calculating SHAP values for selected applicants...")
-    
-    try:
-        # Calculate SHAP values for the selected applicants
-        # explainer(data) returns an Explanation object
-        shap_explanation_local = explainer(shap_applicants) 
-        shap_values_local = shap_explanation_local.values # Get the raw numpy array of SHAP values
-        
-        print("SHAP values calculated. Generating waterfall plots...")
+# Generate SHAP values for the rejected applicant
+shap_values = shap_explainer(sample_reject[AutoGluon_TTD_model.feature_names_])
 
-        # Ensure shap_values_local has the expected shape (instances, features)
-        # If the explainer outputs values for multiple classes, select the positive class (index 1)
-        if len(shap_values_local.shape) == 3: # Check if it has a class dimension
-             shap_values_local = shap_values_local[:, :, 1] # Assuming index 1 is the positive class
-
-        # Create waterfall plots for each applicant
-        for i in range(len(shap_applicants)):
-            print(f"\n--- SHAP Waterfall Plot for Applicant {i+1} (Index: {shap_applicants.index[i]}) ---")
-            # Use the Explanation object directly for plotting if possible, or reconstruct
-            # Reconstructing Explanation for a single instance for clarity:
-            exp_obj_single = shap.Explanation(
-                values=shap_explanation_local.values[i], 
-                base_values=shap_explanation_local.base_values[i], # Use base value for this instance
-                data=shap_explanation_local.data[i], 
-                feature_names=modeling_features # Use the correct feature names
-            )
-            shap.waterfall_plot(exp_obj_single, max_display=15, show=True) # Show top 15 features
-
-    except Exception as e:
-        print(f"Error calculating or plotting local SHAP values: {e}")
-        import traceback
-        traceback.print_exc()
-        shap_values_local = None # Indicate failure
-
-else:
-    print("Skipping local SHAP calculation/plotting: Setup failed or no applicants.")
-    shap_values_local = None
+# Display the waterfall plot for the first (and only) instance
+shap.plots.waterfall(shap_values[0])
 ```
 
-**Interpretation:** Each waterfall plot starts from the baseline prediction (E\[f(X)]) and shows how each feature's SHAP value (red=increase risk, blue=decrease risk) pushes the prediction to its final value (f(x)) for that specific applicant. This reveals the key drivers for individual decisions.
+**Interpretation:** The baseline PD is 23.4%. The features `credit_score`, `dti`, and `emp_length` have positive SHAP values, meaning they increase the predicted PD. The feature `loan_amnt` has a negative SHAP value, meaning it decreases the predicted PD. The aggregate SHAP value for the applicant is 29%, which means that the applicant's predicted PD is 23.4% + 29% = 52.4%.
+
+```{python}
+#| label: tbl-local-shap-values
+
+df_local_shap = pd.DataFrame({
+    'feature': AutoGluon_TTD_model.feature_names_,
+    'shap_value': shap_values[0].values
+})
+df_local_shap['abs_shap_value'] = df_local_shap['shap_value'].abs()
+df_local_shap.sort_values('abs_shap_value', ascending=False, inplace=True)
+
+display(df_local_shap)
+
+```
+
+When we generate a ranked list of features that affected the predicted PD, we should use the **absolute value** of the SHAP values. The absolute value of the SHAP value indicates the magnitude of the impact, regardless of whether it is positive or negative.
+
+The feature that contributes the most to the predicted PD is `credit_score`, followed by `dti` and `loan_amnt`. The feature `emp_length` has the least impact on the predicted PD.
+
+::: callout-warning
+**Important Point: Understanding a Single SHAP Value**
+
+Think of the SHAP values shown in the waterfall plot for one applicant:
+
+-   **What they explain:** Each SHAP value shows how a specific feature *value* for *that particular applicant* pushed their prediction away from the average prediction (the baseline `E[f(X)]`). For instance, the positive SHAP value for `credit_score` means *this applicant's specific credit score* increased their predicted Probability of Default (PD) compared to the average.
+
+-   **What they DON'T explain:**
+
+    -   A single SHAP value for one applicant doesn't tell you the *overall trend* or *marginal effect* of that feature. It doesn't answer the question: "In general, if someone increases their `credit_score`, will their predicted PD decrease?" We should use dependence plots to answer this question.
+
+    -   Nor does the SHAP value answer the question for the rejected applicant: "If the `credit_score` was 20 points higher, would the predicted PD be lower for the applicant?" We should use counterfactuals to answer this question.
+
+:::
 
 # Local Adverse Action Codes
 
-The code below generates adverse action codes for the selected applicants based on the SHAP values. It uses the same logic as before, but now it uses the SHAP values to determine which features are most important for each applicant.
+The code below generates adverse action codes for the 1 rejected applicant based on the SHAP values. It uses the same logic as before, but now it uses the SHAP values to determine which features are most important for our specific applicant.
 
 ```{python}
+#| label: local-adverse-action-codes
 
+
+shap_local_important_features = df_local_shap['feature'].tolist()
+
+shap_action_codes = generate_adverse_action_codes(
+    sample_reject, 
+    df_counterfactuals, 
+    feature_to_action_code, 
+    shap_local_important_features
+)
+
+print("SHAP Adverse Action Codes:")
+for code in shap_action_codes:
+    print(f"- {code}")
 ```
+
+# Concluding Remarks for Adverse Action Codes
+
+Subsequent sections of the lab will show other uses of SHAP values and a potpourri of data science topics. Before we address those topics, let's quickly summarize adverse action codes and the process used to generate them.
+
+1.  Each rejected applicant must be given a list of reasons for rejection. This is a legal requirement in the US.
+
+2.  The list of reasons should be ordered from most impactful to least impactful. This is also a legal requirement in the US.
+
+3.  To generate the list of adverse action codes, we needed to find an example of an **approved applicant** that was very similar to the rejected applicant. This was accomplished using **counterfactual explanations**.
+
+4.  The order of the adverse action codes was based on the **permutation feature importance** (PFI) scores, representing a global ranking of feature impacts in the model.
+
+5.  Alternatively, we could have used **SHAP values** to generate a local ranking of feature impacts, providing a more accurate ranking for the specific applicant.
 
 # Other Uses of SHAP Values
 
 ## Global Interpretability (Summary Plots)
 
-Aggregate SHAP values across a larger sample (e.g., the test set or a sample of training data) to understand overall feature importance and effects.
+Aggregate SHAP values across a larger sample (e.g., the test set) to understand overall feature importance and effects.
+
+Bar Plot: Ranks features by their average impact (mean absolute SHAP value) across the sample. Higher bars mean more influence overall.
 
 ```{python}
-#| label: plot-global-shap
-#| code-summary: "Calculate and visualize global feature importance using SHAP."
+#| label: fig-global-bar-chart
 
-if 'shap_setup_ok' in locals() and shap_setup_ok and explainer is not None and \
-   'df_test_results' in locals() and df_test_results is not None:
-    
-    print("Calculating SHAP values for global analysis (using test set sample)...")
-    
-    # Use a sample of the test set for global analysis (e.g., 500 points)
-    num_global_samples = min(500, len(df_test_results))
-    global_sample_df = df_test_results.sample(num_global_samples, random_state=2025)
-    X_global_sample = global_sample_df[modeling_features] # Use modeling_features
-    
-    try:
-        # Calculate SHAP values for the global sample
-        shap_values_global = explainer.shap_values(X_global_sample.to_numpy())
-        
-        # Ensure correct shape if multi-class output
-        if isinstance(shap_values_global, list) and len(shap_values_global) == 2:
-             shap_values_global = shap_values_global[1]
+test_set_sample = df_ttd_test[AutoGluon_TTD_model.feature_names_].sample(1000, random_state=2025)
 
-        print("Global SHAP values calculated. Generating summary plots...")
+shap_values_global = shap_explainer(test_set_sample)
 
-        # Create Explanation object for global plots
-        exp_global = shap.Explanation(
-            values=shap_values_global, 
-            base_values=explainer.expected_value, 
-            data=X_global_sample.to_numpy(), 
-            feature_names=modeling_features # Use modeling_features
-        )
-
-        # --- Bar Plot (Mean Absolute SHAP) ---
-        print("\n--- Global Feature Importance (Mean |SHAP value|) ---")
-        plt.figure() # Create a new figure context for the bar plot
-        shap.summary_plot(shap_values_global, X_global_sample, plot_type="bar", show=True)
-        # plt.show() # Explicit show might be needed depending on environment
-
-        # --- Summary Plot (Beeswarm) ---
-        print("\n--- SHAP Summary Plot (Beeswarm) ---")
-        plt.figure() # Create a new figure context for the beeswarm plot
-        shap.summary_plot(shap_values_global, X_global_sample, plot_type="dot", show=True) # 'dot' is beeswarm
-        # plt.show() # Explicit show
-
-    except Exception as e:
-        print(f"Error calculating or plotting global SHAP values: {e}")
-        import traceback
-        traceback.print_exc()
-
-else:
-    print("Skipping global SHAP analysis: Setup failed or test data sample unavailable.")
-
+shap.plots.bar(shap_values_global, max_display=10, show=True)
 ```
 
-**Interpretation:**
-*   **Bar Plot:** Ranks features by their average impact (mean absolute SHAP value) across the sample. Higher bars mean more influence overall.
-*   **Summary (Beeswarm) Plot:** Shows each feature's SHAP value distribution. Each point is one instance. Color indicates the feature's value (high/low). This reveals not just importance but also the *direction* of the effect (e.g., high `credit_score` (red points) have negative SHAP values, decreasing default probability).
+Show the bar plot as a data frame.
 
-## SHAP Dependence Plots (Optional)
+```{python}
+#| label: tbl-global-bar-chart
+
+# Calculate mean absolute SHAP values
+mean_abs_shap = np.abs(shap_values_global.values).mean(axis=0)
+
+# Create DataFrame
+df_shap_summary = pd.DataFrame({
+    'feature': test_set_sample.columns,
+    'mean_abs_shap_value': mean_abs_shap
+})
+
+# Sort by mean absolute SHAP value (descending)
+df_shap_summary = df_shap_summary.sort_values('mean_abs_shap_value', ascending=False).reset_index(drop=True)
+
+# Display the DataFrame
+display(df_shap_summary)
+```
+
+Summary (Beeswarm) Plot: Shows each feature's SHAP value distribution. Each point is one instance. Color indicates the feature's value (high/low). This reveals not just importance but also the direction of the effect (e.g., high credit_score (red points) have negative SHAP values, decreasing default probability).
+
+```{python}
+#| label: fig-global-beeswarm
+
+shap.plots.beeswarm(shap_values_global, max_display=10, show=True)
+```
+
+## SHAP Dependence Plots
 
 Explore how a feature's impact (SHAP value) changes with its value, potentially colored by an interacting feature.
 
+These plots show the relationship between a feature's value (x-axis) and its SHAP value (y-axis). The vertical spread, often colored by an interacting feature, highlights how the feature's impact might depend on other factors.
+
+The SHAP dependence plot is an alternative to PDP, ICE, and ALE plots. It provides a more detailed view of how a feature's value affects the model's prediction, especially when interactions with other features are present.
+
 ```{python}
-#| label: plot-shap-dependence
+#| label: fig-shap-dependence
 #| code-summary: "Generate SHAP dependence plots for key features."
 
-if 'shap_setup_ok' in locals() and shap_setup_ok and 'shap_values_global' in locals() and \
-   shap_values_global is not None and 'X_global_sample' in locals() and X_global_sample is not None:
-    
-    print("Generating SHAP dependence plots...")
-    features_for_dependence = ['dti', 'credit_score', 'loan_amnt'] # Choose key features
-    
-    for feature in features_for_dependence:
-        if feature in X_global_sample.columns:
-            print(f"\n--- SHAP Dependence Plot for: {feature} ---")
-            try:
-                plt.figure() # Ensure new plot context
-                shap.dependence_plot(
-                    feature, 
-                    shap_values_global, 
-                    X_global_sample, 
-                    interaction_index="auto", # Automatically find interacting feature
-                    show=True
-                )
-                # plt.show() # Explicit show
-            except Exception as e:
-                print(f"Error generating dependence plot for {feature}: {e}")
-        else:
-            print(f"Skipping dependence plot for {feature}: Not in sample data.")
+features_for_dependence = AutoGluon_TTD_model.feature_names_
 
-else:
-    print("Skipping SHAP dependence plots: Prerequisite SHAP values or data not available.")
-
+for feature in features_for_dependence:
+    if feature in test_set_sample.columns: # Use the defined sample DataFrame
+        plt.figure()
+        shap.plots.scatter(shap_values_global[:, feature], color=shap_values_global, alpha=0.4, show=True)
 ```
-
-**Interpretation:** These plots show the relationship between a feature's value (x-axis) and its SHAP value (y-axis). The vertical spread, often colored by an interacting feature, highlights how the feature's impact might depend on other factors.
