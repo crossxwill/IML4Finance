@@ -1,4 +1,4 @@
-name: C:\Users\chiuw\miniforge3\envs\env_AutoGluon_202502
+name: env_AutoGluon_202502
 channels:
   - conda-forge
 dependencies:
@@ -540,4 +540,4 @@ dependencies:
   - pip:
       - mljar-scikit-plot==0.3.12
       - polars==1.22.0
-prefix: C:\Users\chiuw\miniforge3\envs\env_AutoGluon_202502
+prefix: env_AutoGluon_202502
