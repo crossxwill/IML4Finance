@@ -1544,6 +1544,8 @@ logreg_cv = LogisticRegressionCV(
 ri_model = Pipeline(steps=[('preprocessor', preprocessor_ri),
                 ('classifier', logreg_cv)]) # Use LogisticRegressionCV
 
+global_set_seed(random_seed) # Set global seed
+
 print("Training Reject Inference Logistic Regression model...")
 start_time = time.time()
 ri_model.fit(X_acc_ri, y_acc_ri)
@@ -1691,6 +1693,8 @@ fit_args = {
     }
 }
 
+global_set_seed(random_seed) # Set global seed
+
 # Train model using the helper function
 ag_model_initial_wrapped = train_autogluon_model(
     df_train=df_ttd_train,
@@ -1792,6 +1796,8 @@ fit_args_constrained = {
         'time_limit': 300
     }
 }
+
+global_set_seed(random_seed) # Set global seed
 
 # Train constrained model using the helper function
 ag_model_constrained_wrapped = train_autogluon_model(

@@ -26,8 +26,6 @@ We will use counterfactual explanations to provide actionable feedback to applic
 
 We will use SHAP for both local (individual applicant) and global (overall feature importance) model explanations. SHAP values are versatile, offering alternatives to methods like permutation feature importance, partial dependence plots, ICE plots, and ALE plots.
 
-Furthermore, this lab addresses severe class imbalance, a common challenge in fields like fraud detection. While methods like resampling (undersampling, oversampling, SMOTE) exist, they can introduce issues such as poor probability calibration and overfitting. We will instead use AutoGluon, using class weights (cost-sensitive learning) to build a model that handles imbalance directly during training, mitigating these potential problems.
-
 ```{python}
 #| label: setup-imports
 #| message: false
@@ -384,6 +382,8 @@ First, we need to score the training and test sets to identify the applicants th
 
 Also keep in mind that `model_rejection = 1` means the applicant was rejected by the model, while `model_rejection = 0` means the applicant was accepted.
 
+Crucially, `model_rejection` represents the model's lending decision, which may not match the actual `default_flag`.
+
 ```{python}
 #| label: score-data
 
@@ -400,6 +400,7 @@ df_ttd_test['model_rejection'] = AutoGluon_TTD_model.predict(
 
 ```{python}
 #| label: tbl-training-decisions
+#| tbl-cap: "Training set decisions"
 
 keep_cols = AutoGluon_TTD_model.feature_names_ + ['model_rejection']
 
@@ -408,6 +409,7 @@ display(df_ttd_train[keep_cols].sample(20, random_state=2024).head(10))
 
 ```{python}
 #| label: tbl-test-decisions
+#| tbl-cap: "Test set decisions"
 
 display(df_ttd_test[keep_cols].sample(20, random_state=2024).head(10))
 
@@ -417,8 +419,9 @@ Second, we randomly select 1 rejected applicant from the test set to explain. Th
 
 ```{python}
 #| label: tbl-sample-applicant
+#| tbl-cap: "Sample rejected applicant"
 
-sample_reject = df_ttd_test[keep_cols][df_ttd_test.model_rejection == 1].sample(1, random_state=2022)
+sample_reject = df_ttd_test[keep_cols][df_ttd_test.model_rejection == 1].sample(1, random_state=2020)
 
 display(sample_reject)
 ```
@@ -454,6 +457,10 @@ dice_explainer = dice_ml.Dice(
 
 ```
 
+A k-d tree (k-dimensional tree) is a data structure used for organizing points in a k-dimensional space. It recursively partitions the space along different dimensions, allowing for efficient nearest neighbor searches. This structure helps quickly find data points that are close to a given query point in multiple dimensions.
+
+DiCE uses the k-d tree method to efficiently search the feature space for counterfactual examples. It builds a k-d tree using the training data points. When generating counterfactuals for a specific instance (like the rejected applicant), DiCE searches the k-d tree to find the nearest data points that result in the desired outcome (e.g., loan approval) while minimizing changes to the original features.
+
 ## Counterfactual Explanations
 
 ```{python}
@@ -478,6 +485,8 @@ dice_exp = dice_explainer.generate_counterfactuals(
 df_counterfactuals = dice_exp.cf_examples_list[0].final_cfs_df
 
 ```
+
+The `user_permitted_range` dictionary prevents counterfactuals that are unintuitive or impossible. It prevents counterfactuals with a `loan_amnt` greater than the application amount, a `dti` greater than the applicant value, a `credit_score` less than the applicant value, and an `emp_length` less than the applicant value.
 
 ```{python}
 #| label: tbl-rejected-applicant
@@ -599,7 +608,7 @@ for code in improved_action_codes:
 
 Permutation feature importance provides a global ranking of feature impacts in the model. By ordering the adverse action codes according to this ranking, we ensure that the most important features are highlighted first. This is crucial for effective communication with applicants, as it emphasizes the most significant factors influencing their application outcome.
 
-However, global ranking of feature impacts are not always equal to the local ranking of feature impacts. For example, the most important feature for the model may not be the most important feature for a specific applicant. This is a limitation of the PFI approach. SHAP values can be used to generate local rankings of feature impacts.
+However, global ranking of feature impacts is not always equal to the local ranking of feature impacts. For example, the most important feature for the model may not be the most important feature for a specific applicant. This is a limitation of the PFI approach. SHAP values can be used to generate local rankings of feature impacts.
 
 # SHAP Values
 
@@ -609,19 +618,23 @@ The difference between the predicted probability of default ($\widehat{PD_i}$) f
 
 Suppose a credit scorecard model had 4 features. Then, for applicant $i$, there would be 4 SHAP values, one for each feature. The SHAP values can be interpreted as the contribution of each feature to the difference between the predicted PD and the average PD.
 
-$\widehat{PD_i} - \overline{PD} = S(i,DTI) + S(i,CreditScore) + S(i,EmpLength) + S(i,LoanAmnt)$
+$\widehat{PD_i} - \overline{PD} = \phi_{i,DTI} + \phi_{i,CreditScore} + \phi_{i,EmpLength} + \phi_{i,LoanAmnt}$
 
 For a given data set (e.g., training set), $\overline{PD}$ is constant. Therefore, the SHAP values can be interpreted as the contribution of each feature to the predicted PD.
 
-$\widehat{PD_i} = \overline{PD} + S(i,DTI) + S(i,CreditScore) + S(i,EmpLength) + S(i,LoanAmnt)$
+$\widehat{PD_i} = \overline{PD} + \phi_{i,DTI} + \phi_{i,CreditScore} + \phi_{i,EmpLength} + \phi_{i,LoanAmnt}$
 
-SHAP values could be negative or positive. A negative SHAP value means that the feature decreases the predicted PD, while a positive SHAP value means that the feature increases the predicted PD.
+SHAP values can be negative or positive. A negative SHAP value means that the feature decreases the predicted PD, while a positive SHAP value means that the feature increases the predicted PD.
 
 ## Setup SHAP Explainer
 
 Initialize the SHAP explainer using the constrained model and a background dataset (usually a sample of the training data) to represent the baseline prediction.
 
 Notice that the background dataset does not contain the true label. The SHAP explainer uses the background dataset to calculate the expected value of the model's predictions. This is important because the SHAP values are calculated as the difference between the predicted value and the expected value.
+
+We pass a custom `predict_proba` function (with `[:, 1]`) to the explainer that returns the model's predicted probability of the positive class (default=1), as we want to explain this specific outcome.
+
+The background data provides a reference distribution to calculate the baseline prediction ($E[f(X)]$) and baseline values for each feature. A sample is often used for computational efficiency.
 
 ```{python}
 #| label: setup-shap
@@ -637,7 +650,8 @@ shap_explainer = shap.Explainer(lambda x: AutoGluon_TTD_model.predict_proba(x)[:
 Calculate SHAP values for the 1 rejected applicant and plot the SHAP values using a waterfall plot. The waterfall plot shows the contribution of each feature to the predicted PD for that specific applicant.
 
 ```{python}
-#| label: calculate-local-shap
+#| label: fig-calculate-local-shap
+#| fig-cap: "SHAP Waterfall Plot for Rejected Applicant"
 
 # Generate SHAP values for the rejected applicant
 shap_values = shap_explainer(sample_reject[AutoGluon_TTD_model.feature_names_])
@@ -646,10 +660,12 @@ shap_values = shap_explainer(sample_reject[AutoGluon_TTD_model.feature_names_])
 shap.plots.waterfall(shap_values[0])
 ```
 
-**Interpretation:** The baseline PD is 23.4%. The features `credit_score`, `dti`, and `emp_length` have positive SHAP values, meaning they increase the predicted PD. The feature `loan_amnt` has a negative SHAP value, meaning it decreases the predicted PD. The aggregate SHAP value for the applicant is 29%, which means that the applicant's predicted PD is 23.4% + 29% = 52.4%.
+**Interpretation:** The baseline PD is `{python} round(float(shap_values.base_values[0]),3)`. The sum of the SHAP values (feature contributions) for this applicant is approximately `{python} round(np.sum(shap_values.values),3)`. Adding this to the baseline prediction gives the final prediction `{python} round(float(shap_values.base_values[0]),3)` + `{python} round(np.sum(shap_values.values),3)` = `{python} round(float(shap_values.base_values[0]) + np.sum(shap_values.values),3)`. 
 
 ```{python}
 #| label: tbl-local-shap-values
+#| tbl-cap: "Sorted SHAP values for rejected applicant"
+
 
 df_local_shap = pd.DataFrame({
     'feature': AutoGluon_TTD_model.feature_names_,
@@ -727,6 +743,7 @@ Bar Plot: Ranks features by their average impact (mean absolute SHAP value) acro
 
 ```{python}
 #| label: fig-global-bar-chart
+#| fig-cap: "SHAP Feature Importance Bar Plot"
 
 test_set_sample = df_ttd_test[AutoGluon_TTD_model.feature_names_].sample(1000, random_state=2025)
 
@@ -739,6 +756,8 @@ Show the bar plot as a data frame.
 
 ```{python}
 #| label: tbl-global-bar-chart
+#| tbl-cap: "Average Absolute SHAP values"
+
 
 # Calculate mean absolute SHAP values
 mean_abs_shap = np.abs(shap_values_global.values).mean(axis=0)
@@ -756,10 +775,11 @@ df_shap_summary = df_shap_summary.sort_values('mean_abs_shap_value', ascending=F
 display(df_shap_summary)
 ```
 
-Summary (Beeswarm) Plot: Shows each feature's SHAP value distribution. Each point is one instance. Color indicates the feature's value (high/low). This reveals not just importance but also the direction of the effect (e.g., high credit_score (red points) have negative SHAP values, decreasing default probability).
+Beeswarm Plot: Shows each feature's SHAP value distribution. Each point is one instance. Color indicates the feature's value (high/low). This reveals not just importance but also the direction of the effect (e.g., high credit_score (red points) have negative SHAP values, decreasing default probability).
 
 ```{python}
 #| label: fig-global-beeswarm
+#| fig-cap: "SHAP Summary Plot"
 
 shap.plots.beeswarm(shap_values_global, max_display=10, show=True)
 ```
@@ -774,12 +794,16 @@ The SHAP dependence plot is an alternative to PDP, ICE, and ALE plots. It provid
 
 ```{python}
 #| label: fig-shap-dependence
-#| code-summary: "Generate SHAP dependence plots for key features."
+#| fig-cap: "SHAP Dependence Plot"
 
 features_for_dependence = AutoGluon_TTD_model.feature_names_
 
 for feature in features_for_dependence:
     if feature in test_set_sample.columns: # Use the defined sample DataFrame
-        plt.figure()
-        shap.plots.scatter(shap_values_global[:, feature], color=shap_values_global, alpha=0.4, show=True)
+        # Generate the plot but don't show it immediately
+        shap.plots.scatter(shap_values_global[:, feature], color=shap_values_global, alpha=0.4, show=False)
+        # Display the current figure explicitly
+        plt.show()
+        # Close the figure to prevent the message
+        plt.close()
 ```
