@@ -51,7 +51,7 @@ Students are highly encouraged to purchase the following two books for the cours
 4.  Create the conda environment from the `conda_env_requirements.yml` file:
 
 ``` bash
-conda env create -f conda_env_requirements.yml
+conda env create -f conda_env_requirements.yml -n env_AutoGluon_202502
 ```
 
 5.  Activate the conda environment:
