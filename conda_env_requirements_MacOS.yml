@@ -59,6 +59,7 @@ dependencies:
   - bleach=6.2.0=pyh29332c3_4
   - bleach-with-css=6.2.0=h82add2a_4
   - blosc=1.21.6=h7dd00d9_1
+  - bokeh=3.7.2=pyhd8ed1ab_1
   - boto3=1.36.16=pyhd8ed1ab_0
   - botocore=1.36.16=pyge310_1234567_0
   - brotli=1.1.0=hd74edd7_2
@@ -75,7 +76,7 @@ dependencies:
   - cairo=1.18.2=h6a3b0d2_1
   - catalogue=2.0.10=py310hbe9552e_1
   - catboost=1.2.7=cpu_py310h2ea44fb_1
-  - certifi=2025.1.31=pyhd8ed1ab_0
+  - certifi=2025.4.26=pyhd8ed1ab_0
   - cffi=1.17.1=py310h497396d_0
   - chardet=5.2.0=pyhd8ed1ab_3
   - charls=2.4.2=h13dd4ca_0
@@ -96,8 +97,11 @@ dependencies:
   - cycler=0.12.1=pyhd8ed1ab_1
   - cymem=2.0.11=py310h853098b_0
   - cython-blis=1.0.1=py310h003b70b_0
+  - cytoolz=1.0.1=py310h078409c_0
   - dacite=1.9.2=pyhd8ed1ab_0
   - dart-sass=1.58.3=hce30654_1
+  - dask=2025.4.1=pyhd8ed1ab_0
+  - dask-core=2025.4.1=pyhd8ed1ab_0
   - dataclasses=0.8=pyhc8e2a94_3
   - datasets=2.2.1=pyhd8ed1ab_0
   - dav1d=1.2.1=hb547adb_0
@@ -109,6 +113,7 @@ dependencies:
   - dice-ml=0.9=pyhd8ed1ab_0
   - dill=0.3.9=pyhd8ed1ab_1
   - distlib=0.3.9=pyhd8ed1ab_1
+  - distributed=2025.4.1=pyhd8ed1ab_0
   - dnspython=2.7.0=pyhff2d567_1
   - duckdb=1.1.3=hd8ed1ab_0
   - eli5=0.13.0=pyhd8ed1ab_0
@@ -187,6 +192,7 @@ dependencies:
   - imagecodecs=2024.12.30=py310h2498272_0
   - imagehash=4.3.1=pyhd8ed1ab_1
   - imageio=2.37.0=pyhfb79c49_0
+  - imbalanced-learn=0.13.0=pyhd8ed1ab_0
   - importlib-metadata=8.6.1=pyha770c72_0
   - importlib_resources=6.5.2=pyhd8ed1ab_0
   - ipykernel=6.29.5=pyh57ce528_0
@@ -249,6 +255,8 @@ dependencies:
   - libev=4.33=h93a5062_2
   - libevent=2.1.12=h2757513_1
   - libexpat=2.6.4=h286801f_0
+  - libfabric=2.1.0=hce30654_1
+  - libfabric1=2.1.0=h5505292_1
   - libffi=3.4.2=h3422bc3_5
   - libgd=2.3.3=hb2c3a21_11
   - libgettextpo=0.22.5=h8414b35_3
@@ -314,6 +322,8 @@ dependencies:
   - linkify-it-py=2.0.3=pyhd8ed1ab_1
   - llvm-openmp=20.1.2=hdb05f8b_0
   - llvmlite=0.44.0=py310hed9eb73_1
+  - locket=1.0.0=pyhd8ed1ab_0
+  - lz4=4.4.4=py310hedecf87_0
   - lz4-c=1.10.0=h286801f_1
   - mako=1.3.9=pyhd8ed1ab_0
   - markdown=3.6=pyhd8ed1ab_0
@@ -328,8 +338,16 @@ dependencies:
   - mizani=0.13.1=pyhd8ed1ab_0
   - mlforecast=0.13.4=pyhd8ed1ab_0
   - model-index=0.1.11=pyhd8ed1ab_1
+  - modin-all=0.32.0=h534df25_2
+  - modin-core=0.32.0=pyhd8ed1ab_2
+  - modin-dask=0.32.0=hd8ed1ab_2
+  - modin-mpi=0.32.0=hd8ed1ab_2
+  - modin-ray=0.32.0=hd8ed1ab_2
   - mpc=1.3.1=h8f1351a_1
   - mpfr=4.2.1=hb693164_3
+  - mpi=1.0.1=mpich
+  - mpi4py=4.0.3=py310h8a9557c_0
+  - mpich=4.3.0=h9d9a6ae_100
   - mpmath=1.3.0=pyhd8ed1ab_1
   - msgpack-python=1.1.0=py310h7306fd8_0
   - multidict=6.1.0=py310hdf261b0_1
@@ -374,6 +392,7 @@ dependencies:
   - pandocfilters=1.5.0=pyhd8ed1ab_0
   - pango=1.56.1=h73f1e88_0
   - parso=0.8.4=pyhd8ed1ab_1
+  - partd=1.4.2=pyhd8ed1ab_0
   - patsy=1.0.1=pyhd8ed1ab_1
   - pcre2=10.44=h297a79d_2
   - pdf2image=1.17.0=pyhd8ed1ab_1
@@ -483,12 +502,14 @@ dependencies:
   - shellingham=1.5.4=pyhd8ed1ab_1
   - singledispatch=3.6.1=pyh44b312d_0
   - six=1.17.0=pyhd8ed1ab_0
+  - sklearn-compat=0.1.3=pyhd8ed1ab_0
   - sleef=3.8=h8391f65_0
   - slicer=0.0.8=pyhd8ed1ab_0
   - smart-open=7.1.0=hd8ed1ab_0
   - smart_open=7.1.0=pyhd8ed1ab_0
   - snappy=1.2.1=h98b9ce2_1
   - sniffio=1.3.1=pyhd8ed1ab_1
+  - sortedcontainers=2.4.0=pyhd8ed1ab_1
   - soupsieve=2.5=pyhd8ed1ab_1
   - spacy=3.8.2=py310hf1156d2_0
   - spacy-legacy=3.0.12=pyhd8ed1ab_0
@@ -503,6 +524,7 @@ dependencies:
   - sympy=1.13.3=pyh2585a3b_105
   - tabulate=0.9.0=pyhd8ed1ab_2
   - tbb=2021.13.0=h8149167_1
+  - tblib=3.1.0=pyhd8ed1ab_0
   - tensorboard=2.18.0=pyhd8ed1ab_1
   - tensorboard-data-server=0.7.0=py310hddb97a1_2
   - tensorboardx=2.6.2.2=pyhd8ed1ab_1
@@ -539,6 +561,8 @@ dependencies:
   - ujson=5.10.0=py310hb4ad77e_1
   - umap-learn=0.5.7=py310hbe9552e_1
   - unicodedata2=16.0.0=py310h078409c_0
+  - unidist=0.7.2=py310h6000651_0
+  - unidist-mpi=0.7.2=py310hb6292c7_0
   - uri-template=1.3.0=pyhd8ed1ab_1
   - urllib3=2.3.0=pyhd8ed1ab_0
   - utilsforecast=0.2.3=pyhd8ed1ab_0
@@ -574,12 +598,14 @@ dependencies:
   - xorg-libxpm=3.5.17=hd74edd7_1
   - xorg-libxt=1.3.1=h5505292_0
   - xxhash=0.8.2=hb547adb_0
+  - xyzservices=2025.4.0=pyhd8ed1ab_0
   - yaml=0.2.5=h3422bc3_2
   - yarl=1.9.4=py310h493c2e1_1
   - ydata-profiling=4.12.2=pyhd8ed1ab_0
   - yellowbrick=1.5=pyhd8ed1ab_1
   - zeromq=4.3.5=hc1bb282_7
   - zfp=1.0.1=h1c5d8ea_2
+  - zict=3.0.0=pyhd8ed1ab_1
   - zipp=3.21.0=pyhd8ed1ab_1
   - zlib=1.3.1=h8359307_2
   - zlib-ng=2.2.3=h13dfb9a_0
@@ -588,4 +614,4 @@ dependencies:
   - pip:
       - mljar-scikit-plot==0.3.12
       - polars==1.22.0
-prefix: env_AutoGluon_202502
+prefix: /Users/williamchiu/miniforge3/envs/env_AutoGluon_202502
