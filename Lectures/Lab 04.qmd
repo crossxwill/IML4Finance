@@ -1,0 +1,1858 @@
+---
+title: "Lab 04: Fraud Detection and Imbalanced Learning"
+format: 
+    html:
+        toc: true
+        code-fold: true
+        code-tools: true
+        code-line-numbers: true
+        page-layout: full
+number-sections: true
+number-figures: true
+number-tables: true
+execute:
+    warning: false
+    message: false
+---
+
+# Preamble / Setup
+
+This lab explores techniques for handling imbalanced datasets, a common challenge in fraud detection. We will compare different data handling tools, perform feature engineering, and evaluate various modeling strategies.
+
+## Import Python Libraries and Helper Functions
+
+The first chunk includes all necessary Python libraries and helper functions/classes that will be used throughout this lab. These helpers are adapted from previous labs.
+
+```{python}
+#| label: setup-imports-helpers
+
+# System utilities
+import os
+import shutil
+import random
+import warnings
+import time
+import gc
+import psutil
+import glob # For finding files
+
+# Data manipulation and visualization
+import pandas as pd
+import numpy as np
+import polars as pl
+import matplotlib.pyplot as plt
+import seaborn as sns
+from IPython.display import display # Explicit import for display
+from scipy import stats, special
+from sklearn.feature_selection import mutual_info_classif
+import re
+import duckdb
+
+# Machine learning - scikit-learn
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.metrics import roc_auc_score, average_precision_score, f1_score, confusion_matrix, classification_report, make_scorer
+from sklearn.preprocessing import LabelEncoder, StandardScaler, OneHotEncoder, FunctionTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.inspection import PartialDependenceDisplay
+from sklearn.calibration import CalibratedClassifierCV, CalibrationDisplay # Added for probability calibration
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
+from sklearn.utils.validation import check_is_fitted, check_X_y, check_array # check_array might be needed for custom transformers
+from sklearn import set_config
+
+# Imbalanced-learn for resampling
+from imblearn.pipeline import Pipeline as ImbPipeline
+from imblearn.under_sampling import RandomUnderSampler
+from imblearn.over_sampling import RandomOverSampler, SMOTE
+from imblearn.combine import SMOTEENN, SMOTETomek
+
+
+# Specialized ML libraries
+from autogluon.tabular import TabularPredictor, TabularDataset
+from autogluon.common.features.feature_metadata import FeatureMetadata # For monotonic constraints
+import shap
+from ydata_profiling import ProfileReport
+
+# Counterfactual Explanations (optional, install if needed: pip install dice-ml)
+try:
+    import dice_ml
+    from dice_ml.utils import helpers # Helper functions for DICE
+except ImportError:
+    print("""
+    
+    dice-ml not found. You need to update your conda env by running:
+    
+    conda activate env_AutoGluon_202502 # Or your specific environment name
+    conda install -c conda-forge dice-ml
+    
+    """)
+    dice_ml = None
+    
+import torch
+
+# Settings
+pd.set_option('display.max_columns', 50)
+pd.set_option('display.max_rows', 100)
+warnings.filterwarnings('ignore', category=FutureWarning) # Suppress specific FutureWarnings
+warnings.filterwarnings('ignore', category=UserWarning) # Suppress some UserWarnings from libraries
+set_config(transform_output="pandas") # Set sklearn output to pandas
+
+# Helper Functions and Classes
+
+def global_set_seed(seed_value=2025):
+    """Sets random seeds for reproducibility."""
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+    if dice_ml: # If dice_ml is imported, try to set its seed
+        try:
+            dice_ml.utils.helpers.set_random_seed(seed_value)
+        except AttributeError: # In case the function path changes
+            pass
+
+
+def remove_ag_folder(mdl_folder: str) -> None:
+    """Removes the AutoGluon model folder if it exists."""
+    if os.path.exists(mdl_folder):
+        shutil.rmtree(mdl_folder)
+        print(f"Removed existing AutoGluon folder: {mdl_folder}")
+
+class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
+    """
+    Scikit-learn compatible wrapper for AutoGluon TabularPredictor
+    
+    Inherits from scikit-learn's BaseEstimator and ClassifierMixin to provide
+    full compatibility with scikit-learn tools like PartialDependenceDisplay().
+    
+    Parameters
+    ----------
+    label : str
+        Name of the target column
+
+    **predictor_args : dict
+        Additional arguments passed to TabularPredictor()
+        (e.g., problem_type, eval_metric, path, sample_weight)
+
+    **fit_args : dict
+        Additional arguments passed to TabularPredictor.fit() method
+        (e.g., holdout_frac, presets, time_limit, excluded_model_types, hyperparameters)
+
+
+    Attributes
+    ----------
+    predictor : TabularPredictor
+        The trained AutoGluon predictor
+
+    classes_ : ndarray
+        Class labels (for classification tasks)
+
+    n_features_in_ : int
+        Number of features seen during fit
+
+    feature_names_ : list
+        Feature names inferred during fitting
+
+    is_fitted_ : bool
+        Whether the estimator has been fitted
+    """
+    
+    def __init__(self, label, predictor_args=None, fit_args=None):
+        self.label = label
+        self.predictor_args = predictor_args if predictor_args else {}
+        self.fit_args = fit_args if fit_args else {}
+        self.predictor = None
+        self.classes_ = None
+        self.n_features_in_ = None
+        self.feature_names_ = None
+        self.is_fitted_ = False
+
+    def __sklearn_is_fitted__(self):
+        """Official scikit-learn API for checking fitted status"""
+        return self.is_fitted_
+
+    def fit(self, X, y, sample_weight=None):
+        """
+        Fit AutoGluon model using scikit-learn interface.
+        If sample_weight is provided directly to fit, it's used if 'sample_weight' 
+        is also specified in predictor_args.
+        """
+        self._check_feature_names(X, reset=True)
+        self._check_n_features(X, reset=True)
+
+        train_data_df = pd.DataFrame(X, columns=self.feature_names_)
+        train_data_df[self.label] = y
+
+        ag_weight_col_name = self.predictor_args.get('sample_weight', None)
+
+        if sample_weight is not None:
+            if ag_weight_col_name:
+                train_data_df[ag_weight_col_name] = sample_weight
+            else:
+                default_sw_col = 'autogluon_sample_weight_fit'
+                train_data_df[default_sw_col] = sample_weight
+                self.predictor_args['sample_weight'] = default_sw_col
+                print(f"Warning: sample_weight passed to fit() but 'sample_weight' not in predictor_args. "
+                      f"Using '{default_sw_col}' as weight column for AutoGluon.")
+        elif ag_weight_col_name and ag_weight_col_name not in train_data_df.columns and ag_weight_col_name != "balance_weight":
+            # If predictor_args has a specific column name for weights, and it's not in X, and not 'balance_weight'
+             raise ValueError(f"sample_weight column '{ag_weight_col_name}' specified in predictor_args but not found in X.")
+
+        train_data = TabularDataset(train_data_df)
+        
+        current_fit_args = self.fit_args.copy()
+        # AutoGluon's .fit() doesn't take sample_weight as a direct argument.
+        # It's handled if 'sample_weight' (column name or 'balance_weight') is in predictor_args (passed to TabularPredictor constructor)
+        # or if a column with that name exists in the training data.
+        if 'sample_weight' in current_fit_args:
+            del current_fit_args['sample_weight'] 
+
+        self.predictor = TabularPredictor(
+            label=self.label, 
+            **self.predictor_args
+        ).fit(train_data, **current_fit_args)
+        
+        if self.predictor.problem_type in ['binary', 'multiclass']:
+            self.classes_ = np.array(self.predictor.class_labels)
+            
+        self.is_fitted_ = True
+        return self
+
+    def predict(self, X):
+        check_is_fitted(self)
+        # Convert X to pandas DataFrame if it's Polars, as AG expects pandas for predict
+        if isinstance(X, pl.DataFrame):
+            X_pd = X.to_pandas()
+        else:
+            X_pd = X
+        self._check_feature_names(X_pd, reset=False)
+        self._check_n_features(X_pd, reset=False)
+
+        df = pd.DataFrame(X_pd, columns=self.feature_names_)
+        df = TabularDataset(df)
+        return self.predictor.predict(df).values
+
+    def predict_proba(self, X):
+        check_is_fitted(self)
+        if isinstance(X, pl.DataFrame):
+            X_pd = X.to_pandas()
+        else:
+            X_pd = X
+        self._check_feature_names(X_pd, reset=False)
+        self._check_n_features(X_pd, reset=False)
+        
+        df = pd.DataFrame(X_pd, columns=self.feature_names_)
+        df = TabularDataset(df)
+        return self.predictor.predict_proba(df).values
+
+    def get_params(self, deep=True):
+        return {
+            'label': self.label,
+            'predictor_args': self.predictor_args,
+            'fit_args': self.fit_args
+        }
+
+    def set_params(self, **params):
+        for param, value in params.items():
+            if param == 'label':
+                self.label = value
+            elif param == 'predictor_args':
+                self.predictor_args = value
+            elif param == 'fit_args':
+                self.fit_args = value
+            else:
+                if '.' in param:
+                    # Handle nested params like predictor_args.eval_metric
+                    main_key, sub_key = param.split('.', 1)
+                    if main_key == 'predictor_args' and isinstance(self.predictor_args, dict):
+                        self.predictor_args[sub_key] = value
+                    elif main_key == 'fit_args' and isinstance(self.fit_args, dict):
+                        self.fit_args[sub_key] = value
+                    else:
+                        setattr(self, param, value)
+                else:
+                    setattr(self, param, value)
+        return self
+        
+    def _check_n_features(self, X, reset=False):
+        if isinstance(X, pd.DataFrame):
+            n_features = X.shape[1]
+        elif isinstance(X, np.ndarray):
+            n_features = X.shape[1]
+        elif isinstance(X, pl.DataFrame):
+            n_features = X.width 
+        else:
+            raise TypeError(f"Input X type {type(X)} not supported for _check_n_features.")
+            
+        if reset:
+            self.n_features_in_ = n_features
+        elif n_features != self.n_features_in_:
+            raise ValueError(f"Expected {self.n_features_in_} features, got {n_features}")
+
+    def _check_feature_names(self, X, reset=False):
+        current_feature_names = None
+        if isinstance(X, pd.DataFrame):
+            current_feature_names = X.columns.tolist()
+        elif isinstance(X, pl.DataFrame):
+            current_feature_names = X.columns # Polars columns are already a list of strings
+        elif isinstance(X, np.ndarray) and reset: # Only generate for np.ndarray if resetting names
+            current_feature_names = [f'feat_{i}' for i in range(X.shape[1])]
+        elif not reset and isinstance(X, np.ndarray):
+             # If not resetting and X is numpy, assume feature order matches self.feature_names_
+            # No explicit name check possible here other than count (done in _check_n_features)
+            return 
+        else:
+            raise TypeError(f"Input X type {type(X)} not supported for _check_feature_names.")
+
+        if reset:
+            self.feature_names_ = current_feature_names
+        elif current_feature_names != self.feature_names_:
+            # More informative error message for mismatch
+            msg = f"Feature names mismatch. Expected: {self.feature_names_}. Got: {current_feature_names}."
+            # Find differences for clarity
+            expected_set = set(self.feature_names_)
+            got_set = set(current_feature_names)
+            if len(expected_set) != len(self.feature_names_) or len(got_set) != len(current_feature_names):
+                msg += " (Note: Duplicate feature names might be an issue)"
+            if expected_set - got_set:
+                msg += f" Missing expected features: {expected_set - got_set}."
+            if got_set - expected_set:
+                msg += f" Unexpected features provided: {got_set - expected_set}."
+            raise ValueError(msg)
+
+
+def generate_eda_report(df: pd.DataFrame | pl.DataFrame, title: str, output_path: str, sample_frac: float = 0.1, random_state: int = 2025):
+    """Generates and saves a ydata-profiling report for a DataFrame (Pandas or Polars)."""
+    print(f"Generating EDA report: {title}...")
+    
+    df_to_profile = df
+    if isinstance(df, pl.DataFrame):
+        if sample_frac < 1.0 and len(df) > 0: # Ensure dataframe is not empty for sampling
+            df_to_profile = df.sample(fraction=sample_frac, seed=random_state).to_pandas()
+        elif len(df) > 0:
+            df_to_profile = df.to_pandas()
+        else:
+            print(f"Skipping EDA for {title} as DataFrame is empty.")
+            return 
+    elif isinstance(df, pd.DataFrame):
+        if sample_frac < 1.0 and len(df) > 0:
+            df_to_profile = df.sample(frac=sample_frac, random_state=random_state)
+        elif len(df) == 0:
+            print(f"Skipping EDA for {title} as DataFrame is empty.")
+            return
+    else:
+        print("Error: DataFrame type not supported for EDA report.")
+        return
+
+    try:
+        profile = ProfileReport(
+            df_to_profile,
+            title=title,
+            progress_bar=True,
+            duplicates=None,
+            interactions=None 
+        )
+        profile.to_file(output_path)
+        print(f"Report saved to: {output_path}")
+    except Exception as e:
+        print(f"Error generating report '{title}': {e}")
+
+
+# Initialize global seed
+global_set_seed(2025)
+
+print("Libraries, helper functions, and AutoGluonSklearnWrapper class defined.")
+# Attempt to get library versions
+try: print(f"Polars version: {pl.__version__}")
+except Exception: print("Polars version: Not available")
+try: print(f"Pandas version: {pd.__version__}")
+except Exception: print("Pandas version: Not available")
+try: print(f"DuckDB version: {duckdb.__version__}")
+except Exception: print("DuckDB version: Not available")
+try: print(f"AutoGluon version: {TabularPredictor().version}")
+except Exception: print("AutoGluon version: Not available")
+try: print(f"SHAP version: {shap.__version__}")
+except Exception: print("SHAP version: Not available")
+try: from imblearn import __version__ as imb_version; print(f"Imbalanced-learn version: {imb_version}")
+except Exception: print("Imbalanced-learn version: Not available")
+
+```
+
+# Introduction to Credit Card Fraud Detection
+
+Credit card fraud is a significant concern for financial institutions, merchants, and consumers. Understanding the types of fraud and how detection systems operate is crucial for developing effective machine learning models.
+
+## Card-present frauds
+
+Card-present (CP) fraud occurs when a transaction is made using a physical credit card that has been lost, stolen, counterfeited, or intercepted. In these scenarios, the legitimate cardholder is unaware of the fraudulent use until they notice unauthorized transactions on their statement or are alerted by their bank. The key characteristic of CP fraud is that the physical card is used at the point of sale (e.g., a retail store, restaurant).
+
+## Card-not-present frauds
+
+Card-not-present (CNP) fraud involves the use of credit card information (card number, expiry date, CVV) without the physical card being present. This type of fraud is common in online purchases, phone orders, or mail orders. Fraudsters may obtain card details through data breaches, phishing scams, or malware. CNP fraud has become increasingly prevalent with the growth of e-commerce.
+
+## Credit Card Fraud Detection Systems (CCFDS)
+
+Credit Card Fraud Detection Systems (CCFDS) are sophisticated systems designed to identify and prevent fraudulent transactions in real-time or near real-time. When a transaction occurs, the CCFDS analyzes various data points associated with the transaction (e.g., amount, location, time, customer behavior, terminal ID) using predefined rules and machine learning models.
+
+If a transaction is flagged as potentially fraudulent, the system can take several actions:
+*   **Block the transaction:** The payment is declined immediately.
+*   **Alert the cardholder:** The system may send an SMS or app notification to the cardholder to verify the transaction.
+*   **Refer to human investigators:** The transaction is passed to a team of fraud analysts who review the case, potentially contact the cardholder, and make a final decision.
+
+The goal of a CCFDS is to minimize financial losses due to fraud while also minimizing the number of legitimate transactions that are incorrectly blocked (false positives), as this can lead to customer dissatisfaction.
+
+## Class Imbalance in Fraud Detection
+
+A fundamental challenge in developing fraud detection classifiers is the severe class imbalance in the data. Fraudulent transactions are, by nature, rare events compared to the vast number of legitimate transactions. For instance, fraud might account for less than 1% (or even 0.1%) of all transactions.
+
+This imbalance has several implications:
+*   **Model Bias:** Standard classification algorithms may become biased towards the majority class (legitimate transactions) and perform poorly in identifying the minority class (fraudulent transactions). The model might achieve high overall accuracy by simply predicting all transactions as legitimate.
+*   **Metric Selection:** Traditional accuracy is not a good measure of performance. Metrics like Precision, Recall, F1-score, and the Area Under the Precision-Recall Curve (PR-AUC) are more informative for imbalanced datasets.
+*   **Data Sampling:** The scarcity of fraud examples makes it difficult for models to learn the patterns distinguishing fraudulent activities.
+
+Addressing class imbalance is a critical step in building an effective fraud detection model.
+
+# Dealing with Class Imbalance
+
+Several strategies can be employed to mitigate the effects of class imbalance when training fraud detection models. The choice of strategy can significantly impact model performance and its real-world effectiveness.
+
+## Do-Nothing Approach
+
+**Rationale:** One school of thought suggests that class imbalance is an inherent characteristic of the data and reflects the true state of the world. Modifying the data (e.g., through resampling) might distort this reality. Many modern machine learning estimators, especially tree-based ensembles (like LightGBM, XGBoost, CatBoost) and neural networks, can be relatively insensitive to moderate class imbalance if configured and evaluated appropriately.
+
+**Process:**
+1.  Train the model on the original, imbalanced dataset.
+2.  **Crucially, check for proper probability calibration.** The predicted probabilities should accurately reflect the true likelihood of fraud. If probabilities are miscalibrated, the model's output may not be reliable for risk scoring or decision-making based on thresholds.
+3.  Use a separate tuning (or validation) set to select an optimal classification threshold. This threshold is typically chosen to maximize a business-relevant metric, often the F1-score, which balances precision and recall. ROC AUC can be used as an initial evaluation metric for model selection during training if it's deemed appropriate for the initial model ranking, but PR AUC is generally preferred for final model selection in highly imbalanced scenarios.
+
+## Use PR-AUC Instead of ROC-AUC
+
+**Rationale:** When dealing with severe class imbalance, metrics like ROC-AUC can be misleading. ROC-AUC considers the True Positive Rate (TPR) and False Positive Rate (FPR). In highly imbalanced datasets, the number of true negatives (correctly identified legitimate transactions) is vast. Even a small percentage increase in false positives can lead to a large absolute number of misclassified legitimate transactions, but the FPR (FP / (FP + TN)) might remain low due to the enormous TN count, thus artificially inflating the ROC-AUC.
+
+Precision-Recall AUC (PR-AUC), often referred to as "average_precision" in libraries like scikit-learn and AutoGluon, is generally a more informative metric. It focuses on the performance on the positive (minority) class and is less sensitive to the large number of true negatives.
+
+**Process:**
+1.  Train the model on the original, imbalanced dataset.
+2.  During model training and selection (e.g., hyperparameter tuning in AutoGluon), use PR-AUC (`average_precision`) as the primary evaluation metric to guide the selection of the best model architecture and hyperparameters.
+3.  After training, check the probability calibration of the selected model.
+4.  Use a tuning set to choose an optimal classification threshold that maximizes a business-relevant metric like the F1-score.
+
+## Use Cost-Sensitive Learning
+
+**Rationale:** Cost-sensitive learning assigns different costs to misclassification errors. In fraud detection, failing to detect a fraudulent transaction (a false negative) is typically much more costly than incorrectly flagging a legitimate transaction as fraudulent (a false positive). By incorporating these costs, the model is encouraged to pay more attention to the minority (fraud) class.
+
+**Implementation Detail:** One common way to implement cost-sensitive learning is by using sample weights. Instances from the minority class are given higher weights, and instances from the majority class are given lower weights. The weights are inversely proportional to class frequencies. AutoGluon provides a convenient way to do this by setting the `sample_weight` argument in `predictor_args` to the special string `"balance_weight"`. This automatically calculates and applies appropriate weights to balance the classes during training.
+
+**Process:**
+1.  Train the model on the original, imbalanced dataset.
+2.  Specify `sample_weight="balance_weight"` in the `predictor_args` for `AutoGluonSklearnWrapper` (or equivalent functionality in other libraries).
+3.  Use a class-sensitive metric like PR-AUC (`average_precision`) for model selection during training.
+4.  Check the probability calibration of the trained model.
+5.  Use a tuning set to choose the optimal classification threshold based on the F1-score or another relevant business metric.
+
+## Use Class-Based Resampling
+
+**Rationale:** Class-based resampling techniques modify the training data's distribution to create a more balanced dataset. This is done *only* on the training data; the tuning and test sets should remain in their original, imbalanced state to reflect real-world conditions.
+
+**Common Resampling Schemes:**
+*   **Random Undersampling (RUS):** Randomly remove instances from the majority class until the dataset is more balanced. This can lead to loss of information from the majority class.
+*   **Random Oversampling (ROS):** Randomly duplicate instances from the minority class. This can lead to overfitting on the minority class examples.
+*   **SMOTE (Synthetic Minority Over-sampling Technique):** Creates synthetic samples for the minority class by interpolating between existing minority instances. This can help to create a more diverse set of minority examples than simple oversampling.
+*   **Hybrid Methods:** Combine oversampling and undersampling. For example:
+    *   First, apply SMOTE to oversample the minority class.
+    *   Then, apply random undersampling to the (now larger) majority class or cleaning techniques like Edited Nearest Neighbours (ENN) or Tomek Links to remove noisy or borderline instances. Examples include `SMOTEENN` and `SMOTETomek` from the `imbalanced-learn` library.
+
+**Process:**
+1.  Apply the chosen resampling technique **only to the training dataset**.
+2.  Train the model on the resampled training data. Use a class-sensitive metric like PR-AUC for model selection if desired.
+3.  **Crucially, check for probability calibration after training.** Resampling, especially oversampling methods like SMOTE, can severely distort the model's predicted probabilities, making them unreliable.
+4.  If probabilities are miscalibrated (which is common after resampling):
+    *   Use the tuning set and a calibration method (e.g., Isotonic Regression or Platt Scaling, often via `sklearn.calibration.CalibratedClassifierCV` applied to the *predictions* of the already trained model) to recalibrate the probabilities.
+5.  After calibration (if needed), use the tuning set to choose the optimal classification threshold based on the F1-score or another relevant business metric, using the (recalibrated) probabilities.
+
+It's important to note that while resampling can sometimes improve certain metrics, it can also obscure the model's true performance on the original data distribution and often harms probability calibration, which is critical if probability scores themselves are used for decision-making beyond simple classification.
+
+# Dealing with Big Data: Pandas vs. Polars vs. DuckDB
+
+Credit card transaction data is often characterized by high volume and high velocity (frequency). Datasets can easily grow to millions or even billions of records, making efficient data handling crucial for timely analysis and model development. Traditional tools like pandas, while powerful, can sometimes struggle with very large datasets in terms of speed and memory usage. Newer libraries like Polars and embedded databases like DuckDB offer alternative approaches designed for better performance on larger-than-memory or memory-intensive tasks.
+
+## Context
+
+In this lab, we simulate a scenario with multiple transaction files, representing data that might be collected over time or from different sources. We need to load and combine this data efficiently before proceeding with analysis and modeling.
+
+## Objective
+
+The goal of this section is to compare the performance (speed and memory usage) of pandas, Polars, and DuckDB for a common task: loading multiple Parquet files into a single data structure.
+
+## Data Loading
+
+We will load all Parquet files located in the `Data/credit-card-fraud/simulated-data/` directory. This directory is assumed to contain several Parquet files, each potentially representing a batch of transactions.
+
+First, let's list the files we'll be working with.
+
+```{python}
+#| label: list-parquet-files
+
+# Define the path to the data directory
+data_dir = "../Data/credit-card-fraud/simulated-data/"
+
+# Find all Parquet files in the directory
+# The imports of 'os' and 'glob' are expected to be handled by the setup chunk
+parquet_files = sorted(glob.glob(os.path.join(data_dir, "*.parquet")))
+
+if parquet_files:
+    # Get absolute path for printing, helps user verify the location
+    # This assumes 'os' module is available from the setup chunk
+    abs_data_dir_for_print = os.path.abspath(data_dir)
+    print(f"Found {len(parquet_files)} Parquet files in '{abs_data_dir_for_print}':")
+    for f_path in parquet_files:
+        # os.path.basename() will extract the filename
+        print(f" - {os.path.basename(f_path)}")
+else:
+    abs_data_dir_for_print = os.path.abspath(data_dir)
+    print(f"No Parquet files found in directory: {abs_data_dir_for_print}")
+```
+
+## Performance Comparison
+
+We will now load all these files using Polars, DuckDB, and pandas, measuring the time taken and estimating memory usage.
+
+**Note on Memory Measurement:** Accurately profiling memory usage from within a script can be complex. We'll use the `.estimated_size("mb")` method for Polars DataFrames, `sys.getsizeof()` for a rough estimate of pandas DataFrame objects (which doesn't capture the full memory of underlying NumPy arrays accurately for large DataFrames), and acknowledge DuckDB's efficiency without precise in-script measurement for its internal representation.
+
+```{python}
+#| label: performance-comparison
+
+results = []
+
+if not parquet_files:
+    print("Cannot proceed with performance comparison: No Parquet files available.")
+else:
+    # 1. Polars
+    print("\n--- Polars Performance ---")
+    start_time_pl = time.time()
+    try:
+        # scan_parquet is lazy, .collect() materializes it
+        df_pl = pl.scan_parquet(os.path.join(data_dir, "*.parquet")).collect()
+        end_time_pl = time.time()
+        time_taken_pl = end_time_pl - start_time_pl
+        memory_pl = df_pl.estimated_size("mb")
+        results.append({"Library": "Polars", "Time (s)": time_taken_pl, "Memory (MB)": memory_pl, "Shape": df_pl.shape})
+        print(f"Polars: Loaded {df_pl.shape} in {time_taken_pl:.4f} seconds. Estimated memory: {memory_pl:.2f} MB.")
+        # Display a sample to verify loading
+        # display(df_pl.head())
+    except Exception as e:
+        print(f"Error loading with Polars: {e}")
+        results.append({"Library": "Polars", "Time (s)": np.nan, "Memory (MB)": np.nan, "Shape": (np.nan,np.nan)})
+
+    # Clean up to free memory for the next test if df_pl was created
+    if 'df_pl' in locals():
+        del df_pl
+        gc.collect()
+
+    # 2. DuckDB
+    print("\n--- DuckDB Performance ---")
+    start_time_ddb = time.time()
+    try:
+        # DuckDB can read multiple parquet files directly into a relation
+        con = duckdb.connect(database=':memory:', read_only=False)
+        # The path for read_parquet needs to be a glob string or list of files
+        # For DuckDB, it might be simpler to use a SQL glob if all files are in one directory
+        duckdb_path_glob = os.path.join(data_dir, '*.parquet') # Glob pattern
+        df_ddb_relation = con.execute(f"SELECT * FROM read_parquet('{duckdb_path_glob}')").pl() # Convert to Polars DataFrame to get shape/memory
+        end_time_ddb = time.time()
+        time_taken_ddb = end_time_ddb - start_time_ddb
+        memory_ddb = df_ddb_relation.estimated_size("mb") # Estimate from Polars DataFrame
+        results.append({"Library": "DuckDB", "Time (s)": time_taken_ddb, "Memory (MB)": memory_ddb, "Shape": df_ddb_relation.shape})
+        print(f"DuckDB: Loaded {df_ddb_relation.shape} in {time_taken_ddb:.4f} seconds. Estimated memory (via Polars conversion): {memory_ddb:.2f} MB.")
+        # display(df_ddb_relation.head())
+        con.close()
+    except Exception as e:
+        print(f"Error loading with DuckDB: {e}")
+        results.append({"Library": "DuckDB", "Time (s)": np.nan, "Memory (MB)": np.nan, "Shape": (np.nan,np.nan)})
+
+    if 'df_ddb_relation' in locals():
+        del df_ddb_relation
+        gc.collect()
+
+    # 3. Pandas
+    print("\n--- Pandas Performance ---")
+    start_time_pd = time.time()
+    try:
+        # Pandas needs to read file by file and then concatenate
+        all_dfs_pd = [pd.read_parquet(f) for f in parquet_files]
+        df_pd = pd.concat(all_dfs_pd, ignore_index=True)
+        end_time_pd = time.time()
+        time_taken_pd = end_time_pd - start_time_pd
+        memory_pd = df_pd.memory_usage(deep=True).sum() / (1024 * 1024) # More accurate for pandas
+        results.append({"Library": "Pandas", "Time (s)": time_taken_pd, "Memory (MB)": memory_pd, "Shape": df_pd.shape})
+        print(f"Pandas: Loaded {df_pd.shape} in {time_taken_pd:.4f} seconds. Estimated memory: {memory_pd:.2f} MB.")
+        # display(df_pd.head())
+    except Exception as e:
+        print(f"Error loading with Pandas: {e}")
+        results.append({"Library": "Pandas", "Time (s)": np.nan, "Memory (MB)": np.nan, "Shape": (np.nan,np.nan)})
+
+    if 'df_pd' in locals():
+        del df_pd
+        gc.collect()
+
+# Display results in a table
+if results:
+    results_df = pd.DataFrame(results)
+    print("\n--- Performance Summary ---")
+    display(results_df)
+else:
+    print("\nNo performance results to display.")
+
+```
+
+**Interpreting Performance:**
+*   **Time:** Lower is better. Polars and DuckDB are often significantly faster than pandas for I/O-bound operations on Parquet files, especially when reading multiple files.
+*   **Memory:** Lower is better. Polars' memory representation is generally more efficient than pandas'. DuckDB processes data efficiently, potentially out-of-core, but converting to a Polars/Pandas DataFrame for inspection will incur memory costs for that DataFrame.
+
+## Tool Selection
+
+Based on typical performance benchmarks for loading and manipulating large tabular datasets, **Polars** often demonstrates significant advantages in both speed and memory efficiency compared to pandas. Its lazy evaluation capabilities (e.g., `scan_parquet`) combined with an expressive API for eager operations make it a strong choice for this lab.
+
+For the subsequent sections of this lab, we will primarily use **Polars** for data manipulation tasks. We will load the data once using Polars and then proceed with splitting and feature engineering.
+
+First, let's reload the data using Polars, as it might have been cleared from memory during the comparison.
+
+```{python}
+#| label: load-data-polars
+
+if not parquet_files:
+    print("Cannot load data with Polars: No Parquet files available.")
+    df_transactions = pl.DataFrame() # Create an empty Polars DataFrame
+else:
+    try:
+        print("Loading all transaction data using Polars...")
+        df_transactions = pl.scan_parquet(os.path.join(data_dir, "*.parquet")).collect()
+        print(f"Successfully loaded data into a Polars DataFrame. Shape: {df_transactions.shape}")
+        # Convert TX_DATETIME to proper datetime objects if not already
+        if 'TX_DATETIME' in df_transactions.columns:
+            if df_transactions['TX_DATETIME'].dtype != pl.Datetime:
+                # Attempt conversion, assuming it's a string or compatible numeric format
+                # Polars is usually good at inferring types from Parquet, but explicit conversion might be needed.
+                try:
+                    df_transactions = df_transactions.with_columns(pl.col("TX_DATETIME").str.to_datetime(strict=False))
+                    print("Converted TX_DATETIME to datetime objects.")
+                except Exception as e:
+                    print(f"Warning: Could not automatically convert TX_DATETIME. Error: {e}. Ensure it's a datetime type for splitting.")
+        else:
+            print("Warning: TX_DATETIME column not found. Data splitting will fail.")
+            
+        # display(df_transactions.head())
+        # print(df_transactions.schema)
+
+    except Exception as e:
+        print(f"Error loading data with Polars for subsequent steps: {e}")
+        df_transactions = pl.DataFrame() # Ensure df_transactions exists as an empty DF on error
+
+```
+
+## Data Splitting (using Polars)
+
+To evaluate our fraud detection models robustly, we need to split the data into training, tuning (validation), and test sets. Since transaction data is time-ordered, a random split is inappropriate as it can lead to data leakage (information from the future unintentionally influencing past predictions). Instead, we will perform a chronological split based on the `TX_DATETIME` column.
+
+*   `df_train`: Transactions between 2018-04-01 (inclusive) and 2018-07-31 (inclusive).
+*   `df_tuning`: Transactions between 2018-08-01 (inclusive) and 2018-08-31 (inclusive).
+*   `df_test`: Transactions between 2018-09-01 (inclusive) and 2018-09-30 (inclusive).
+
+```{python}
+#| label: data-splitting-polars
+
+if df_transactions.is_empty() or 'TX_DATETIME' not in df_transactions.columns or df_transactions['TX_DATETIME'].dtype != pl.Datetime:
+    print("Data splitting cannot proceed: df_transactions is empty, TX_DATETIME is missing, or not a datetime type.")
+    # Create empty dataframes to allow the lab to proceed without crashing
+    df_train = pl.DataFrame()
+    df_tuning = pl.DataFrame()
+    df_test = pl.DataFrame()
+else:
+    print("Splitting data chronologically...")
+    # Define date ranges for splitting
+    # Ensure TX_DATETIME is comparable with Polars datetime literals
+    # Polars datetime literals can be created with pl.datetime(year, month, day, hour, minute, second)
+
+    # Training set: 2018-04-01 to 2018-07-31
+    train_start_date = pl.datetime(2018, 4, 1)
+    train_end_date = pl.datetime(2018, 7, 31, 23, 59, 59) # Inclusive of the end day
+
+    # Tuning set: 2018-08-01 to 2018-08-31
+    tuning_start_date = pl.datetime(2018, 8, 1)
+    tuning_end_date = pl.datetime(2018, 8, 31, 23, 59, 59)
+
+    # Test set: 2018-09-01 to 2018-09-30
+    test_start_date = pl.datetime(2018, 9, 1)
+    test_end_date = pl.datetime(2018, 9, 30, 23, 59, 59)
+
+    df_train = df_transactions.filter(
+        (pl.col("TX_DATETIME") >= train_start_date) & (pl.col("TX_DATETIME") <= train_end_date)
+    )
+
+    df_tuning = df_transactions.filter(
+        (pl.col("TX_DATETIME") >= tuning_start_date) & (pl.col("TX_DATETIME") <= tuning_end_date)
+    )
+
+    df_test = df_transactions.filter(
+        (pl.col("TX_DATETIME") >= test_start_date) & (pl.col("TX_DATETIME") <= test_end_date)
+    )
+
+    print("\n--- Data Split Verification ---")
+    print(f"df_train shape: {df_train.shape}")
+    if not df_train.is_empty():
+        print(f"  df_train TX_DATETIME range: {df_train['TX_DATETIME'].min()} to {df_train['TX_DATETIME'].max()}")
+    else:
+        print("  df_train is empty.")
+
+    print(f"df_tuning shape: {df_tuning.shape}")
+    if not df_tuning.is_empty():
+        print(f"  df_tuning TX_DATETIME range: {df_tuning['TX_DATETIME'].min()} to {df_tuning['TX_DATETIME'].max()}")
+    else:
+        print("  df_tuning is empty.")
+
+    print(f"df_test shape: {df_test.shape}")
+    if not df_test.is_empty():
+        print(f"  df_test TX_DATETIME range: {df_test['TX_DATETIME'].min()} to {df_test['TX_DATETIME'].max()}")
+    else:
+        print("  df_test is empty.")
+
+# For subsequent steps, we might need pandas DataFrames for some tools (like ydata-profiling or AutoGluonWrapper)
+# We will convert them as needed. For now, they are Polars DataFrames.
+
+```
+
+--- 
+
+# EDA: Comparing `df_train` and `df_tuning`
+
+Before diving into feature engineering and modeling, it's crucial to understand our datasets. We will perform Exploratory Data Analysis (EDA) to compare the training set (`df_train`) and the tuning set (`df_tuning`). This helps identify any significant differences in distributions, missing values, or data characteristics that might indicate concept drift or issues with our chronological split. Such differences could affect how well a model trained on `df_train` generalizes to `df_tuning` and, consequently, to `df_test`.
+
+We use `ydata-profiling` to generate comprehensive EDA reports. Due to the potential size of these reports, we will generate them to HTML files rather than embedding them directly in this document. You are encouraged to open and review these reports.
+
+```{python}
+#| label: eda-train-tuning-comparison
+
+# Ensure df_train and df_tuning are not empty before generating reports
+if 'df_train' in locals() and not df_train.is_empty():
+    generate_eda_report(
+        df=df_train, 
+        title="Training Data Profile (df_train)", 
+        output_path="Lab04_eda_report_df_train_raw.html",
+        sample_frac=0.05 # Sample 5% for faster report generation if data is large
+    )
+else:
+    print("Skipping EDA for df_train as it is empty or not defined.")
+
+if 'df_tuning' in locals() and not df_tuning.is_empty():
+    generate_eda_report(
+        df=df_tuning, 
+        title="Tuning Data Profile (df_tuning)", 
+        output_path="Lab04_eda_report_df_tuning_raw.html",
+        sample_frac=0.05 # Sample 5% for faster report generation
+    )
+else:
+    print("Skipping EDA for df_tuning as it is empty or not defined.")
+
+# Placeholder for ydata-profiling comparison if desired (manual step for students)
+# if 'df_train' in locals() and not df_train.is_empty() and \ 
+#    'df_tuning' in locals() and not df_tuning.is_empty():
+# try:
+#        train_profile = ProfileReport(df_train.sample(fraction=0.05, seed=2025).to_pandas(), title="Train Sample")
+#        tuning_profile = ProfileReport(df_tuning.sample(fraction=0.05, seed=2025).to_pandas(), title="Tuning Sample")
+#        comparison_report = train_profile.compare(tuning_profile)
+#        comparison_report.to_file("Lab04_eda_comparison_train_vs_tuning_raw.html")
+#        print("EDA comparison report between df_train and df_tuning saved.")
+# except Exception as e:
+# print(f"Could not generate comparison report: {e}")
+# else:
+# print("Skipping comparison EDA as one or both dataframes are empty.")
+
+```
+
+**Review Points for EDA Reports:**
+*   **Distribution Shifts:** Are there noticeable changes in the distributions of key features like `TX_AMOUNT` between `df_train` and `df_tuning`?
+*   **Fraud Rate:** Is the `TX_FRAUD` rate consistent across the two datasets? Significant changes could indicate that the nature of fraud is evolving.
+*   **Missing Values:** Check for changes in patterns of missing data.
+*   **Cardinality:** For categorical features, observe if new categories appear in `df_tuning` that were not present in `df_train`.
+
+Any significant discrepancies should be noted as they might impact modeling choices or suggest the need for more adaptive modeling techniques.
+
+
+# Feature Engineering (using Polars)
+
+Feature engineering is a critical step in building effective machine learning models. It involves creating new features from existing data that can help the model better capture underlying patterns and improve predictive performance. For fraud detection, time-based features and features capturing customer or terminal behavior over time are often very informative.
+
+## Importance of Pipelines
+
+When performing feature engineering, it's best practice to encapsulate the transformation logic within pipelines (e.g., using scikit-learn's `Pipeline` and `FunctionTransformer` or custom transformers). This offers several advantages:
+
+*   **Consistency:** Ensures that the same transformations are applied to training, tuning, and test datasets, preventing discrepancies.
+*   **Reproducibility:** Makes the feature engineering process clear and easy to reproduce.
+*   **Preventing Data Leakage:** Pipelines help manage the flow of data, especially when transformations depend on statistics calculated from the training set (e.g., mean imputation, scaling). Applying transformations correctly within a pipeline ensures that information from tuning/test sets does not leak into the training process.
+*   **Deployment:** A saved pipeline can be easily deployed to process new, unseen data in a production environment.
+
+In this section, we will define functions that perform feature engineering using Polars expressions. These functions will then be wrapped using `sklearn.preprocessing.FunctionTransformer` to be included in a scikit-learn pipeline. This approach allows us to leverage Polars' performance for the transformations while maintaining compatibility with the scikit-learn ecosystem for modeling.
+
+## Polars Feature Creation Functions
+
+We will create functions to generate the following features. Each function will take a Polars DataFrame as input and return a Polars DataFrame with the new feature(s) added.
+
+Key columns expected: `TX_DATETIME`, `TX_AMOUNT`, `CUSTOMER_ID`, `TRANSACTION_ID`, `TX_FRAUD`, `TERMINAL_ID`.
+
+### Function 1: `is_weekend`
+
+This feature indicates if a transaction occurred on a weekend.
+
+```{python}
+#| label: feature-is-weekend
+
+def fe_is_weekend(df: pl.DataFrame) -> pl.DataFrame:
+    """Adds IS_WEEKEND feature (1 if weekend, 0 if weekday)."""
+    # Polars: weekday() returns 1 (Monday) to 7 (Sunday).
+    # So, Saturday (6) or Sunday (7) are weekends.
+    return df.with_columns(
+        IS_WEEKEND = pl.when(pl.col("TX_DATETIME").dt.weekday() >= 6).then(1).otherwise(0).cast(pl.UInt8)
+    )
+
+# Example of applying it (will be part of a pipeline later)
+# if not df_train.is_empty():
+#     df_train_with_weekend = fe_is_weekend(df_train)
+#     display(df_train_with_weekend.select(["TX_DATETIME", "IS_WEEKEND"]).head())
+```
+
+### Function 2: `is_night`
+
+This feature indicates if a transaction occurred during the night (defined as hour <= 6).
+
+```{python}
+#| label: feature-is-night
+
+def fe_is_night(df: pl.DataFrame) -> pl.DataFrame:
+    """Adds IS_NIGHT feature (1 if hour <= 6, 0 otherwise)."""
+    return df.with_columns(
+        IS_NIGHT = pl.when(pl.col("TX_DATETIME").dt.hour() <= 6).then(1).otherwise(0).cast(pl.UInt8)
+    )
+
+# Example of applying it
+# if not df_train.is_empty():
+#     df_train_with_night = fe_is_night(df_train)
+#     display(df_train_with_night.select(["TX_DATETIME", "IS_NIGHT"]).head())
+```
+
+### Function 3: Customer Spending Behavior Features
+
+These features capture a customer's recent transaction count and average transaction amount over different time windows (1, 7, and 30 days).
+
+```{python}
+#| label: feature-customer-spending
+def fe_customer_spending(df: pl.DataFrame, window_sizes_in_days: list = [1, 7, 30]) -> pl.DataFrame:
+    """
+    Calculates customer spending features:
+    - Count of transactions per customer over different window_sizes.
+    - Average transaction amount per customer over different window_sizes.
+    """
+    
+    # Ensure data is sorted by CUSTOMER_ID and TX_DATETIME for rolling operations
+    df_with_features = df.sort(["CUSTOMER_ID", "TX_DATETIME"])
+    
+    for window_size in window_sizes_in_days:
+        # Use rolling with by parameter to group by customer
+        df_roll = df_with_features.rolling(
+            index_column="TX_DATETIME", 
+            period=f"{window_size}d", 
+            by="CUSTOMER_ID", 
+            closed="left"
+        ).agg([
+            pl.count("TX_DATETIME").alias(f"CUSTOMER_ID_NB_TX_{window_size}DAY_WINDOW"),
+            pl.col("TX_AMOUNT").mean().alias(f"CUSTOMER_ID_AVG_AMOUNT_{window_size}DAY_WINDOW")
+        ])
+        
+        # Join the rolling features back to the original dataframe
+        df_with_features = df_with_features.join(
+            df_roll,
+            on=["CUSTOMER_ID", "TX_DATETIME"],
+            how="left"
+        )
+    
+    # Fill nulls for new features
+    new_cols = [f"CUSTOMER_ID_NB_TX_{w}DAY_WINDOW" for w in window_sizes_in_days] + [f"CUSTOMER_ID_AVG_AMOUNT_{w}DAY_WINDOW" for w in window_sizes_in_days]
+    df_with_features = df_with_features.with_columns([pl.col(c).fill_null(0) for c in new_cols])
+    
+    return df_with_features
+```
+
+### Function 4: Terminal Risk Features
+
+These features capture the number of transactions and the proportion of fraudulent transactions associated with a terminal over recent time windows. A delay period is introduced because fraud labels might not be available immediately.
+
+```{python}
+#| label: feature-terminal-risk
+def fe_terminal_risk(df: pl.DataFrame, delay_period_days: int = 7, window_sizes_in_days: list = [1, 7, 30]) -> pl.DataFrame:
+    """Adds terminal risk features for various window sizes, considering a delay in fraud labeling."""
+    # Ensure data is sorted by TERMINAL_ID and TX_DATETIME
+    df = df.sort(["TERMINAL_ID", "TX_DATETIME"])
+    
+    expressions = []
+    for window_size in window_sizes_in_days:
+        # Count of transactions on the terminal in the window (delayed)
+        expr_nb_tx_terminal = (
+            pl.col("TRANSACTION_ID")
+            .rolling(index_column="TX_DATETIME", period=f"{window_size}d", offset=f"-{delay_period_days}d", closed="both")
+            .count()
+            .over("TERMINAL_ID")
+            .alias(f"TERMINAL_ID_NB_TX_{window_size}DAY_WINDOW")
+        )
+        expressions.append(expr_nb_tx_terminal)
+        
+        # Count of fraudulent transactions on the terminal in the window (delayed)
+        # Using name.suffix to make each expression unique
+        expr_nb_fraud_terminal = (
+            pl.col("TX_FRAUD") # Assumes TX_FRAUD is 0 or 1
+            .rolling(index_column="TX_DATETIME", period=f"{window_size}d", offset=f"-{delay_period_days}d", closed="both")
+            .sum()
+            .over("TERMINAL_ID")
+            .name.suffix(f"_FRAUD_{window_size}DAY_WINDOW")
+        )
+        expressions.append(expr_nb_fraud_terminal)
+
+    # Add temporary columns first
+    df_with_features = df.with_columns(expressions)
+    
+    # Calculate risk and fill NaNs
+    risk_expressions = []
+    fill_expressions = []
+    
+    for window_size in window_sizes_in_days:
+        nb_tx_col = f"TERMINAL_ID_NB_TX_{window_size}DAY_WINDOW"
+        nb_fraud_col = f"TX_FRAUD_FRAUD_{window_size}DAY_WINDOW"  # This matches the name.suffix pattern
+        risk_col = f"TERMINAL_ID_RISK_{window_size}DAY_WINDOW"
+        
+        # Create risk expression
+        risk_expr = (
+            pl.when(pl.col(nb_tx_col) > 0)
+            .then(pl.col(nb_fraud_col) / (pl.col(nb_tx_col) + 1e-8))
+            .otherwise(0.0)
+            .alias(risk_col)
+        )
+        risk_expressions.append(risk_expr)
+        
+        # Create fill expressions
+        fill_expr_tx = pl.col(nb_tx_col).fill_null(0).cast(pl.UInt32)
+        fill_expr_risk = pl.col(risk_col).fill_null(0.0).cast(pl.Float32)
+        fill_expressions.extend([fill_expr_tx, fill_expr_risk])
+    
+    # Apply risk calculations
+    df_with_features = df_with_features.with_columns(risk_expressions)
+    
+    # Apply fill operations
+    df_with_features = df_with_features.with_columns(fill_expressions)
+    
+    # Drop the temporary fraud count columns
+    columns_to_drop = [f"TX_FRAUD_FRAUD_{window_size}DAY_WINDOW" for window_size in window_sizes_in_days]
+    df_with_features = df_with_features.drop(columns_to_drop)
+    
+    return df_with_features
+```
+
+### Building the Feature Engineering Pipeline
+
+Now we will create a scikit-learn pipeline that applies these Polars-based feature engineering functions. We use `FunctionTransformer` to wrap our Polars functions. It's important that these transformers correctly handle the Polars DataFrame input and output Polars DataFrames if subsequent steps also expect Polars, or convert to pandas if downstream scikit-learn components require it (though AutoGluonSklearnWrapper can handle Polars input for feature name/number checks).
+
+For simplicity in this lab, the `AutoGluonSklearnWrapper` is designed to eventually convert Polars DataFrames to Pandas DataFrames before feeding them into the core AutoGluon `TabularDataset` and `TabularPredictor`. Therefore, our `FunctionTransformer` wrappers should ideally output Pandas DataFrames if they are the last step before the estimator, or if there are intermediate scikit-learn steps that require Pandas. However, to leverage Polars speed, we can keep data in Polars format as long as possible.
+
+Let's define wrapper functions for `FunctionTransformer` that ensure the input is a Polars DataFrame and output is also a Polars DataFrame.
+
+```{python}
+#| label: feature-engineering-pipeline
+
+# Wrapper function for FunctionTransformer to apply Polars functions
+# These take a DataFrame (assumed Pandas from sklearn context) and return Pandas
+# Define feature engineering functions (assuming these already exist)
+# fe_is_weekend, fe_is_night, fe_customer_spending, fe_terminal_risk
+
+# Create a Polars pipeline using pipe method
+def polars_feature_pipeline(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Apply all feature engineering steps in sequence using Polars pipe
+    """
+    return (df
+            .pipe(fe_is_weekend)
+            .pipe(fe_is_night)
+            .pipe(fe_customer_spending)  # Uses default window_sizes
+            .pipe(fe_terminal_risk))     # Uses default delay and window_sizes
+
+print("Feature engineering pipeline defined.")
+
+# Apply the pipeline to the datasets
+print("\nApplying feature engineering pipeline to df_train...")
+if not df_train.is_empty() and 'TX_FRAUD' in df_train.columns:
+    df_train_ft_pl = polars_feature_pipeline(df_train)
+    print(f"df_train_ft shape after feature engineering: {df_train_ft_pl.shape}")
+    # If you need pandas for AutoGluon:
+    df_train_ft = df_train_ft_pl.to_pandas()
+    # display(df_train_ft_pl.head())
+else:
+    print("Skipping feature engineering for df_train as it is empty or TX_FRAUD is missing.")
+    df_train_ft_pl = pl.DataFrame()
+    df_train_ft = pd.DataFrame()  # Empty df
+
+print("\nApplying feature engineering pipeline to df_tuning...")
+if not df_tuning.is_empty() and 'TX_FRAUD' in df_tuning.columns:
+    df_tuning_ft_pl = polars_feature_pipeline(df_tuning)
+    print(f"df_tuning_ft shape after feature engineering: {df_tuning_ft_pl.shape}")
+    # If you need pandas for AutoGluon:
+    df_tuning_ft = df_tuning_ft_pl.to_pandas()
+    # display(df_tuning_ft_pl.head())
+else:
+    print("Skipping feature engineering for df_tuning as it is empty or TX_FRAUD is missing.")
+    df_tuning_ft_pl = pl.DataFrame()
+    df_tuning_ft = pd.DataFrame()
+
+print("\nApplying feature engineering pipeline to df_test...")
+if not df_test.is_empty() and 'TX_FRAUD' in df_test.columns:
+    df_test_ft_pl = polars_feature_pipeline(df_test)
+    print(f"df_test_ft shape after feature engineering: {df_test_ft_pl.shape}")
+    # If you need pandas for AutoGluon:
+    df_test_ft = df_test_ft_pl.to_pandas()
+    # display(df_test_ft_pl.head())
+else:
+    print("Skipping feature engineering for df_test as it is empty or TX_FRAUD is missing.")
+    df_test_ft_pl = pl.DataFrame()
+    df_test_ft = pd.DataFrame()
+
+# Store the engineered features names
+if not df_train_ft_pl.is_empty():
+    engineered_feature_names = df_train_ft_pl.columns
+    # We need to exclude the original columns that are not features and the target
+    original_cols_to_exclude_from_features = ['TRANSACTION_ID', 'TX_DATETIME', 'CUSTOMER_ID', 'TERMINAL_ID', 'TX_FRAUD']
+    # Base features are usually TX_AMOUNT and the newly engineered ones.
+    # The wrapper will get feature names from X passed to .fit()
+else:
+    engineered_feature_names = []
+
+print(f"\nPotential engineered feature names (example from df_train_ft): {engineered_feature_names[:15]}...")
+```
+
+# EDA of the Enhanced `df_train`
+
+After applying feature engineering, it's good practice to perform another round of EDA on the enhanced training dataset (`df_train_ft`). This helps to:
+
+*   Understand the distributions of the newly created features.
+*   Check for any unexpected values or relationships that might have arisen from the transformations.
+*   Verify that the new features seem plausible and potentially informative for fraud detection.
+
+Again, we will generate an HTML report using `ydata-profiling`.
+
+```{python}
+#| label: eda-enhanced-train
+
+if 'df_train_ft_pl' in locals() and not df_train_ft_pl.is_empty():
+    generate_eda_report(
+        df=df_train_ft_pl, 
+        title="Enhanced Training Data Profile (df_train_ft)", 
+        output_path="Lab04_eda_report_df_train_ft.html",
+        sample_frac=0.05 # Sample 5% if data is large
+    )
+else:
+    print("Skipping EDA for enhanced df_train as it is empty or not defined.")
+
+```
+
+**Review Points for Enhanced EDA Report:**
+*   **New Feature Distributions:** Examine histograms and summary statistics for features like `CUSTOMER_ID_NB_TX_1DAY_WINDOW`, `TERMINAL_ID_RISK_7DAY_WINDOW`, etc. Are the ranges sensible?
+*   **Correlations:** Check correlations between new features and the `TX_FRAUD` target, and also among the new features themselves (multicollinearity).
+*   **Missing Values:** Confirm that `fill_null(0)` in our feature engineering functions handled NaNs as expected, especially for the rolling window features at the beginning of a customer's or terminal's history.
+
+--- 
+
+# Modeling and Evaluation: Comparing Imbalance Strategies
+
+In this section, we will implement and compare the different strategies for handling class imbalance discussed in Section 2. We will use the feature-engineered datasets (`df_train_ft`, `df_tuning_ft`, `df_test_ft`). For all strategies, our target variable is `TX_FRAUD`.
+
+Key modeling choices:
+*   We will use the `AutoGluonSklearnWrapper` for training.
+*   We will primarily use `average_precision` (PR-AUC) as the `eval_metric` for AutoGluon, as it's more robust for imbalanced fraud data. For the "Do Nothing" approach, we might start with `roc_auc` but will also closely monitor `average_precision`.
+*   Threshold tuning for F1-score will be performed on the `df_tuning_ft` set.
+*   Final F1-score will be reported on the `df_test_ft` set using the optimized threshold.
+
+Let's define the features to be used for modeling. These will be the original `TX_AMOUNT` plus all the engineered features. We exclude IDs, raw datetime, and the target variable itself from the feature set `X`.
+
+```{python}
+#| label: define-modeling-features-final
+
+if not df_train_ft.empty:
+    # Start with all columns from the feature-engineered training set
+    candidate_features = df_train_ft.columns.tolist()
+    
+    # Define columns to exclude from features (IDs, datetime, target, and any intermediate raw features)
+    cols_to_exclude = ['TRANSACTION_ID', 'TX_DATETIME', 'CUSTOMER_ID', 'TERMINAL_ID', 'TX_FRAUD']
+    
+    # Define the specific base features and generated features we want to use
+    # This provides more control than just excluding.
+    # Base feature(s):
+    base_numeric_features = ['TX_AMOUNT'] 
+    
+    # Engineered features (names are derived from the functions):
+    datetime_features = ['IS_WEEKEND', 'IS_NIGHT']
+    
+    customer_windows = [1, 7, 30]
+    customer_spending_features = []
+    for win in customer_windows:
+        customer_spending_features.append(f'CUSTOMER_ID_NB_TX_{win}DAY_WINDOW')
+        customer_spending_features.append(f'CUSTOMER_ID_AVG_AMOUNT_{win}DAY_WINDOW')
+        
+    terminal_windows = [1, 7, 30]
+    terminal_risk_features = []
+    for win in terminal_windows:
+        terminal_risk_features.append(f'TERMINAL_ID_NB_TX_{win}DAY_WINDOW')
+        terminal_risk_features.append(f'TERMINAL_ID_RISK_{win}DAY_WINDOW')
+        
+    modeling_features_final = base_numeric_features + datetime_features + customer_spending_features + terminal_risk_features
+    
+    # Verify that all selected modeling features exist in df_train_ft
+    missing_modeling_features = [f for f in modeling_features_final if f not in df_train_ft.columns]
+    if missing_modeling_features:
+        print(f"Warning: The following selected modeling features are missing from df_train_ft: {missing_modeling_features}")
+        # Fallback to only using features present in df_train_ft to avoid errors
+        modeling_features_final = [f for f in modeling_features_final if f in df_train_ft.columns]
+        
+    print(f"Final list of {len(modeling_features_final)} features selected for modeling:")
+    #for f in modeling_features_final: print(f"  {f}") # Print all if list is not too long
+    if len(modeling_features_final) > 10 : print(modeling_features_final[:5] + ['...'] + modeling_features_final[-5:])
+    else: print(modeling_features_final)
+        
+    X_train = df_train_ft[modeling_features_final]
+    y_train = df_train_ft['TX_FRAUD']
+    
+    X_tuning = df_tuning_ft[modeling_features_final]
+    y_tuning = df_tuning_ft['TX_FRAUD']
+    
+    X_test = df_test_ft[modeling_features_final]
+    y_test = df_test_ft['TX_FRAUD']
+    
+else:
+    print("df_train_ft is empty. Cannot define modeling features or proceed with modeling.")
+    # Create empty placeholders to prevent downstream errors in the lab structure
+    modeling_features_final = []
+    X_train, y_train, X_tuning, y_tuning, X_test, y_test = pd.DataFrame(), pd.Series(dtype='int'), pd.DataFrame(), pd.Series(dtype='int'), pd.DataFrame(), pd.Series(dtype='int')
+
+
+# Store results for final comparison table
+comparison_results = []
+```
+
+## Strategy 1: "Do Nothing" (Train on Imbalanced Data)
+
+**Concept Recap:** Train the model on the original, imbalanced training data. We will use ROC AUC as the initial `eval_metric` for AutoGluon to select the best base models, but we will also closely monitor PR-AUC. Probability calibration and F1-score optimization via threshold tuning are key.
+
+### AutoGluon Implementation (Strategy 1)
+
+```{python}
+#| label: model-strategy1-do-nothing
+
+if X_train.empty:
+    print("Skipping Strategy 1: Training data is empty.")
+else:
+    print("--- Strategy 1: Do Nothing ---")
+    strategy_name_1 = "1. Do Nothing"
+    model_folder_s1 = "Lab04_ag_models_s1_do_nothing"
+    remove_ag_folder(model_folder_s1)
+
+    # AutoGluon arguments
+    # Initially use roc_auc, but also track average_precision
+    predictor_args_s1 = {
+        'problem_type': 'binary',
+        'eval_metric': 'roc_auc', # Could also start with 'average_precision'
+        'path': model_folder_s1
+    }
+    fit_args_s1 = {
+        'presets': 'medium_quality_faster_train', # Faster preset for lab purposes
+        'time_limit': 300, # Reduced time limit for the lab
+        'excluded_model_types': ['KNN', 'NN_TORCH', 'FASTAI']
+    }
+
+    ag_model_s1 = AutoGluonSklearnWrapper(
+        label='TX_FRAUD',
+        predictor_args=predictor_args_s1,
+        fit_args=fit_args_s1
+    )
+    
+    print("Training AutoGluon model for Strategy 1...")
+    start_time = time.time()
+    ag_model_s1.fit(X_train, y_train)
+    end_time = time.time()
+    print(f"Strategy 1 model training finished in {end_time - start_time:.2f} seconds.")
+
+    # Performance Reporting
+    print("\n--- Performance on Test Set (Strategy 1) ---")
+    # Ensure X_test has columns in the same order as X_train (wrapper handles this if names match)
+    leaderboard_s1 = ag_model_s1.predictor.leaderboard(X_test, extra_metrics=['average_precision', 'f1', 'roc_auc'], silent=True)
+    display(leaderboard_s1)
+    
+    best_model_name_s1 = leaderboard_s1.iloc[0]['model']
+    roc_auc_s1_test = leaderboard_s1.iloc[0]['score_test'] # This is roc_auc as per eval_metric
+    pr_auc_s1_test = leaderboard_s1.iloc[0]['average_precision']
+    # F1 from leaderboard is at default 0.5 threshold
+    f1_default_s1_test = leaderboard_s1.iloc[0]['f1'] 
+    print(f"Best model: {best_model_name_s1}")
+    print(f"Test ROC-AUC (from leaderboard): {roc_auc_s1_test:.4f}")
+    print(f"Test PR-AUC (average_precision, from leaderboard): {pr_auc_s1_test:.4f}")
+    print(f"Test F1 Score at default 0.5 threshold (from leaderboard): {f1_default_s1_test:.4f}")
+
+    # Probability Calibration Check & Threshold Tuning
+    print("\n--- Probability Calibration & Threshold Tuning (Strategy 1) ---")
+    pred_proba_tuning_s1 = ag_model_s1.predict_proba(X_tuning)[:, 1]
+
+    # Plot Calibration Curve
+    plt.figure(figsize=(8, 6))
+    disp = CalibrationDisplay.from_predictions(y_tuning, pred_proba_tuning_s1, n_bins=10, name=best_model_name_s1)
+    plt.title("Calibration Curve (Strategy 1: Do Nothing)")
+    plt.grid(True)
+    plt.show()
+    calibration_note_s1 = "Review plot" # Placeholder, student should assess
+
+    # Threshold Tuning for F1-score on df_tuning
+    best_f1_s1 = 0
+    best_threshold_s1 = 0.5 # Default
+    thresholds = np.arange(0.01, 1.0, 0.01)
+    f1_scores_tuning = []
+    for threshold in thresholds:
+        y_pred_tuning_thresholded = (pred_proba_tuning_s1 >= threshold).astype(int)
+        current_f1 = f1_score(y_tuning, y_pred_tuning_thresholded)
+        f1_scores_tuning.append(current_f1)
+        if current_f1 > best_f1_s1:
+            best_f1_s1 = current_f1
+            best_threshold_s1 = threshold
+            
+    print(f"Best F1-score on tuning set: {best_f1_s1:.4f} at threshold {best_threshold_s1:.2f}")
+
+    # Plot F1 scores vs thresholds
+    plt.figure(figsize=(8, 6))
+    plt.plot(thresholds, f1_scores_tuning, marker='.')
+    plt.axvline(best_threshold_s1, color='r', linestyle='--', label=f'Best Threshold: {best_threshold_s1:.2f}')
+    plt.title('F1 Score vs. Threshold on Tuning Set (Strategy 1)')
+    plt.xlabel('Threshold')
+    plt.ylabel('F1 Score')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    # Evaluate on test set with optimal threshold
+    pred_proba_test_s1 = ag_model_s1.predict_proba(X_test)[:, 1]
+    y_pred_test_optimal_s1 = (pred_proba_test_s1 >= best_threshold_s1).astype(int)
+    f1_optimal_s1_test = f1_score(y_test, y_pred_test_optimal_s1)
+    print(f"F1-score on test set with optimal threshold ({best_threshold_s1:.2f}): {f1_optimal_s1_test:.4f}")
+    
+    # Classification report for more details
+    print("\nClassification Report on Test Set (Optimal Threshold, Strategy 1):")
+    print(classification_report(y_test, y_pred_test_optimal_s1, target_names=['Legitimate', 'Fraud']))
+
+    comparison_results.append({
+        "Strategy": strategy_name_1,
+        "Test ROC-AUC": roc_auc_s1_test,
+        "Test PR-AUC": pr_auc_s1_test,
+        "Test F1 (Optimized)": f1_optimal_s1_test,
+        "Optimized Threshold": best_threshold_s1,
+        "Calibration Note": calibration_note_s1
+    })
+
+    # Save the predictor with the tuned threshold for potential later use (optional)
+    # ag_model_s1.predictor.set_decision_threshold(best_threshold_s1)
+    # ag_model_s1.predictor.save() # This would save changes back to the model folder
+```
+
+## Strategy 2: Use Class-Sensitive Evaluation Metrics (PR-AUC)
+
+**Rationale:** When dealing with severe class imbalance, metrics like ROC-AUC can be misleading. ROC-AUC considers the True Positive Rate (TPR) and False Positive Rate (FPR). In highly imbalanced datasets, the number of true negatives (correctly identified legitimate transactions) is vast. Even a small percentage increase in false positives can lead to a large absolute number of misclassified legitimate transactions, but the FPR (FP / (FP + TN)) might remain low due to the enormous TN count, thus artificially inflating the ROC-AUC.
+
+Precision-Recall AUC (PR-AUC), often referred to as "average_precision" in libraries like scikit-learn and AutoGluon, is generally a more informative metric. It focuses on the performance on the positive (minority) class and is less sensitive to the large number of true negatives.
+
+**Process:**
+1.  Train the model on the original, imbalanced dataset.
+2.  During model training and selection (e.g., hyperparameter tuning in AutoGluon), use PR-AUC (`average_precision`) as the primary evaluation metric to guide the selection of the best model architecture and hyperparameters.
+3.  After training, check the probability calibration of the selected model.
+4.  Use a tuning set to choose an optimal classification threshold that maximizes a business-relevant metric like the F1-score.
+
+### AutoGluon Implementation (Strategy 2)
+
+```{python}
+#| label: model-strategy2-prauc
+
+if X_train.empty:
+    print("Skipping Strategy 2: Training data is empty.")
+else:
+    print("\n--- Strategy 2: Use Class-Sensitive Metrics (PR-AUC) ---")
+    strategy_name_2 = "2. PR-AUC (average_precision)"
+    model_folder_s2 = "Lab04_ag_models_s2_prauc"
+    remove_ag_folder(model_folder_s2)
+
+    predictor_args_s2 = {
+        'problem_type': 'binary',
+        'eval_metric': 'average_precision', # Key change: Use PR-AUC
+        'path': model_folder_s2
+    }
+    fit_args_s2 = {
+        'presets': 'medium_quality_faster_train',
+        'time_limit': 300,
+        'excluded_model_types': ['KNN', 'NN_TORCH', 'FASTAI']
+    }
+
+    ag_model_s2 = AutoGluonSklearnWrapper(
+        label='TX_FRAUD',
+        predictor_args=predictor_args_s2,
+        fit_args=fit_args_s2
+    )
+    
+    print("Training AutoGluon model for Strategy 2...")
+    start_time    start_time = time.time()
+    ag_model_s2.fit(X_train, y_train)
+    end_time = time.time()
+    print(f"Strategy 2 model training finished in {end_time - start_time:.2f} seconds.")
+
+    # Performance Reporting
+    print("\n--- Performance on Test Set (Strategy 2) ---")
+    leaderboard_s2 = ag_model_s2.predictor.leaderboard(X_test, extra_metrics=['average_precision', 'f1', 'roc_auc'], silent=True)
+    display(leaderboard_s2)
+    
+    best_model_name_s2 = leaderboard_s2.iloc[0]['model']
+    # score_test is now average_precision
+    pr_auc_s2_test = leaderboard_s2.iloc[0]['score_test'] 
+    roc_auc_s2_test = leaderboard_s2.iloc[0]['roc_auc']
+    f1_default_s2_test = leaderboard_s2.iloc[0]['f1']
+    print(f"Best model: {best_model_name_s2}")
+    print(f"Test PR-AUC (average_precision, from leaderboard): {pr_auc_s2_test:.4f}")
+    print(f"Test ROC-AUC (from leaderboard): {roc_auc_s2_test:.4f}")
+    print(f"Test F1 Score at default 0.5 threshold (from leaderboard): {f1_default_s2_test:.4f}")
+
+    # Probability Calibration Check & Threshold Tuning
+    print("\n--- Probability Calibration & Threshold Tuning (Strategy 2) ---")
+    pred_proba_tuning_s2 = ag_model_s2.predict_proba(X_tuning)[:, 1]
+
+    plt.figure(figsize=(8, 6))
+    disp = CalibrationDisplay.from_predictions(y_tuning, pred_proba_tuning_s2, n_bins=10, name=best_model_name_s2)
+    plt.title("Calibration Curve (Strategy 2: PR-AUC)")
+    plt.grid(True)
+    plt.show()
+    calibration_note_s2 = "Review plot"
+
+    best_f1_s2 = 0
+    best_threshold_s2 = 0.5
+    thresholds = np.arange(0.01, 1.0, 0.01)
+    f1_scores_tuning_s2 = []
+    for threshold in thresholds:
+        y_pred_tuning_thresholded_s2 = (pred_proba_tuning_s2 >= threshold).astype(int)
+        current_f1 = f1_score(y_tuning, y_pred_tuning_thresholded_s2)
+        f1_scores_tuning_s2.append(current_f1)
+        if current_f1 > best_f1_s2:
+            best_f1_s2 = current_f1
+            best_threshold_s2 = threshold
+            
+    print(f"Best F1-score on tuning set: {best_f1_s2:.4f} at threshold {best_threshold_s2:.2f}")
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(thresholds, f1_scores_tuning_s2, marker='.')
+    plt.axvline(best_threshold_s2, color='r', linestyle='--', label=f'Best Threshold: {best_threshold_s2:.2f}')
+    plt.title('F1 Score vs. Threshold on Tuning Set (Strategy 2)')
+    plt.xlabel('Threshold')
+    plt.ylabel('F1 Score')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    pred_proba_test_s2 = ag_model_s2.predict_proba(X_test)[:, 1]
+    y_pred_test_optimal_s2 = (pred_proba_test_s2 >= best_threshold_s2).astype(int)
+    f1_optimal_s2_test = f1_score(y_test, y_pred_test_optimal_s2)
+    print(f"F1-score on test set with optimal threshold ({best_threshold_s2:.2f}): {f1_optimal_s2_test:.4f}")
+
+    print("\nClassification Report on Test Set (Optimal Threshold, Strategy 2):")
+    print(classification_report(y_test, y_pred_test_optimal_s2, target_names=['Legitimate', 'Fraud']))
+
+    comparison_results.append({
+        "Strategy": strategy_name_2,
+        "Test ROC-AUC": roc_auc_s2_test,
+        "Test PR-AUC": pr_auc_s2_test,
+        "Test F1 (Optimized)": f1_optimal_s2_test,
+        "Optimized Threshold": best_threshold_s2,
+        "Calibration Note": calibration_note_s2
+    })
+```
+
+## Strategy 3: Use Cost-Sensitive Learning (`sample_weight='balance_weight'`)
+
+**Concept Recap:** Cost-sensitive learning is achieved by assigning higher weights to the minority class (fraud) instances during training. AutoGluon handles this internally when `sample_weight='balance_weight'` is specified. We will use `average_precision` as the evaluation metric.
+
+### AutoGluon Implementation (Strategy 3)
+
+```{python}
+#| label: model-strategy3-cost-sensitive
+
+if X_train.empty:
+    print("Skipping Strategy 3: Training data is empty.")
+else:
+    print("\n--- Strategy 3: Cost-Sensitive Learning (balance_weight) ---")
+    strategy_name_3 = "3. Cost-Sensitive (balance_weight)"
+    model_folder_s3 = "Lab04_ag_models_s3_cost_sensitive"
+    remove_ag_folder(model_folder_s3)
+
+    predictor_args_s3 = {
+        'problem_type': 'binary',
+        'eval_metric': 'average_precision',
+        'path': model_folder_s3,
+        'sample_weight': 'balance_weight' # Key change: Apply class balancing via sample weights
+    }
+    fit_args_s3 = {
+        'presets': 'medium_quality_faster_train',
+        'time_limit': 300,
+        'excluded_model_types': ['KNN', 'NN_TORCH', 'FASTAI']
+    }
+
+    ag_model_s3 = AutoGluonSklearnWrapper(
+        label='TX_FRAUD',
+        predictor_args=predictor_args_s3,
+        fit_args=fit_args_s3
+    )
+    
+    print("Training AutoGluon model for Strategy 3...")
+    start_time = time.time()
+    # Note: The AutoGluonSklearnWrapper is set up to handle 'balance_weight' in predictor_args.
+    # No explicit sample_weight array needs to be passed to .fit() for this case.
+    ag_model_s3.fit(X_train, y_train)
+    end_time = time.time()
+    print(f"Strategy 3 model training finished in {end_time - start_time:.2f} seconds.")
+
+    # Performance Reporting
+    print("\n--- Performance on Test Set (Strategy 3) ---")
+    leaderboard_s3 = ag_model_s3.predictor.leaderboard(X_test, extra_metrics=['average_precision', 'f1', 'roc_auc'], silent=True)
+    display(leaderboard_s3)
+    
+    best_model_name_s3 = leaderboard_s3.iloc[0]['model']
+    pr_auc_s3_test = leaderboard_s3.iloc[0]['score_test'] # average_precision
+    roc_auc_s3_test = leaderboard_s3.iloc[0]['roc_auc']
+    f1_default_s3_test = leaderboard_s3.iloc[0]['f1']
+    print(f"Best model: {best_model_name_s3}")
+    print(f"Test PR-AUC (average_precision, from leaderboard): {pr_auc_s3_test:.4f}")
+    print(f"Test ROC-AUC (from leaderboard): {roc_auc_s3_test:.4f}")
+    print(f"Test F1 Score at default 0.5 threshold (from leaderboard): {f1_default_s3_test:.4f}")
+
+    # Probability Calibration Check & Threshold Tuning
+    print("\n--- Probability Calibration & Threshold Tuning (Strategy 3) ---")
+    pred_proba_tuning_s3 = ag_model_s3.predict_proba(X_tuning)[:, 1]
+
+    plt.figure(figsize=(8, 6))
+    disp = CalibrationDisplay.from_predictions(y_tuning, pred_proba_tuning_s3, n_bins=10, name=best_model_name_s3)
+    plt.title("Calibration Curve (Strategy 3: Cost-Sensitive)")
+    plt.grid(True)
+    plt.show()
+    calibration_note_s3 = "Review plot"
+
+    best_f1_s3 = 0
+    best_threshold_s3 = 0.5
+    thresholds = np.arange(0.01, 1.0, 0.01)
+    f1_scores_tuning_s3 = []
+    for threshold in thresholds:
+        y_pred_tuning_thresholded_s3 = (pred_proba_tuning_s3 >= threshold).astype(int)
+        current_f1 = f1_score(y_tuning, y_pred_tuning_thresholded_s3)
+        f1_scores_tuning_s3.append(current_f1)
+        if current_f1 > best_f1_s3:
+            best_f1_s3 = current_f1
+            best_threshold_s3 = threshold
+            
+    print(f"Best F1-score on tuning set: {best_f1_s3:.4f} at threshold {best_threshold_s3:.2f}")
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(thresholds, f1_scores_tuning_s3, marker='.')
+    plt.axvline(best_threshold_s3, color='r', linestyle='--', label=f'Best Threshold: {best_threshold_s3:.2f}')
+    plt.title('F1 Score vs. Threshold on Tuning Set (Strategy 3)')
+    plt.xlabel('Threshold')
+    plt.ylabel('F1 Score')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    pred_proba_test_s3 = ag_model_s3.predict_proba(X_test)[:, 1]
+    y_pred_test_optimal_s3 = (pred_proba_test_s3 >= best_threshold_s3).astype(int)
+    f1_optimal_s3_test = f1_score(y_test, y_pred_test_optimal_s3)
+    print(f"F1-score on test set with optimal threshold ({best_threshold_s3:.2f}): {f1_optimal_s3_test:.4f}")
+
+    print("\nClassification Report on Test Set (Optimal Threshold, Strategy 3):")
+    print(classification_report(y_test, y_pred_test_optimal_s3, target_names=['Legitimate', 'Fraud']))
+
+    comparison_results.append({
+        "Strategy": strategy_name_3,
+        "Test ROC-AUC": roc_auc_s3_test,
+        "Test PR-AUC": pr_auc_s3_test,
+        "Test F1 (Optimized)": f1_optimal_s3_test,
+        "Optimized Threshold": best_threshold_s3,
+        "Calibration Note": calibration_note_s3
+    })
+```
+
+## Strategy 4: Use Class-Based Resampling (SMOTE Example)
+
+**Concept Recap:** Modify the training data distribution to be more balanced. We will use SMOTE (Synthetic Minority Over-sampling Technique) to oversample the minority (fraud) class in the training set. The tuning and test sets remain unchanged. Probability calibration after training on resampled data is a critical concern.
+
+### Data Preparation (Resampling `df_train_ft`)
+
+```{python}
+#| label: model-strategy4-resampling-prep
+
+if X_train.empty:
+    print("Skipping data preparation for Strategy 4: Training data is empty.")
+    X_train_smote, y_train_smote = pd.DataFrame(), pd.Series(dtype='int') # Placeholders
+else:
+    print("\n--- Preparing Resampled Training Data (SMOTE) for Strategy 4 ---")
+    
+    # Initialize SMOTE. We can adjust the sampling_strategy if needed.
+    # Default is to oversample the minority class to have an equal number of samples as the majority class.
+    smote = SMOTE(random_state=2025, k_neighbors=5) # k_neighbors should be less than minority samples
+    
+    # Check minority class size for k_neighbors
+    minority_class_count = y_train.value_counts().min()
+    if minority_class_count <= smote.k_neighbors:
+        # Adjust k_neighbors if it's too large for the number of minority samples
+        # This is a common issue with very small minority classes in CV folds or small datasets.
+        new_k = max(1, minority_class_count - 1)
+        print(f"Warning: Original k_neighbors ({smote.k_neighbors}) for SMOTE is >= minority samples ({minority_class_count}). Adjusting k_neighbors to {new_k}.")
+        smote.k_neighbors = new_k
+
+    if minority_class_count > 1: # SMOTE needs at least 2 samples in the minority class to operate with k_neighbors=1
+        start_time_smote = time.time()
+        try:
+            X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
+            end_time_smote = time.time()
+            print(f"SMOTE applied in {end_time_smote - start_time_smote:.2f} seconds.")
+            print(f"Resampled training data shape: {X_train_smote.shape}, Resampled target distribution:\n{y_train_smote.value_counts(normalize=True)}")
+        except ValueError as e:
+            print(f"Error during SMOTE: {e}. This can happen if minority class count is too low for k_neighbors.")
+            print("Skipping SMOTE, proceeding with original data for this strategy as a fallback.")
+            X_train_smote, y_train_smote = X_train.copy(), y_train.copy()
+    else:
+        print("Minority class count is too low for SMOTE. Skipping resampling for Strategy 4.")
+        X_train_smote, y_train_smote = X_train.copy(), y_train.copy() # Fallback to original
+
+```
+
+### AutoGluon Implementation (Strategy 4 - with SMOTE)
+
+```{python}
+#| label: model-strategy4-resampling-train
+
+if X_train.empty or X_train_smote.empty:
+    print("Skipping Strategy 4 training: Training data (original or resampled) is empty.")
+else:
+    print("\n--- Strategy 4: Class-Based Resampling (SMOTE) ---")
+    strategy_name_4 = "4. Resampling (SMOTE)"
+    model_folder_s4 = "Lab04_ag_models_s4_smote"
+    remove_ag_folder(model_folder_s4)
+
+    predictor_args_s4 = {
+        'problem_type': 'binary',
+        'eval_metric': 'average_precision', # Continue using PR-AUC
+    }
+
+    ag_model_s4 = AutoGluonSklearnWrapper(
+        label='TX_FRAUD',
+        predictor_args=predictor_args_s4,
+        fit_args=fit_args_s4
+    )
+    
+    print("Training AutoGluon model for Strategy 4 on SMOTE data...")
+    start_time = time.time()
+    ag_model_s4.fit(X_train_smote, y_train_smote) # Train on resampled data
+    end_time = time.time()
+    print(f"Strategy 4 model training finished in {end_time - start_time:.2f} seconds.")
+
+    # Performance Reporting
+    print("\n--- Performance on Test Set (Strategy 4) ---")
+    leaderboard_s4 = ag_model_s4.predictor.leaderboard(X_test, extra_metrics=['average_precision', 'f1', 'roc_auc'], silent=True)
+    display(leaderboard_s4)
+    
+    best_model_name_s4 = leaderboard_s4.iloc[0]['model']
+    pr_auc_s4_test = leaderboard_s4.iloc[0]['score_test'] # average_precision
+    roc_auc_s4_test = leaderboard_s4.iloc[0]['roc_auc']
+    f1_default_s4_test = leaderboard_s4.iloc[0]['f1']
+    print(f"Best model: {best_model_name_s4}")
+    print(f"Test PR-AUC (average_precision, from leaderboard): {pr_auc_s4_test:.4f}")
+    print(f"Test ROC-AUC (from leaderboard): {roc_auc_s4_test:.4f}")
+    print(f"Test F1 Score at default 0.5 threshold (from leaderboard): {f1_default_s4_test:.4f}")
+
+    # Probability Calibration Check & Threshold Tuning
+    print("\n--- Probability Calibration & Threshold Tuning (Strategy 4) ---")
+    pred_proba_tuning_s4_raw = ag_model_s4.predict_proba(X_tuning)[:, 1]
+
+    plt.figure(figsize=(10, 7))
+    disp_raw = CalibrationDisplay.from_predictions(y_tuning, pred_proba_tuning_s4_raw, n_bins=10, name=f"{best_model_name_s4} (Raw from SMOTE)")
+    plt.title("Calibration Curve (Strategy 4: SMOTE - Before Calibration)")
+    plt.grid(True)
+    plt.show()
+    calibration_note_s4 = "Review plot; SMOTE often miscalibrates. Explicit calibration likely needed."
+    print(calibration_note_s4)
+
+    # Explicit Probability Calibration Step for resampled model (if needed)
+    # We use CalibratedClassifierCV on the *predictions* of the AutoGluon model.
+    # This requires fitting CalibratedClassifierCV on the tuning set predictions.
+    # For simplicity with AutoGluon, which is an ensemble, we might re-calibrate its best model's predictions.
+    # However, AutoGluon's internal models might already have some calibration.
+    # Let's demonstrate a conceptual recalibration on the tuning set predictions if they look off.
+    
+    print("\nAttempting to calibrate probabilities from SMOTE model using Isotonic Regression on tuning set...")
+    # We fit the calibrator on the tuning set's raw probabilities and tuning labels
+    isotonic_calibrator = CalibratedClassifierCV(estimator=None, method='isotonic', cv='prefit') 
+    # To use CalibratedClassifierCV with a pre-fitted model's probabilities, we need to wrap it slightly
+    # or directly use IsotonicRegression from sklearn.calibration.
+    # For this lab, we'll use a simpler path: fit IsotonicRegression on (pred_proba_tuning_s4_raw, y_tuning)
+    # and then apply it to pred_proba_tuning_s4_raw for threshold tuning, and pred_proba_test_s4_raw for final eval.
+    
+    from sklearn.calibration import IsotonicRegression
+    iso_reg = IsotonicRegression(out_of_bounds='clip') # y_min=0, y_max=1 by default for clip
+    # Fit on tuning probabilities and tuning labels
+    # Reshape pred_proba_tuning_s4_raw if it gives shape warning for IsotonicRegression
+    try:
+        iso_reg.fit(pred_proba_tuning_s4_raw, y_tuning)
+        pred_proba_tuning_s4_calibrated = iso_reg.predict(pred_proba_tuning_s4_raw)
+        print("Probabilities calibrated using Isotonic Regression for threshold tuning.")
+        
+        # Display calibrated curve
+        plt.figure(figsize=(10, 7))
+        disp_calib = CalibrationDisplay.from_predictions(y_tuning, pred_proba_tuning_s4_calibrated, n_bins=10, name=f"{best_model_name_s4} (Calibrated)")
+        plt.title("Calibration Curve (Strategy 4: SMOTE - After Isotonic Calibration)")
+        plt.grid(True)
+        plt.show()
+        calibration_note_s4 += " Applied Isotonic."
+        # Use calibrated probabilities for threshold tuning
+        pred_proba_tuning_for_thresholding = pred_proba_tuning_s4_calibrated
+    except Exception as e:
+        print(f"Could not fit IsotonicRegression (e.g. if all probabilities are same): {e}. Using raw probabilities.")
+        pred_proba_tuning_for_thresholding = pred_proba_tuning_s4_raw # Fallback to raw if calibration failed
+
+
+    best_f1_s4 = 0
+    best_threshold_s4 = 0.5
+    thresholds = np.arange(0.01, 1.0, 0.01)
+    f1_scores_tuning_s4 = []
+    for threshold in thresholds:
+        y_pred_tuning_thresholded_s4 = (pred_proba_tuning_for_thresholding >= threshold).astype(int)
+        current_f1 = f1_score(y_tuning, y_pred_tuning_thresholded_s4)
+        f1_scores_tuning_s4.append(current_f1)
+        if current_f1 > best_f1_s4:
+            best_f1_s4 = current_f1
+            best_threshold_s4 = threshold
+            
+    print(f"Best F1-score on (potentially calibrated) tuning probabilities: {best_f1_s4:.4f} at threshold {best_threshold_s4:.2f}")
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(thresholds, f1_scores_tuning_s4, marker='.')
+    plt.axvline(best_threshold_s4, color='r', linestyle='--', label=f'Best Threshold: {best_threshold_s4:.2f}')
+    plt.title('F1 Score vs. Threshold on (Potentially Calibrated) Tuning Probs (Strategy 4)')
+    plt.xlabel('Threshold')
+    plt.ylabel('F1 Score')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    # Evaluate on test set with optimal threshold, using calibrated probabilities for test set too
+    pred_proba_test_s4_raw = ag_model_s4.predict_proba(X_test)[:, 1]
+    if 'iso_reg' in locals() and hasattr(iso_reg, 'is_fitted_') and iso_reg.is_fitted_ : # Check if calibrator was successfully fitted
+         pred_proba_test_s4_final = iso_reg.predict(pred_proba_test_s4_raw)
+    else:
+         pred_proba_test_s4_final = pred_proba_test_s4_raw # Fallback to raw if calibration failed
+         
+    y_pred_test_optimal_s4 = (pred_proba_test_s4_final >= best_threshold_s4).astype(int)
+    f1_optimal_s4_test = f1_score(y_test, y_pred_test_optimal_s4)
+    print(f"F1-score on test set with optimal threshold ({best_threshold_s4:.2f}) using (potentially calibrated) probabilities: {f1_optimal_s4_test:.4f}")
+
+    print("\nClassification Report on Test Set (Optimal Threshold, Strategy 4):")
+    print(classification_report(y_test, y_pred_test_optimal_s4, target_names=['Legitimate', 'Fraud']))
+
+    comparison_results.append({
+        "Strategy": strategy_name_4,
+        "Test ROC-AUC": roc_auc_s4_test,
+        "Test PR-AUC": pr_auc_s4_test,
+        "Test F1 (Optimized)": f1_optimal_s4_test,
+        "Optimized Threshold": best_threshold_s4,
+        "Calibration Note": calibration_note_s4
+    })
+```
+
+### Comparison Table
+
+After running all strategies, we compile the results into a summary table to compare their effectiveness.
+
+```{python}
+#| label: tbl-comparison-summary
+#| tbl-cap: "Comparison of Imbalance Handling Strategies"
+
+if comparison_results:
+    summary_df = pd.DataFrame(comparison_results)
+    display(summary_df)
+else:
+    print("No modeling results to display in the summary table.")
+
+```
+
+
+### Interpreting the Best Model
+
+Assuming one of the strategies yielded a satisfactory model (e.g., based on a combination of PR-AUC, F1-score, and good calibration), we can perform further interpretability analysis on it. Let's assume `ag_model_s2` (PR-AUC metric) was chosen as a good candidate for this example. You should replace this with your actual best model.
+
+```{python}
+#| label: interpret-best-model
+
+# Choose the model to interpret (e.g., ag_model_s2)
+# For the lab, let's assume Strategy 2 (PR-AUC) gave a good balance.
+# If another model was better, replace ag_model_s2 accordingly.
+if 'ag_model_s2' in locals() and ag_model_s2.is_fitted_:
+    chosen_model_to_interpret = ag_model_s2
+    chosen_model_name = "Strategy 2 Model (PR-AUC)"
+    print(f"--- Interpreting: {chosen_model_name} ---")
+
+    # 1. Permutation Feature Importance
+    print("\nCalculating Permutation Feature Importance...")
+    # AutoGluon's feature_importance is essentially permutation importance
+    # It needs the data to have the label column for evaluation during permutation.
+    X_test_with_label = X_test.copy()
+    X_test_with_label['TX_FRAUD'] = y_test
+    
+    pfi = chosen_model_to_interpret.predictor.feature_importance(data=X_test_with_label, silent=True)
+    pfi_df = pfi.reset_index().rename(columns={'index': 'feature', 0: 'importance'})
+    print("Permutation Feature Importance (Test Set):")
+    display(pfi_df)
+
+    # 2. Partial Dependence Plots (PDP) / Individual Conditional Expectation (ICE)
+    print("\nGenerating PDP/ICE plots...")
+    # We need a sample of the data for PDP/ICE for performance reasons
+    # Background data for PDP should not have the target column
+    pdp_ice_sample_data = X_train.sample(min(1000, len(X_train)), random_state=2025) 
+    
+    # Get features from the predictor if possible
+    try:
+        pdp_features = chosen_model_to_interpret.predictor.features()
+        # Select top N features by PFI for PDP/ICE if too many features
+        if len(pdp_features) > 5:
+            pdp_features_to_plot = pfi_df['feature'].head(5).tolist()
+        else:
+            pdp_features_to_plot = pdp_features
+            
+        # Get categorical features metadata
+        cat_features_metadata = chosen_model_to_interpret.predictor.feature_metadata
+        categorical_for_pdp = [f for f in pdp_features_to_plot if cat_features_metadata.get_feature_type_raw(f) == 'category']
+
+        for feature_to_plot in pdp_features_to_plot:
+            print(f"PDP/ICE for feature: {feature_to_plot}")
+            try:
+                PartialDependenceDisplay.from_estimator(
+                    chosen_model_to_interpret, 
+                    pdp_ice_sample_data, 
+                    features=[feature_to_plot],
+                    categorical_features=[feature_to_plot] if feature_to_plot in categorical_for_pdp else None,
+                    kind='both', # PDP and ICE
+                    subsample=50, # Number of ICE lines
+                    random_state=2025,
+                    pd_line_kw={"color": "red", "linestyle": "--", "linewidth": 2},
+                    ice_lines_kw={"color": "lightblue", "alpha": 0.5, "linewidth": 0.5}
+                )
+                plt.title(f"PDP and ICE for {feature_to_plot} ({chosen_model_name})")
+                plt.grid(True)
+                plt.show()
+            except Exception as e_pdp:
+                print(f"  Could not generate PDP/ICE for {feature_to_plot}: {e_pdp}")
+
+    except Exception as e:
+        print(f"Could not generate PDP/ICE plots: {e}")
+
+    # 3. SHAP Values (using a sample of test data for SHAP summary)
+    print("\nCalculating SHAP values for summary plots...")
+    # SHAP can be slow on large datasets, so use a sample of X_test
+    if len(X_test) > 200:
+        shap_sample_data = X_test.sample(200, random_state=2025)
+    else:
+        shap_sample_data = X_test
+
+    try:
+        # Create a SHAP explainer. For tree models, TreeExplainer is efficient.
+        # AutoGluon often ensembles, so KernelExplainer might be more general but slower.
+        # If the best model is a single tree-based one (e.g. LGBM, CatBoost), we can try to optimize.
+        # For the wrapper, a generic lambda explainer is safer.
+        shap_explainer = shap.Explainer(lambda x: chosen_model_to_interpret.predict_proba(x)[:,1], shap_sample_data)
+        shap_values_summary = shap_explainer(shap_sample_data)
+
+        print("SHAP Summary Plot (Beeswarm):")
+        shap.summary_plot(shap_values_summary, shap_sample_data, plot_type="beeswarm", show=False)
+        plt.title(f"SHAP Beeswarm Plot ({chosen_model_name})")
+        plt.show()
+
+        print("SHAP Feature Importance (Bar Plot based on mean absolute SHAP values):")
+        shap.summary_plot(shap_values_summary, shap_sample_data, plot_type="bar", show=False)
+        plt.title(f"SHAP Bar Plot ({chosen_model_name})")
+        plt.show()
+
+        # SHAP Dependence Plots for top features
+        print("SHAP Dependence Plots:")
+        # Get top features from PFI to plot SHAP dependence
+        top_shap_features = pfi_df['feature'].head(min(5, len(pfi_df))).tolist()
+        for feature_shap_dep in top_shap_features:
+            if feature_shap_dep in shap_sample_data.columns:
+                print(f"  Dependence plot for {feature_shap_dep}")
+                shap.dependence_plot(feature_shap_dep, shap_values_summary.values, shap_sample_data, show=False)
+                plt.title(f"SHAP Dependence Plot for {feature_shap_dep} ({chosen_model_name})")
+                plt.show()
+            else:
+                 print(f"  Skipping SHAP dependence for {feature_shap_dep} as it is not in shap_sample_data columns (this should not happen if PFI features are correct).")
+
+    except Exception as e_shap:
+        print(f"Could not generate SHAP plots: {e_shap}")
+else:
+    print("Chosen model for interpretation (ag_model_s2) not available or not fitted. Skipping interpretation.")
+
+```
+
+---
+
+# Key Conclusions and Recommendations
+
+This lab explored several common strategies for handling class imbalance in the context of credit card fraud detection. We compared:
+1.  Doing nothing (training on original imbalanced data).
+2.  Using a class-sensitive evaluation metric (PR-AUC / `average_precision`) for model selection.
+3.  Employing cost-sensitive learning via `sample_weight='balance_weight'`.
+4.  Applying class-based resampling (SMOTE) to the training data.
+
+**Hypothetical Findings & Discussion:**
+
+(Students should replace this with their actual findings based on the lab execution. The following is a general discussion based on common outcomes in such scenarios.)
+
+*   **Strategy 1 (Do Nothing with ROC-AUC):** While simple, relying solely on ROC-AUC for model selection in highly imbalanced scenarios can be misleading. The model might achieve a high ROC-AUC by correctly classifying the vast majority of legitimate transactions, yet still perform poorly on identifying fraud. The F1-score after threshold tuning is the more critical indicator here.
+
+*   **Strategy 2 (PR-AUC Metric):** Using PR-AUC (`average_precision`) as the primary evaluation metric often leads to models that are better at distinguishing the minority (fraud) class. This is because PR-AUC focuses on the trade-off between precision and recall, which is more relevant when the number of true negatives is very large. The F1-score obtained after threshold tuning on this model is usually a strong contender.
+
+*   **Strategy 3 (Cost-Sensitive Learning with `balance_weight`):** This approach directly tells the learning algorithm to pay more attention to the minority class by up-weighting its instances. It often yields good performance, comparable to or sometimes better than just using PR-AUC, especially in terms of recall for the fraud class. The `balance_weight` option in AutoGluon is a convenient way to implement this.
+
+*   **Strategy 4 (SMOTE Resampling):** While resampling techniques like SMOTE aim to provide the model with more minority examples, they come with significant caveats:
+    *   **Probability Calibration:** SMOTE (and other oversampling methods) almost invariably destroy the probability calibration of a model. The predicted probabilities from a model trained on SMOTE-d data often do not reflect the true likelihoods on the original, imbalanced data distribution. This was likely observed in the calibration plot for Strategy 4 before explicit recalibration.
+    *   **Recalibration Necessity:** If using resampled data, an explicit probability recalibration step (e.g., using Isotonic Regression or Platt Scaling, often via `sklearn.calibration.CalibratedClassifierCV` applied to the *predictions* of the already trained model) is crucial if reliable probabilities are needed.
+    *   **Overfitting Risk:** SMOTE can sometimes lead to overfitting if the synthetic samples do not generalize well or if the underlying minority class patterns are not distinct enough.
+    *   **Performance:** In practice, despite the intuitive appeal, resampling methods like SMOTE do not always outperform strategies like using PR-AUC and/or cost-sensitive learning, especially when considering the F1-score on an unadulterated test set and the reliability of probabilities.
+
+**General Recommendations:**
+
+1.  **Prioritize Class-Sensitive Metrics:** For imbalanced fraud detection, always prioritize metrics like PR-AUC (`average_precision`), F1-score, precision, and recall over simple accuracy or ROC-AUC for final model assessment and selection. AutoGluon makes it easy to specify `eval_metric='average_precision'`.
+
+2.  **Consider Cost-Sensitive Learning:** Techniques like `sample_weight='balance_weight'` are often effective and less prone to distorting probabilities compared to aggressive resampling. This is generally a robust approach.
+
+3.  **Be Cautious with Resampling:** Do not manipulate training data (e.g., via RUS, ROS, SMOTE) solely because it is imbalanced or "difficult to model." Such methods can introduce their own problems:
+    *   **Loss of Information (RUS):** Undersampling can discard valuable data from the majority class.
+    *   **Overfitting (ROS, SMOTE):** Oversampling can lead to models that are too specific to the (potentially synthetic) minority samples.
+    *   **Destroyed Probability Calibration:** This is a major issue, especially if the model outputs are used for more than just binary classification (e.g., risk scoring, estimating expected fraud rates).
+    *   **Increased Complexity:** More complex pipelines can be harder to maintain, understand, and debug.
+
+4.  **Probability Calibration is Crucial:** If the model's predicted probabilities are used for downstream tasks like estimating 'expected frauds per day,' 'expected fraud value,' or for any decision-making that relies on the magnitude of the probability (not just its rank), then accurate probability calibration is essential. Models trained on heavily resampled data often require a separate, explicit calibration step on a non-resampled tuning set.
+
+5.  **Threshold Tuning is Key:** Regardless of the imbalance strategy, always use a dedicated tuning set to find an optimal decision threshold that aligns with business objectives (e.g., maximizing F1-score, or balancing precision and recall according to specific cost considerations).
+
+6.  **Domain Knowledge & Feature Engineering:** Robust feature engineering, informed by domain knowledge, often provides more significant and reliable gains than complex imbalance handling techniques alone.
+
+**Further Reading:**
+
+For a deeper dive into practical fraud detection and the nuances of handling imbalanced data, students are highly encouraged to explore the **Fraud Detection Handbook**: [https://fraud-detection-handbook.github.io/fraud-detection-handbook/Foreword.html](https://fraud-detection-handbook.github.io/fraud-detection-handbook/Foreword.html)
+
+This handbook provides extensive insights into various aspects of fraud detection, including data preprocessing, feature engineering, model selection, and dealing with challenges like class imbalance and concept drift.
