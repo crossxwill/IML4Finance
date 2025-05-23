@@ -15,16 +15,16 @@ execute:
     message: false
 ---
 
-# Preamble / Setup
+# Overview
 
-This lab explores techniques for handling imbalanced datasets, a common challenge in fraud detection. We will compare different data handling tools, perform feature engineering, and evaluate various modeling strategies.
+The lab explores Python libraries for handling large datasets, feature engineering, and strategies for addressing imbalanced data in fraud detection.
 
-## Import Python Libraries and Helper Functions
+# Import Python Libraries and Helper Functions
 
-The first chunk includes all necessary Python libraries and helper functions/classes that will be used throughout this lab. These helpers are adapted from previous labs.
+The chunks below include all necessary Python libraries and helper functions/classes that will be used in the lab. The helpers are adapted from previous labs.
 
 ```{python}
-#| label: setup-imports-helpers
+#| label: setup-imports
 
 # System utilities
 import os
@@ -37,59 +37,36 @@ import psutil
 import glob # For finding files
 
 # Data manipulation and visualization
-import pandas as pd
 import numpy as np
-import polars as pl
+import pandas as pd
+import polars as pl # Polars is a fast DataFrame library
 import matplotlib.pyplot as plt
-import seaborn as sns
 from IPython.display import display # Explicit import for display
-from scipy import stats, special
-from sklearn.feature_selection import mutual_info_classif
 import re
 import duckdb
 
 # Machine learning - scikit-learn
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
-from sklearn.metrics import roc_auc_score, average_precision_score, f1_score, confusion_matrix, classification_report, make_scorer
-from sklearn.preprocessing import LabelEncoder, StandardScaler, OneHotEncoder, FunctionTransformer
-from sklearn.impute import SimpleImputer
+from sklearn.metrics import roc_auc_score, average_precision_score, f1_score, classification_report
 from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
 from sklearn.inspection import PartialDependenceDisplay
 from sklearn.calibration import CalibratedClassifierCV, CalibrationDisplay # Added for probability calibration
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
-from sklearn.utils.validation import check_is_fitted, check_X_y, check_array # check_array might be needed for custom transformers
+from sklearn.utils.validation import check_is_fitted
 from sklearn import set_config
 
 # Imbalanced-learn for resampling
 from imblearn.pipeline import Pipeline as ImbPipeline
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.over_sampling import RandomOverSampler, SMOTE
-from imblearn.combine import SMOTEENN, SMOTETomek
-
 
 # Specialized ML libraries
 from autogluon.tabular import TabularPredictor, TabularDataset
-from autogluon.common.features.feature_metadata import FeatureMetadata # For monotonic constraints
-import shap
 from ydata_profiling import ProfileReport
-
-# Counterfactual Explanations (optional, install if needed: pip install dice-ml)
-try:
-    import dice_ml
-    from dice_ml.utils import helpers # Helper functions for DICE
-except ImportError:
-    print("""
-    
-    dice-ml not found. You need to update your conda env by running:
-    
-    conda activate env_AutoGluon_202502 # Or your specific environment name
-    conda install -c conda-forge dice-ml
-    
-    """)
-    dice_ml = None
-    
+import shap
+import dice_ml
+from dice_ml.utils import helpers 
 import torch
 
 # Settings
@@ -98,6 +75,10 @@ pd.set_option('display.max_rows', 100)
 warnings.filterwarnings('ignore', category=FutureWarning) # Suppress specific FutureWarnings
 warnings.filterwarnings('ignore', category=UserWarning) # Suppress some UserWarnings from libraries
 set_config(transform_output="pandas") # Set sklearn output to pandas
+```
+
+```{python}
+#| label: setup-helpers
 
 # Helper Functions and Classes
 
@@ -362,21 +343,6 @@ def generate_eda_report(df: pd.DataFrame | pl.DataFrame, title: str, output_path
 # Initialize global seed
 global_set_seed(2025)
 
-print("Libraries, helper functions, and AutoGluonSklearnWrapper class defined.")
-# Attempt to get library versions
-try: print(f"Polars version: {pl.__version__}")
-except Exception: print("Polars version: Not available")
-try: print(f"Pandas version: {pd.__version__}")
-except Exception: print("Pandas version: Not available")
-try: print(f"DuckDB version: {duckdb.__version__}")
-except Exception: print("DuckDB version: Not available")
-try: print(f"AutoGluon version: {TabularPredictor().version}")
-except Exception: print("AutoGluon version: Not available")
-try: print(f"SHAP version: {shap.__version__}")
-except Exception: print("SHAP version: Not available")
-try: from imblearn import __version__ as imb_version; print(f"Imbalanced-learn version: {imb_version}")
-except Exception: print("Imbalanced-learn version: Not available")
-
 ```
 
 # Introduction to Credit Card Fraud Detection
@@ -385,33 +351,47 @@ Credit card fraud is a significant concern for financial institutions, merchants
 
 ## Card-present frauds
 
-Card-present (CP) fraud occurs when a transaction is made using a physical credit card that has been lost, stolen, counterfeited, or intercepted. In these scenarios, the legitimate cardholder is unaware of the fraudulent use until they notice unauthorized transactions on their statement or are alerted by their bank. The key characteristic of CP fraud is that the physical card is used at the point of sale (e.g., a retail store, restaurant).
+- Card-present (CP) fraud occurs when a transaction is made using a **physical credit card** that has been lost, stolen, counterfeited, or intercepted.
+- The legitimate cardholder is typically unaware of the fraudulent use until they notice unauthorized transactions on their statement or are alerted by their bank.
+- The key characteristic of CP fraud is that the **physical card** is used at the point of sale (e.g., a retail store, restaurant).
 
 ## Card-not-present frauds
 
-Card-not-present (CNP) fraud involves the use of credit card information (card number, expiry date, CVV) without the physical card being present. This type of fraud is common in online purchases, phone orders, or mail orders. Fraudsters may obtain card details through data breaches, phishing scams, or malware. CNP fraud has become increasingly prevalent with the growth of e-commerce.
+- Card-not-present (CNP) fraud occurs when credit card information (such as card number, expiry date, CVV) is used **without** the physical card being present.
+- This type of fraud is common in online purchases.
+- Fraudsters may obtain card details through data breaches, phishing scams, or malware.
+- CNP fraud has become increasingly prevalent with the growth of e-commerce.
 
 ## Credit Card Fraud Detection Systems (CCFDS)
 
-Credit Card Fraud Detection Systems (CCFDS) are sophisticated systems designed to identify and prevent fraudulent transactions in real-time or near real-time. When a transaction occurs, the CCFDS analyzes various data points associated with the transaction (e.g., amount, location, time, customer behavior, terminal ID) using predefined rules and machine learning models.
-
-If a transaction is flagged as potentially fraudulent, the system can take several actions:
-*   **Block the transaction:** The payment is declined immediately.
-*   **Alert the cardholder:** The system may send an SMS or app notification to the cardholder to verify the transaction.
-*   **Refer to human investigators:** The transaction is passed to a team of fraud analysts who review the case, potentially contact the cardholder, and make a final decision.
-
-The goal of a CCFDS is to minimize financial losses due to fraud while also minimizing the number of legitimate transactions that are incorrectly blocked (false positives), as this can lead to customer dissatisfaction.
+- **Credit Card Fraud Detection Systems (CCFDS)** are designed to identify and prevent fraudulent transactions in real-time or near real-time by analyzing transaction data (e.g., amount, location, time, customer behavior, terminal ID) using rules and machine learning models.
+- If a transaction is flagged as potentially fraudulent, the system may block the transaction, alert the cardholder (e.g., via SMS or app notification), or refer the case to human fraud analysts for review.
+- The primary goal of a CCFDS is to minimize financial losses from fraud while also reducing false positives (legitimate transactions incorrectly blocked), which can negatively impact customer experience.
+- CCFDS must balance detection accuracy, speed, and customer convenience, often operating under strict latency requirements to avoid disrupting normal transaction flows.
 
 ## Class Imbalance in Fraud Detection
 
-A fundamental challenge in developing fraud detection classifiers is the severe class imbalance in the data. Fraudulent transactions are, by nature, rare events compared to the vast number of legitimate transactions. For instance, fraud might account for less than 1% (or even 0.1%) of all transactions.
+Class imbalance occurs when one class (e.g., fraudulent transactions) is significantly smaller compared to another class (e.g., legitimate transactions).
 
-This imbalance has several implications:
-*   **Model Bias:** Standard classification algorithms may become biased towards the majority class (legitimate transactions) and perform poorly in identifying the minority class (fraudulent transactions). The model might achieve high overall accuracy by simply predicting all transactions as legitimate.
-*   **Metric Selection:** Traditional accuracy is not a good measure of performance. Metrics like Precision, Recall, F1-score, and the Area Under the Precision-Recall Curve (PR-AUC) are more informative for imbalanced datasets.
-*   **Data Sampling:** The scarcity of fraud examples makes it difficult for models to learn the patterns distinguishing fraudulent activities.
+**Characteristics in Fraud Data**
 
-Addressing class imbalance is a critical step in building an effective fraud detection model.
+-   Rarity of Fraud: Fraudulent transactions are typically a small fraction (often $< 1\%$, sometimes $< 0.1\%$) of total transactions.
+
+-   Standard accuracy can be misleading; a naive model predicting "no fraud" for all transactions might appear highly accurate.
+
+**Impact of Sample Size**
+
+The difficulty of modeling depends on both the imbalance ratio (IR) and the absolute number of samples in the minority class (fraud) .
+
+A higher imbalance ratio (IR) indicates greater class imbalance: $$IR = \frac{\text{Number of samples in majority class}}{\text{Number of samples in minority class}}$$
+
+The absolute number of samples in the minority class (fraud) also matters:
+
+-   **Large Datasets:** A low fraud rate (e.g., 0.1\%) in a large dataset (e.g., 100 million transactions) can still yield enough fraud examples (e.g., 100,000) for effective modeling training and testing.
+
+-   **Small Datasets:** The same low fraud rate in a small dataset (e.g., 1,000 transactions) results in too few fraud examples (e.g., 1) for reliable model training and testing.
+
+The lab assumes large imbalanced data sets.
 
 # Dealing with Class Imbalance
 
@@ -419,59 +399,121 @@ Several strategies can be employed to mitigate the effects of class imbalance wh
 
 ## Do-Nothing Approach
 
-**Rationale:** One school of thought suggests that class imbalance is an inherent characteristic of the data and reflects the true state of the world. Modifying the data (e.g., through resampling) might distort this reality. Many modern machine learning estimators, especially tree-based ensembles (like LightGBM, XGBoost, CatBoost) and neural networks, can be relatively insensitive to moderate class imbalance if configured and evaluated appropriately.
+**Rationale:**
+
+- Class imbalance is an inherent characteristic of the data that reflects the true state of the world
+- Modifying the data (e.g., through resampling) distorts reality
+- Many modern machine learning estimators are relatively insensitive to class imbalance if configured and evaluated appropriately, including:
+    - Tree-based ensembles (LightGBM, XGBoost, CatBoost)
+    - Neural networks
+- Under the do-nothing approach, class imbalance is a "key feature" of the data rather than a bug/defect that needs to be fixed.
+
+**Process:** 
+
+1. Train multiple estimators on the original, imbalanced dataset. 
+
+2. Select the best model with the lowest **log loss** on the test set.
+
+3. Check for proper probability calibration (i.e., how well aligned are the predicted probabilities to the observed frequencies of fraud). Calibrate the predicted probabilities if needed.
+
+4. Select the optimal decision threshold.
+
+5. Evaluate the performance of the calibrated model and the optimal threshold on the test set.
+
+## Class-Sensitive Evaluation Approach
+
+**Rationale:**
+
+-   In fraud detection, the positive class (fraud) is much rarer than the negative class (legitimate transactions).
+-   **ROC-AUC** is a very common binary classification metric (the gold standard), but it can be misleading when classes are highly imbalanced:
+    -   ROC plots the True Positive Rate (also known as TPR, recall, sensitivity, or gain) against the False Positive Rate (FPR) at different decision thresholds.
+    -   The FPR denominator is huge (all legitimate transactions), so even many false positives may not increase the FPR much, making the ROC-AUC look artificially good.
+    -   Because there are so many legitimate transactions, even a model that misses many frauds (low recall) can still achieve a decent ROC-AUC if the model correctly classifies most legitimate transactions (true negatives).
+-   **Precision-Recall (PR) curves** are more informative for imbalanced data:
+    -   The PR curve plots Precision (the proportion of predicted frauds that are actually fraud) against Recall (the proportion of actual frauds that are detected).
+    -   A model with high precision is desirable to minimize false alarms (which flag legitimate transactions as fraud).
+-   **PR-AUC** (Area Under the PR Curve, also called Average Precision or AP) summarizes the PR curve in a single number.
+    -   A high PR-AUC means the model can achieve both high precision and high recall for fraud.
+    -   PR-AUC removes the effect of true negatives and focuses on the positive class (fraud).
 
 **Process:**
-1.  Train the model on the original, imbalanced dataset.
-2.  **Crucially, check for proper probability calibration.** The predicted probabilities should accurately reflect the true likelihood of fraud. If probabilities are miscalibrated, the model's output may not be reliable for risk scoring or decision-making based on thresholds.
-3.  Use a separate tuning (or validation) set to select an optimal classification threshold. This threshold is typically chosen to maximize a business-relevant metric, often the F1-score, which balances precision and recall. ROC AUC can be used as an initial evaluation metric for model selection during training if it's deemed appropriate for the initial model ranking, but PR AUC is generally preferred for final model selection in highly imbalanced scenarios.
 
-## Use PR-AUC Instead of ROC-AUC
+1. Train multiple estimators on the original, imbalanced dataset. 
 
-**Rationale:** When dealing with severe class imbalance, metrics like ROC-AUC can be misleading. ROC-AUC considers the True Positive Rate (TPR) and False Positive Rate (FPR). In highly imbalanced datasets, the number of true negatives (correctly identified legitimate transactions) is vast. Even a small percentage increase in false positives can lead to a large absolute number of misclassified legitimate transactions, but the FPR (FP / (FP + TN)) might remain low due to the enormous TN count, thus artificially inflating the ROC-AUC.
+2. Select the best model with the highest **average precision** on the test set.
 
-Precision-Recall AUC (PR-AUC), often referred to as "average_precision" in libraries like scikit-learn and AutoGluon, is generally a more informative metric. It focuses on the performance on the positive (minority) class and is less sensitive to the large number of true negatives.
+3. Check for proper probability calibration. Calibrate the predicted probabilities if needed.
 
-**Process:**
-1.  Train the model on the original, imbalanced dataset.
-2.  During model training and selection (e.g., hyperparameter tuning in AutoGluon), use PR-AUC (`average_precision`) as the primary evaluation metric to guide the selection of the best model architecture and hyperparameters.
-3.  After training, check the probability calibration of the selected model.
-4.  Use a tuning set to choose an optimal classification threshold that maximizes a business-relevant metric like the F1-score.
+4. Select the optimal decision threshold.
 
-## Use Cost-Sensitive Learning
+5. Evaluate the performance of the calibrated model and the optimal threshold on the test set.
 
-**Rationale:** Cost-sensitive learning assigns different costs to misclassification errors. In fraud detection, failing to detect a fraudulent transaction (a false negative) is typically much more costly than incorrectly flagging a legitimate transaction as fraudulent (a false positive). By incorporating these costs, the model is encouraged to pay more attention to the minority (fraud) class.
+## Cost-Sensitive Learning Approach
 
-**Implementation Detail:** One common way to implement cost-sensitive learning is by using sample weights. Instances from the minority class are given higher weights, and instances from the majority class are given lower weights. The weights are inversely proportional to class frequencies. AutoGluon provides a convenient way to do this by setting the `sample_weight` argument in `predictor_args` to the special string `"balance_weight"`. This automatically calculates and applies appropriate weights to balance the classes during training.
+**Rationale:** 
 
-**Process:**
-1.  Train the model on the original, imbalanced dataset.
-2.  Specify `sample_weight="balance_weight"` in the `predictor_args` for `AutoGluonSklearnWrapper` (or equivalent functionality in other libraries).
-3.  Use a class-sensitive metric like PR-AUC (`average_precision`) for model selection during training.
-4.  Check the probability calibration of the trained model.
-5.  Use a tuning set to choose the optimal classification threshold based on the F1-score or another relevant business metric.
+- Cost-sensitive learning assigns different costs to misclassification errors.
+- In fraud detection, failing to detect a fraudulent transaction (a false negative) is typically much more costly than incorrectly flagging a legitimate transaction as fraudulent (a false positive).
+- By incorporating these costs, the model is encouraged to pay more attention to the minority (fraud) class.
 
-## Use Class-Based Resampling
+**Implementation Detail:** 
 
-**Rationale:** Class-based resampling techniques modify the training data's distribution to create a more balanced dataset. This is done *only* on the training data; the tuning and test sets should remain in their original, imbalanced state to reflect real-world conditions.
+- One common way to implement cost-sensitive learning is by using sample weights:
+    - Instances from the minority class are given higher weights.
+    - Instances from the majority class are given lower weights.
+    - The weights are inversely proportional to class frequencies.
+- AutoGluon provides a convenient way to do this:
+    - Set the `sample_weight` argument in `predictor_args` to the special string `"balance_weight"`.
+    - This automatically calculates and applies appropriate weights to balance the classes during training.
+- Sample weights are not needed for the test set evaluation.
 
-**Common Resampling Schemes:**
-*   **Random Undersampling (RUS):** Randomly remove instances from the majority class until the dataset is more balanced. This can lead to loss of information from the majority class.
-*   **Random Oversampling (ROS):** Randomly duplicate instances from the minority class. This can lead to overfitting on the minority class examples.
-*   **SMOTE (Synthetic Minority Over-sampling Technique):** Creates synthetic samples for the minority class by interpolating between existing minority instances. This can help to create a more diverse set of minority examples than simple oversampling.
-*   **Hybrid Methods:** Combine oversampling and undersampling. For example:
-    *   First, apply SMOTE to oversample the minority class.
-    *   Then, apply random undersampling to the (now larger) majority class or cleaning techniques like Edited Nearest Neighbours (ENN) or Tomek Links to remove noisy or borderline instances. Examples include `SMOTEENN` and `SMOTETomek` from the `imbalanced-learn` library.
+**Process:** 
 
-**Process:**
-1.  Apply the chosen resampling technique **only to the training dataset**.
-2.  Train the model on the resampled training data. Use a class-sensitive metric like PR-AUC for model selection if desired.
-3.  **Crucially, check for probability calibration after training.** Resampling, especially oversampling methods like SMOTE, can severely distort the model's predicted probabilities, making them unreliable.
-4.  If probabilities are miscalibrated (which is common after resampling):
-    *   Use the tuning set and a calibration method (e.g., Isotonic Regression or Platt Scaling, often via `sklearn.calibration.CalibratedClassifierCV` applied to the *predictions* of the already trained model) to recalibrate the probabilities.
-5.  After calibration (if needed), use the tuning set to choose the optimal classification threshold based on the F1-score or another relevant business metric, using the (recalibrated) probabilities.
+1. Specify sample weights for each observation in the training set. This can be done by setting the `sample_weight` argument in `predictor_args` to `"balance_weight"`.
 
-It's important to note that while resampling can sometimes improve certain metrics, it can also obscure the model's true performance on the original data distribution and often harms probability calibration, which is critical if probability scores themselves are used for decision-making beyond simple classification.
+2. Train multiple estimators on the original, imbalanced dataset.
+
+3. Select the best model with the highest **average precision** on the test set.
+
+4. Check for proper probability calibration. Calibrate the predicted probabilities if needed.
+
+5. Select the optimal decision threshold.
+
+6. Evaluate the performance of the calibrated model and the optimal threshold on the test set.
+
+## Resampling Approach
+
+**Rationale:** 
+
+- Class-based resampling techniques modify the training data's class distribution to create a more balanced dataset.
+- Resampling is performed **only** on the training data
+- The calibration and test sets remain in their original, imbalanced form to reflect reality (i.e., fraud is rare).
+
+**Common Resampling Schemes:** 
+
+- **Random Undersampling (RUS):** Randomly remove instances from the majority class until the dataset is more balanced. This can lead to loss of information from the majority class. However, the scheme substantially reduces the dataset size, which can be beneficial for training speed and memory usage.
+
+- **Random Oversampling (ROS):** Randomly duplicate instances from the minority class. This can lead to overfitting on the minority class examples.
+
+- **SMOTE (Synthetic Minority Over-sampling Technique):** Creates synthetic samples for the minority class by interpolating between actual minority instances. This can help to create a more diverse set of minority examples than simple oversampling.
+
+- **Hybrid Methods:** Combine oversampling and undersampling. For example:
+    - First, apply SMOTE to generate synthetic samples for the minority class.
+    - Then, apply random undersampling to the majority class.
+
+**Process:** 
+
+1. Use RUS, ROS, SMOTE, or hybrid to create a **balanced** training set.
+
+2. Train multiple estimators on the **balanced** training set.
+
+3. Select the best model with the highest **average precision** on the test set (which is imbalanced).
+
+4. Check for proper probability calibration. Calibrate the predicted probabilities if needed.
+
+5. Select the optimal decision threshold.
+
+6. Evaluate the performance of the calibrated model and the optimal threshold on the test set (which is imbalanced).
 
 # Dealing with Big Data: Pandas vs. Polars vs. DuckDB
 
@@ -606,9 +648,7 @@ else:
 
 ```
 
-**Interpreting Performance:**
-*   **Time:** Lower is better. Polars and DuckDB are often significantly faster than pandas for I/O-bound operations on Parquet files, especially when reading multiple files.
-*   **Memory:** Lower is better. Polars' memory representation is generally more efficient than pandas'. DuckDB processes data efficiently, potentially out-of-core, but converting to a Polars/Pandas DataFrame for inspection will incur memory costs for that DataFrame.
+**Interpreting Performance:** \* **Time:** Lower is better. Polars and DuckDB are often significantly faster than pandas for I/O-bound operations on Parquet files, especially when reading multiple files. \* **Memory:** Lower is better. Polars' memory representation is generally more efficient than pandas'. DuckDB processes data efficiently, potentially out-of-core, but converting to a Polars/Pandas DataFrame for inspection will incur memory costs for that DataFrame.
 
 ## Tool Selection
 
@@ -655,9 +695,9 @@ else:
 
 To evaluate our fraud detection models robustly, we need to split the data into training, tuning (validation), and test sets. Since transaction data is time-ordered, a random split is inappropriate as it can lead to data leakage (information from the future unintentionally influencing past predictions). Instead, we will perform a chronological split based on the `TX_DATETIME` column.
 
-*   `df_train`: Transactions between 2018-04-01 (inclusive) and 2018-07-31 (inclusive).
-*   `df_tuning`: Transactions between 2018-08-01 (inclusive) and 2018-08-31 (inclusive).
-*   `df_test`: Transactions between 2018-09-01 (inclusive) and 2018-09-30 (inclusive).
+-   `df_train`: Transactions between 2018-04-01 (inclusive) and 2018-07-31 (inclusive).
+-   `df_tuning`: Transactions between 2018-08-01 (inclusive) and 2018-08-31 (inclusive).
+-   `df_test`: Transactions between 2018-09-01 (inclusive) and 2018-09-30 (inclusive).
 
 ```{python}
 #| label: data-splitting-polars
@@ -722,7 +762,7 @@ else:
 
 ```
 
---- 
+------------------------------------------------------------------------
 
 # EDA: Comparing `df_train` and `df_tuning`
 
@@ -770,14 +810,9 @@ else:
 
 ```
 
-**Review Points for EDA Reports:**
-*   **Distribution Shifts:** Are there noticeable changes in the distributions of key features like `TX_AMOUNT` between `df_train` and `df_tuning`?
-*   **Fraud Rate:** Is the `TX_FRAUD` rate consistent across the two datasets? Significant changes could indicate that the nature of fraud is evolving.
-*   **Missing Values:** Check for changes in patterns of missing data.
-*   **Cardinality:** For categorical features, observe if new categories appear in `df_tuning` that were not present in `df_train`.
+**Review Points for EDA Reports:** \* **Distribution Shifts:** Are there noticeable changes in the distributions of key features like `TX_AMOUNT` between `df_train` and `df_tuning`? \* **Fraud Rate:** Is the `TX_FRAUD` rate consistent across the two datasets? Significant changes could indicate that the nature of fraud is evolving. \* **Missing Values:** Check for changes in patterns of missing data. \* **Cardinality:** For categorical features, observe if new categories appear in `df_tuning` that were not present in `df_train`.
 
 Any significant discrepancies should be noted as they might impact modeling choices or suggest the need for more adaptive modeling techniques.
-
 
 # Feature Engineering (using Polars)
 
@@ -787,10 +822,10 @@ Feature engineering is a critical step in building effective machine learning mo
 
 When performing feature engineering, it's best practice to encapsulate the transformation logic within pipelines (e.g., using scikit-learn's `Pipeline` and `FunctionTransformer` or custom transformers). This offers several advantages:
 
-*   **Consistency:** Ensures that the same transformations are applied to training, tuning, and test datasets, preventing discrepancies.
-*   **Reproducibility:** Makes the feature engineering process clear and easy to reproduce.
-*   **Preventing Data Leakage:** Pipelines help manage the flow of data, especially when transformations depend on statistics calculated from the training set (e.g., mean imputation, scaling). Applying transformations correctly within a pipeline ensures that information from tuning/test sets does not leak into the training process.
-*   **Deployment:** A saved pipeline can be easily deployed to process new, unseen data in a production environment.
+-   **Consistency:** Ensures that the same transformations are applied to training, tuning, and test datasets, preventing discrepancies.
+-   **Reproducibility:** Makes the feature engineering process clear and easy to reproduce.
+-   **Preventing Data Leakage:** Pipelines help manage the flow of data, especially when transformations depend on statistics calculated from the training set (e.g., mean imputation, scaling). Applying transformations correctly within a pipeline ensures that information from tuning/test sets does not leak into the training process.
+-   **Deployment:** A saved pipeline can be easily deployed to process new, unseen data in a production environment.
 
 In this section, we will define functions that perform feature engineering using Polars expressions. These functions will then be wrapped using `sklearn.preprocessing.FunctionTransformer` to be included in a scikit-learn pipeline. This approach allows us to leverage Polars' performance for the transformations while maintaining compatibility with the scikit-learn ecosystem for modeling.
 
@@ -823,7 +858,7 @@ def fe_is_weekend(df: pl.DataFrame) -> pl.DataFrame:
 
 ### Function 2: `is_night`
 
-This feature indicates if a transaction occurred during the night (defined as hour <= 6).
+This feature indicates if a transaction occurred during the night (defined as hour \<= 6).
 
 ```{python}
 #| label: feature-is-night
@@ -949,8 +984,7 @@ def fe_terminal_risk(df: pl.DataFrame, delay_period_days: int = 7, window_sizes_
     df_with_features = df_with_features.with_columns(fill_expressions)
     
     # Drop the temporary fraud count columns
-    columns_to_drop = [f"TX_FRAUD_FRAUD_{window_size}DAY_WINDOW" for window_size in window_sizes_in_days]
-    df_with_features = df_with_features.drop(columns_to_drop)
+    df_with_features = df_with_features.drop([f"TX_FRAUD_FRAUD_{window_size}DAY_WINDOW" for window_size in window_sizes_in_days])
     
     return df_with_features
 ```
@@ -1038,9 +1072,9 @@ print(f"\nPotential engineered feature names (example from df_train_ft): {engine
 
 After applying feature engineering, it's good practice to perform another round of EDA on the enhanced training dataset (`df_train_ft`). This helps to:
 
-*   Understand the distributions of the newly created features.
-*   Check for any unexpected values or relationships that might have arisen from the transformations.
-*   Verify that the new features seem plausible and potentially informative for fraud detection.
+-   Understand the distributions of the newly created features.
+-   Check for any unexpected values or relationships that might have arisen from the transformations.
+-   Verify that the new features seem plausible and potentially informative for fraud detection.
 
 Again, we will generate an HTML report using `ydata-profiling`.
 
@@ -1059,22 +1093,15 @@ else:
 
 ```
 
-**Review Points for Enhanced EDA Report:**
-*   **New Feature Distributions:** Examine histograms and summary statistics for features like `CUSTOMER_ID_NB_TX_1DAY_WINDOW`, `TERMINAL_ID_RISK_7DAY_WINDOW`, etc. Are the ranges sensible?
-*   **Correlations:** Check correlations between new features and the `TX_FRAUD` target, and also among the new features themselves (multicollinearity).
-*   **Missing Values:** Confirm that `fill_null(0)` in our feature engineering functions handled NaNs as expected, especially for the rolling window features at the beginning of a customer's or terminal's history.
+**Review Points for Enhanced EDA Report:** \* **New Feature Distributions:** Examine histograms and summary statistics for features like `CUSTOMER_ID_NB_TX_1DAY_WINDOW`, `TERMINAL_ID_RISK_7DAY_WINDOW`, etc. Are the ranges sensible? \* **Correlations:** Check correlations between new features and the `TX_FRAUD` target, and also among the new features themselves (multicollinearity). \* **Missing Values:** Confirm that `fill_null(0)` in our feature engineering functions handled NaNs as expected, especially for the rolling window features at the beginning of a customer's or terminal's history.
 
---- 
+------------------------------------------------------------------------
 
 # Modeling and Evaluation: Comparing Imbalance Strategies
 
 In this section, we will implement and compare the different strategies for handling class imbalance discussed in Section 2. We will use the feature-engineered datasets (`df_train_ft`, `df_tuning_ft`, `df_test_ft`). For all strategies, our target variable is `TX_FRAUD`.
 
-Key modeling choices:
-*   We will use the `AutoGluonSklearnWrapper` for training.
-*   We will primarily use `average_precision` (PR-AUC) as the `eval_metric` for AutoGluon, as it's more robust for imbalanced fraud data. For the "Do Nothing" approach, we might start with `roc_auc` but will also closely monitor `average_precision`.
-*   Threshold tuning for F1-score will be performed on the `df_tuning_ft` set.
-*   Final F1-score will be reported on the `df_test_ft` set using the optimized threshold.
+Key modeling choices: \* We will use the `AutoGluonSklearnWrapper` for training. \* We will primarily use `average_precision` (PR-AUC) as the `eval_metric` for AutoGluon, as it's more robust for imbalanced fraud data. For the "Do Nothing" approach, we might start with `roc_auc` but will also closely monitor `average_precision`. \* Threshold tuning for F1-score will be performed on the `df_tuning_ft` set. \* Final F1-score will be reported on the `df_test_ft` set using the optimized threshold.
 
 Let's define the features to be used for modeling. These will be the original `TX_AMOUNT` plus all the engineered features. We exclude IDs, raw datetime, and the target variable itself from the feature set `X`.
 
@@ -1268,11 +1295,7 @@ else:
 
 Precision-Recall AUC (PR-AUC), often referred to as "average_precision" in libraries like scikit-learn and AutoGluon, is generally a more informative metric. It focuses on the performance on the positive (minority) class and is less sensitive to the large number of true negatives.
 
-**Process:**
-1.  Train the model on the original, imbalanced dataset.
-2.  During model training and selection (e.g., hyperparameter tuning in AutoGluon), use PR-AUC (`average_precision`) as the primary evaluation metric to guide the selection of the best model architecture and hyperparameters.
-3.  After training, check the probability calibration of the selected model.
-4.  Use a tuning set to choose an optimal classification threshold that maximizes a business-relevant metric like the F1-score.
+**Process:** 1. Train the model on the original, imbalanced dataset. 2. During model training and selection (e.g., hyperparameter tuning in AutoGluon), use PR-AUC (`average_precision`) as the primary evaluation metric to guide the selection of the best model architecture and hyperparameters. 3. After training, check the probability calibration of the selected model. 4. Use a tuning set to choose an optimal classification threshold that maximizes a business-relevant metric like the F1-score.
 
 ### AutoGluon Implementation (Strategy 2)
 
@@ -1360,6 +1383,7 @@ else:
     plt.grid(True)
     plt.show()
 
+    # Evaluate on test set with optimal threshold
     pred_proba_test_s2 = ag_model_s2.predict_proba(X_test)[:, 1]
     y_pred_test_optimal_s2 = (pred_proba_test_s2 >= best_threshold_s2).astype(int)
     f1_optimal_s2_test = f1_score(y_test, y_pred_test_optimal_s2)
@@ -1400,6 +1424,7 @@ else:
         'eval_metric': 'average_precision',
         'path': model_folder_s3,
         'sample_weight': 'balance_weight' # Key change: Apply class balancing via sample weights
+
     }
     fit_args_s3 = {
         'presets': 'medium_quality_faster_train',
@@ -1470,6 +1495,7 @@ else:
     plt.grid(True)
     plt.show()
 
+    # Evaluate on test set with optimal threshold
     pred_proba_test_s3 = ag_model_s3.predict_proba(X_test)[:, 1]
     y_pred_test_optimal_s3 = (pred_proba_test_s3 >= best_threshold_s3).astype(int)
     f1_optimal_s3_test = f1_score(y_test, y_pred_test_optimal_s3)
@@ -1691,7 +1717,6 @@ else:
 
 ```
 
-
 ### Interpreting the Best Model
 
 Assuming one of the strategies yielded a satisfactory model (e.g., based on a combination of PR-AUC, F1-score, and good calibration), we can perform further interpretability analysis on it. Let's assume `ag_model_s2` (PR-AUC metric) was chosen as a good candidate for this example. You should replace this with your actual best model.
@@ -1807,31 +1832,28 @@ else:
 
 ```
 
----
+------------------------------------------------------------------------
 
 # Key Conclusions and Recommendations
 
-This lab explored several common strategies for handling class imbalance in the context of credit card fraud detection. We compared:
-1.  Doing nothing (training on original imbalanced data).
-2.  Using a class-sensitive evaluation metric (PR-AUC / `average_precision`) for model selection.
-3.  Employing cost-sensitive learning via `sample_weight='balance_weight'`.
-4.  Applying class-based resampling (SMOTE) to the training data.
+This lab explored several common strategies for handling class imbalance in the context of credit card fraud detection. We compared: 1. Doing nothing (training on original imbalanced data). 2. Using a class-sensitive evaluation metric (PR-AUC / `average_precision`) for model selection. 3. Employing cost-sensitive learning via `sample_weight='balance_weight'`. 4. Applying class-based resampling (SMOTE) to the training data.
 
 **Hypothetical Findings & Discussion:**
 
 (Students should replace this with their actual findings based on the lab execution. The following is a general discussion based on common outcomes in such scenarios.)
 
-*   **Strategy 1 (Do Nothing with ROC-AUC):** While simple, relying solely on ROC-AUC for model selection in highly imbalanced scenarios can be misleading. The model might achieve a high ROC-AUC by correctly classifying the vast majority of legitimate transactions, yet still perform poorly on identifying fraud. The F1-score after threshold tuning is the more critical indicator here.
+-   **Strategy 1 (Do Nothing with ROC-AUC):** While simple, relying solely on ROC-AUC for model selection in highly imbalanced scenarios can be misleading. The model might achieve a high ROC-AUC by correctly classifying the vast majority of legitimate transactions, yet still perform poorly on identifying fraud. The F1-score after threshold tuning is the more critical indicator here.
 
-*   **Strategy 2 (PR-AUC Metric):** Using PR-AUC (`average_precision`) as the primary evaluation metric often leads to models that are better at distinguishing the minority (fraud) class. This is because PR-AUC focuses on the trade-off between precision and recall, which is more relevant when the number of true negatives is very large. The F1-score obtained after threshold tuning on this model is usually a strong contender.
+-   **Strategy 2 (PR-AUC Metric):** Using PR-AUC (`average_precision`) as the primary evaluation metric often leads to models that are better at distinguishing the minority (fraud) class. This is because PR-AUC focuses on the trade-off between precision and recall, which is more relevant when the number of true negatives is very large. The F1-score obtained after threshold tuning on this model is usually a strong contender.
 
-*   **Strategy 3 (Cost-Sensitive Learning with `balance_weight`):** This approach directly tells the learning algorithm to pay more attention to the minority class by up-weighting its instances. It often yields good performance, comparable to or sometimes better than just using PR-AUC, especially in terms of recall for the fraud class. The `balance_weight` option in AutoGluon is a convenient way to implement this.
+-   **Strategy 3 (Cost-Sensitive Learning with `balance_weight`):** This approach directly tells the learning algorithm to pay more attention to the minority class by up-weighting its instances. It often yields good performance, comparable to or sometimes better than just using PR-AUC, especially in terms of recall for the fraud class. The `balance_weight` option in AutoGluon is a convenient way to implement this.
 
-*   **Strategy 4 (SMOTE Resampling):** While resampling techniques like SMOTE aim to provide the model with more minority examples, they come with significant caveats:
-    *   **Probability Calibration:** SMOTE (and other oversampling methods) almost invariably destroy the probability calibration of a model. The predicted probabilities from a model trained on SMOTE-d data often do not reflect the true likelihoods on the original, imbalanced data distribution. This was likely observed in the calibration plot for Strategy 4 before explicit recalibration.
-    *   **Recalibration Necessity:** If using resampled data, an explicit probability recalibration step (e.g., using Isotonic Regression or Platt Scaling, often via `sklearn.calibration.CalibratedClassifierCV` applied to the *predictions* of the already trained model) is crucial if reliable probabilities are needed.
-    *   **Overfitting Risk:** SMOTE can sometimes lead to overfitting if the synthetic samples do not generalize well or if the underlying minority class patterns are not distinct enough.
-    *   **Performance:** In practice, despite the intuitive appeal, resampling methods like SMOTE do not always outperform strategies like using PR-AUC and/or cost-sensitive learning, especially when considering the F1-score on an unadulterated test set and the reliability of probabilities.
+-   **Strategy 4 (SMOTE Resampling):** While resampling techniques like SMOTE aim to provide the model with more minority examples, they come with significant caveats:
+
+    -   **Probability Calibration:** SMOTE (and other oversampling methods) almost invariably destroy the probability calibration of a model. The predicted probabilities from a model trained on SMOTE-d data often do not reflect the true likelihoods on the original, imbalanced data distribution. This was likely observed in the calibration plot for Strategy 4 before explicit recalibration.
+    -   **Recalibration Necessity:** If using resampled data, an explicit probability recalibration step (e.g., using Isotonic Regression or Platt Scaling, often via `sklearn.calibration.CalibratedClassifierCV` applied to the *predictions* of the already trained model) is crucial if reliable probabilities are needed.
+    -   **Overfitting Risk:** SMOTE can sometimes lead to overfitting if the synthetic samples do not generalize well or if the underlying minority class patterns are not distinct enough.
+    -   **Performance:** In practice, despite the intuitive appeal, resampling methods like SMOTE do not always outperform strategies like using PR-AUC and/or cost-sensitive learning, especially when considering the F1-score on an unadulterated test set and the reliability of probabilities.
 
 **General Recommendations:**
 
@@ -1840,10 +1862,11 @@ This lab explored several common strategies for handling class imbalance in the 
 2.  **Consider Cost-Sensitive Learning:** Techniques like `sample_weight='balance_weight'` are often effective and less prone to distorting probabilities compared to aggressive resampling. This is generally a robust approach.
 
 3.  **Be Cautious with Resampling:** Do not manipulate training data (e.g., via RUS, ROS, SMOTE) solely because it is imbalanced or "difficult to model." Such methods can introduce their own problems:
-    *   **Loss of Information (RUS):** Undersampling can discard valuable data from the majority class.
-    *   **Overfitting (ROS, SMOTE):** Oversampling can lead to models that are too specific to the (potentially synthetic) minority samples.
-    *   **Destroyed Probability Calibration:** This is a major issue, especially if the model outputs are used for more than just binary classification (e.g., risk scoring, estimating expected fraud rates).
-    *   **Increased Complexity:** More complex pipelines can be harder to maintain, understand, and debug.
+
+    -   **Loss of Information (RUS):** Undersampling can discard valuable data from the majority class.
+    -   **Overfitting (ROS, SMOTE):** Oversampling can lead to models that are too specific to the (potentially synthetic) minority samples.
+    -   **Destroyed Probability Calibration:** This is a major issue, especially if the model outputs are used for more than just binary classification (e.g., risk scoring, estimating expected fraud rates).
+    -   **Increased Complexity:** More complex pipelines can be harder to maintain, understand, and debug.
 
 4.  **Probability Calibration is Crucial:** If the model's predicted probabilities are used for downstream tasks like estimating 'expected frauds per day,' 'expected fraud value,' or for any decision-making that relies on the magnitude of the probability (not just its rank), then accurate probability calibration is essential. Models trained on heavily resampled data often require a separate, explicit calibration step on a non-resampled tuning set.
 
@@ -1853,6 +1876,6 @@ This lab explored several common strategies for handling class imbalance in the 
 
 **Further Reading:**
 
-For a deeper dive into practical fraud detection and the nuances of handling imbalanced data, students are highly encouraged to explore the **Fraud Detection Handbook**: [https://fraud-detection-handbook.github.io/fraud-detection-handbook/Foreword.html](https://fraud-detection-handbook.github.io/fraud-detection-handbook/Foreword.html)
+For a deeper dive into practical fraud detection and the nuances of handling imbalanced data, students are highly encouraged to explore the **Fraud Detection Handbook**: <https://fraud-detection-handbook.github.io/fraud-detection-handbook/Foreword.html>
 
 This handbook provides extensive insights into various aspects of fraud detection, including data preprocessing, feature engineering, model selection, and dealing with challenges like class imbalance and concept drift.
