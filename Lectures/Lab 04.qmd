@@ -19,7 +19,7 @@ execute:
 
 The lab explores Python libraries for handling large datasets, feature engineering, and strategies for addressing imbalanced data in fraud detection.
 
-# Import Python Libraries and Helper Functions
+# Import Code
 
 The chunks below include all necessary Python libraries and helper functions/classes that will be used in the lab. The helpers are adapted from previous labs.
 
@@ -35,6 +35,7 @@ import time
 import gc
 import psutil
 import glob # For finding files
+import time
 
 # Data manipulation and visualization
 import numpy as np
@@ -345,7 +346,7 @@ global_set_seed(2025)
 
 ```
 
-# Introduction to Credit Card Fraud Detection
+# Credit Card Fraud Detection
 
 Credit card fraud is a significant concern for financial institutions, merchants, and consumers. Understanding the types of fraud and how detection systems operate is crucial for developing effective machine learning models.
 
@@ -452,7 +453,7 @@ Several strategies can be employed to mitigate the effects of class imbalance wh
 
 **Rationale:** 
 
-- Cost-sensitive learning assigns different costs to misclassification errors.
+- Cost-sensitive learning assigns different costs to classification errors.
 - In fraud detection, failing to detect a fraudulent transaction (a false negative) is typically much more costly than incorrectly flagging a legitimate transaction as fraudulent (a false positive).
 - By incorporating these costs, the model is encouraged to pay more attention to the minority (fraud) class.
 
@@ -515,179 +516,225 @@ Several strategies can be employed to mitigate the effects of class imbalance wh
 
 6. Evaluate the performance of the calibrated model and the optimal threshold on the test set (which is imbalanced).
 
-# Dealing with Big Data: Pandas vs. Polars vs. DuckDB
+# Data Prep for Big Data
 
-Credit card transaction data is often characterized by high volume and high velocity (frequency). Datasets can easily grow to millions or even billions of records, making efficient data handling crucial for timely analysis and model development. Traditional tools like pandas, while powerful, can sometimes struggle with very large datasets in terms of speed and memory usage. Newer libraries like Polars and embedded databases like DuckDB offer alternative approaches designed for better performance on larger-than-memory or memory-intensive tasks.
-
-## Context
-
-In this lab, we simulate a scenario with multiple transaction files, representing data that might be collected over time or from different sources. We need to load and combine this data efficiently before proceeding with analysis and modeling.
-
-## Objective
-
-The goal of this section is to compare the performance (speed and memory usage) of pandas, Polars, and DuckDB for a common task: loading multiple Parquet files into a single data structure.
+- Credit card transaction data involves a huge number of records, often millions or even billions, and new data arrives quickly.
+- Handling such large datasets efficiently is essential for fast analysis and model building.
+- Traditional tools like `pandas` can be slow and use a lot of memory with big data.
+- Modern libraries like `polars` and databases like `DuckDB` are designed to work faster and use memory more efficiently, making them better choices for large-scale data tasks.
 
 ## Data Loading
 
-We will load all Parquet files located in the `Data/credit-card-fraud/simulated-data/` directory. This directory is assumed to contain several Parquet files, each potentially representing a batch of transactions.
+We will load all the parquet files found in the `Data/credit-card-fraud/simulated-data/` folder. Each parquet file contains credit card transactions for a single day.
 
-First, let's list the files we'll be working with.
+Some notes about the parquet file format:
+
+- The parquet file format is widely used for tabular data.
+- Parquet is designed for efficient storage (small file sizes) and fast processing (quick reads).
+- Data frame libraries such as `pandas`, `polars`, and `DuckDB` support reading from and writing to parquet files.
+- One drawback of parquet files is the lack of human readability, unlike CSV files.
+- Writing a parquet file to disk is also slower than writing a CSV file.
+
+Read all the parquet files into a `polars` data frame and a `DuckDB` table.
 
 ```{python}
-#| label: list-parquet-files
+#| label: read-parquet-files
 
-# Define the path to the data directory
 data_dir = "../Data/credit-card-fraud/simulated-data/"
 
-# Find all Parquet files in the directory
-# The imports of 'os' and 'glob' are expected to be handled by the setup chunk
-parquet_files = sorted(glob.glob(os.path.join(data_dir, "*.parquet")))
+path_parquet_files = glob.glob(os.path.join(data_dir, "*.parquet"))
 
-if parquet_files:
-    # Get absolute path for printing, helps user verify the location
-    # This assumes 'os' module is available from the setup chunk
-    abs_data_dir_for_print = os.path.abspath(data_dir)
-    print(f"Found {len(parquet_files)} Parquet files in '{abs_data_dir_for_print}':")
-    for f_path in parquet_files:
-        # os.path.basename() will extract the filename
-        print(f" - {os.path.basename(f_path)}")
-else:
-    abs_data_dir_for_print = os.path.abspath(data_dir)
-    print(f"No Parquet files found in directory: {abs_data_dir_for_print}")
+df_fraud = pl.read_parquet(path_parquet_files)
+
+tbl_fraud = duckdb.query(f"""
+    SELECT * 
+    FROM read_parquet({path_parquet_files})
+    """)
 ```
 
-## Performance Comparison
+```{python}
+#| label: num-parquet-files
 
-We will now load all these files using Polars, DuckDB, and pandas, measuring the time taken and estimating memory usage.
+print(len(path_parquet_files)) # Display the number of parquet files found
+```
 
-**Note on Memory Measurement:** Accurately profiling memory usage from within a script can be complex. We'll use the `.estimated_size("mb")` method for Polars DataFrames, `sys.getsizeof()` for a rough estimate of pandas DataFrame objects (which doesn't capture the full memory of underlying NumPy arrays accurately for large DataFrames), and acknowledge DuckDB's efficiency without precise in-script measurement for its internal representation.
+Take a peek at the data.
 
 ```{python}
-#| label: performance-comparison
+#| label: peek-polars
 
-results = []
+display(df_fraud.head(10))
+```
 
-if not parquet_files:
-    print("Cannot proceed with performance comparison: No Parquet files available.")
-else:
-    # 1. Polars
-    print("\n--- Polars Performance ---")
-    start_time_pl = time.time()
-    try:
-        # scan_parquet is lazy, .collect() materializes it
-        df_pl = pl.scan_parquet(os.path.join(data_dir, "*.parquet")).collect()
-        end_time_pl = time.time()
-        time_taken_pl = end_time_pl - start_time_pl
-        memory_pl = df_pl.estimated_size("mb")
-        results.append({"Library": "Polars", "Time (s)": time_taken_pl, "Memory (MB)": memory_pl, "Shape": df_pl.shape})
-        print(f"Polars: Loaded {df_pl.shape} in {time_taken_pl:.4f} seconds. Estimated memory: {memory_pl:.2f} MB.")
-        # Display a sample to verify loading
-        # display(df_pl.head())
-    except Exception as e:
-        print(f"Error loading with Polars: {e}")
-        results.append({"Library": "Polars", "Time (s)": np.nan, "Memory (MB)": np.nan, "Shape": (np.nan,np.nan)})
+```{python}
+#| label: peek-duckdb
 
-    # Clean up to free memory for the next test if df_pl was created
-    if 'df_pl' in locals():
-        del df_pl
-        gc.collect()
+display(tbl_fraud.limit(10))
+```
 
-    # 2. DuckDB
-    print("\n--- DuckDB Performance ---")
-    start_time_ddb = time.time()
-    try:
-        # DuckDB can read multiple parquet files directly into a relation
-        con = duckdb.connect(database=':memory:', read_only=False)
-        # The path for read_parquet needs to be a glob string or list of files
-        # For DuckDB, it might be simpler to use a SQL glob if all files are in one directory
-        duckdb_path_glob = os.path.join(data_dir, '*.parquet') # Glob pattern
-        df_ddb_relation = con.execute(f"SELECT * FROM read_parquet('{duckdb_path_glob}')").pl() # Convert to Polars DataFrame to get shape/memory
-        end_time_ddb = time.time()
-        time_taken_ddb = end_time_ddb - start_time_ddb
-        memory_ddb = df_ddb_relation.estimated_size("mb") # Estimate from Polars DataFrame
-        results.append({"Library": "DuckDB", "Time (s)": time_taken_ddb, "Memory (MB)": memory_ddb, "Shape": df_ddb_relation.shape})
-        print(f"DuckDB: Loaded {df_ddb_relation.shape} in {time_taken_ddb:.4f} seconds. Estimated memory (via Polars conversion): {memory_ddb:.2f} MB.")
-        # display(df_ddb_relation.head())
-        con.close()
-    except Exception as e:
-        print(f"Error loading with DuckDB: {e}")
-        results.append({"Library": "DuckDB", "Time (s)": np.nan, "Memory (MB)": np.nan, "Shape": (np.nan,np.nan)})
+Get column names and data types for both `polars` and `DuckDB`.
 
-    if 'df_ddb_relation' in locals():
-        del df_ddb_relation
-        gc.collect()
+```{python}
+#| label: column-info-polars
 
-    # 3. Pandas
-    print("\n--- Pandas Performance ---")
-    start_time_pd = time.time()
-    try:
-        # Pandas needs to read file by file and then concatenate
-        all_dfs_pd = [pd.read_parquet(f) for f in parquet_files]
-        df_pd = pd.concat(all_dfs_pd, ignore_index=True)
-        end_time_pd = time.time()
-        time_taken_pd = end_time_pd - start_time_pd
-        memory_pd = df_pd.memory_usage(deep=True).sum() / (1024 * 1024) # More accurate for pandas
-        results.append({"Library": "Pandas", "Time (s)": time_taken_pd, "Memory (MB)": memory_pd, "Shape": df_pd.shape})
-        print(f"Pandas: Loaded {df_pd.shape} in {time_taken_pd:.4f} seconds. Estimated memory: {memory_pd:.2f} MB.")
-        # display(df_pd.head())
-    except Exception as e:
-        print(f"Error loading with Pandas: {e}")
-        results.append({"Library": "Pandas", "Time (s)": np.nan, "Memory (MB)": np.nan, "Shape": (np.nan,np.nan)})
+# Get schema as a dictionary
+summary_df = pl.DataFrame({
+    "Column Name": df_fraud.columns,
+    "Data Type": [str(dtype) for dtype in df_fraud.dtypes]
+})
 
-    if 'df_pd' in locals():
-        del df_pd
-        gc.collect()
+display(summary_df)
+```
 
-# Display results in a table
-if results:
-    results_df = pd.DataFrame(results)
-    print("\n--- Performance Summary ---")
-    display(results_df)
-else:
-    print("\nNo performance results to display.")
+```{python}
+#| label: column-info-duckdb
+
+duckdb.sql("""
+    SELECT column_name, column_type
+    FROM
+    (DESCRIBE SELECT * FROM tbl_fraud)
+    """).show()
+```
+
+Read the same parquet files with `pandas` for comparison.
+
+```{python}
+# Read all parquet files into a pandas DataFrame (only .parquet files)
+
+df_fraud_pd = pd.read_parquet(path_parquet_files)
+
+# Display the first few rows
+display(df_fraud_pd.head())
+```
+
+## Compare performance of `polars`, `DuckDB`, and `pandas`
+
+Calculate the fraud rate per CUSTOMER_ID using `polars`, `DuckDB`, and `pandas`. Show the fraud rate only for customers with more than 10 transactions. This will help us compare the performance of these libraries on a common task.
+
+```{python}
+#| label: fraud-rate-polars-complex
+
+start_time = time.time()
+
+fraud_analysis_polars = (
+    df_fraud
+    .group_by(pl.col("CUSTOMER_ID"))
+    .agg(
+        FRAUD_RATE = pl.col("TX_FRAUD").mean(),
+        TOTAL_FRAUDS = pl.col("TX_FRAUD").sum(),
+        AVG_AMOUNT = pl.col("TX_AMOUNT").mean(),
+        STD_AMOUNT = pl.col("TX_AMOUNT").std(),
+        P95_AMOUNT = pl.col("TX_AMOUNT").quantile(0.95),
+        MIN_AMOUNT = pl.col("TX_AMOUNT").min(),
+        MAX_AMOUNT = pl.col("TX_AMOUNT").max(),
+        TX_COUNT = pl.len(),
+        FRAUD_VALUE = (pl.col("TX_AMOUNT") * pl.col("TX_FRAUD")).sum(),
+        FIRST_TX = pl.col("TX_DATETIME").min(),
+        LAST_TX = pl.col("TX_DATETIME").max()
+    )
+    .with_columns(
+        AVG_FRAUD_AMOUNT = (pl.col("FRAUD_VALUE") / pl.col("TX_COUNT")),
+        CUSTOMER_TENURE_DAYS = (pl.col("LAST_TX") - pl.col("FIRST_TX")).dt.total_days()
+    )
+    .filter(pl.col("TX_COUNT") > 10)
+    .sort("FRAUD_RATE", descending=True)
+)
+
+end_time = time.time()
+print(f"Polars fraud analysis completed in {end_time - start_time:.2f} seconds.")
 
 ```
 
-**Interpreting Performance:** \* **Time:** Lower is better. Polars and DuckDB are often significantly faster than pandas for I/O-bound operations on Parquet files, especially when reading multiple files. \* **Memory:** Lower is better. Polars' memory representation is generally more efficient than pandas'. DuckDB processes data efficiently, potentially out-of-core, but converting to a Polars/Pandas DataFrame for inspection will incur memory costs for that DataFrame.
+```{python}
+#| label: print-polars-fraud-rate
 
-## Tool Selection
+display(fraud_analysis_polars.head(10))
+```
 
-Based on typical performance benchmarks for loading and manipulating large tabular datasets, **Polars** often demonstrates significant advantages in both speed and memory efficiency compared to pandas. Its lazy evaluation capabilities (e.g., `scan_parquet`) combined with an expressive API for eager operations make it a strong choice for this lab.
-
-For the subsequent sections of this lab, we will primarily use **Polars** for data manipulation tasks. We will load the data once using Polars and then proceed with splitting and feature engineering.
-
-First, let's reload the data using Polars, as it might have been cleared from memory during the comparison.
 
 ```{python}
-#| label: load-data-polars
+#| label: fraud-rate-duckdb-complex
 
-if not parquet_files:
-    print("Cannot load data with Polars: No Parquet files available.")
-    df_transactions = pl.DataFrame() # Create an empty Polars DataFrame
-else:
-    try:
-        print("Loading all transaction data using Polars...")
-        df_transactions = pl.scan_parquet(os.path.join(data_dir, "*.parquet")).collect()
-        print(f"Successfully loaded data into a Polars DataFrame. Shape: {df_transactions.shape}")
-        # Convert TX_DATETIME to proper datetime objects if not already
-        if 'TX_DATETIME' in df_transactions.columns:
-            if df_transactions['TX_DATETIME'].dtype != pl.Datetime:
-                # Attempt conversion, assuming it's a string or compatible numeric format
-                # Polars is usually good at inferring types from Parquet, but explicit conversion might be needed.
-                try:
-                    df_transactions = df_transactions.with_columns(pl.col("TX_DATETIME").str.to_datetime(strict=False))
-                    print("Converted TX_DATETIME to datetime objects.")
-                except Exception as e:
-                    print(f"Warning: Could not automatically convert TX_DATETIME. Error: {e}. Ensure it's a datetime type for splitting.")
-        else:
-            print("Warning: TX_DATETIME column not found. Data splitting will fail.")
-            
-        # display(df_transactions.head())
-        # print(df_transactions.schema)
+start_time = time.time()
 
-    except Exception as e:
-        print(f"Error loading data with Polars for subsequent steps: {e}")
-        df_transactions = pl.DataFrame() # Ensure df_transactions exists as an empty DF on error
+fraud_analysis_duckdb = duckdb.query("""
+    WITH customer_stats AS (
+        SELECT 
+            CUSTOMER_ID,
+            AVG(TX_FRAUD) AS FRAUD_RATE,
+            SUM(TX_FRAUD) AS TOTAL_FRAUDS,
+            AVG(TX_AMOUNT) AS AVG_AMOUNT,
+            STDDEV(TX_AMOUNT) AS STD_AMOUNT,
+            PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY TX_AMOUNT) AS P95_AMOUNT,
+            MIN(TX_AMOUNT) AS MIN_AMOUNT,
+            MAX(TX_AMOUNT) AS MAX_AMOUNT,
+            COUNT(*) AS TX_COUNT,
+            SUM(TX_AMOUNT * TX_FRAUD) AS FRAUD_VALUE,
+            MIN(TX_DATETIME) AS FIRST_TX,
+            MAX(TX_DATETIME) AS LAST_TX
+        FROM tbl_fraud
+        GROUP BY CUSTOMER_ID
+        HAVING COUNT(*) > 10
+    )
+    SELECT *,
+        FRAUD_VALUE / TX_COUNT AS AVG_FRAUD_AMOUNT,
+        DATE_DIFF('day', FIRST_TX, LAST_TX) AS CUSTOMER_TENURE_DAYS
+    FROM customer_stats
+    ORDER BY FRAUD_RATE DESC
+""")
+
+end_time = time.time()
+print(f"DuckDB fraud analysis completed in {end_time - start_time:.2f} seconds.")
+
+```
+
+```{python}
+#| label: print-duckdb-fraud-rate
+
+display(fraud_analysis_duckdb.limit(10))
+```
+
+```{python}
+#| label: fraud-rate-pandas-complex
+
+start_time = time.time()
+
+df_fraud_pd['FRAUD_VALUE'] = df_fraud_pd['TX_AMOUNT'] * df_fraud_pd['TX_FRAUD']
+
+fraud_analysis_pandas = (
+    df_fraud_pd
+    .groupby("CUSTOMER_ID", sort=False)
+    .agg(
+        FRAUD_RATE=('TX_FRAUD', 'mean'),
+        TOTAL_FRAUDS=('TX_FRAUD', 'sum'),
+        AVG_AMOUNT=('TX_AMOUNT', 'mean'),
+        STD_AMOUNT=('TX_AMOUNT', 'std'),
+        P95_AMOUNT=('TX_AMOUNT', lambda x: x.quantile(0.95)),
+        MIN_AMOUNT=('TX_AMOUNT', 'min'),
+        MAX_AMOUNT=('TX_AMOUNT', 'max'),
+        TX_COUNT=('TX_FRAUD', 'size'),
+        FRAUD_VALUE=('FRAUD_VALUE', 'sum'),
+        FIRST_TX=('TX_DATETIME', 'min'),
+        LAST_TX=('TX_DATETIME', 'max')
+    )
+    .reset_index()
+    .query("TX_COUNT > 10")
+    .assign(
+        AVG_FRAUD_AMOUNT=lambda x: x['FRAUD_VALUE'] / x['TX_COUNT'],
+        CUSTOMER_TENURE_DAYS=lambda x: (x['LAST_TX'] - x['FIRST_TX']).dt.days
+    )
+    .sort_values("FRAUD_RATE", ascending=False)
+)
+
+end_time = time.time()
+print(f"Pandas fraud analysis completed in {end_time - start_time:.2f} seconds.")
+
+```
+
+```{python}
+#| label: print-pandas-fraud-rate
+
+display(fraud_analysis_pandas.head(10))
 
 ```
 
@@ -814,7 +861,7 @@ else:
 
 Any significant discrepancies should be noted as they might impact modeling choices or suggest the need for more adaptive modeling techniques.
 
-# Feature Engineering (using Polars)
+# Feature Engineering
 
 Feature engineering is a critical step in building effective machine learning models. It involves creating new features from existing data that can help the model better capture underlying patterns and improve predictive performance. For fraud detection, time-based features and features capturing customer or terminal behavior over time are often very informative.
 
@@ -1097,7 +1144,7 @@ else:
 
 ------------------------------------------------------------------------
 
-# Modeling and Evaluation: Comparing Imbalance Strategies
+# Modeling and Evaluation
 
 In this section, we will implement and compare the different strategies for handling class imbalance discussed in Section 2. We will use the feature-engineered datasets (`df_train_ft`, `df_tuning_ft`, `df_test_ft`). For all strategies, our target variable is `TX_FRAUD`.
 
