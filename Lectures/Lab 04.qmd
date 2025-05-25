@@ -13,6 +13,7 @@ number-tables: true
 execute:
     warning: false
     message: false
+bibliography: references.bib
 ---
 
 # Overview
@@ -304,42 +305,6 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
             raise ValueError(msg)
 
 
-def generate_eda_report(df: pd.DataFrame | pl.DataFrame, title: str, output_path: str, sample_frac: float = 0.1, random_state: int = 2025):
-    """Generates and saves a ydata-profiling report for a DataFrame (Pandas or Polars)."""
-    print(f"Generating EDA report: {title}...")
-    
-    df_to_profile = df
-    if isinstance(df, pl.DataFrame):
-        if sample_frac < 1.0 and len(df) > 0: # Ensure dataframe is not empty for sampling
-            df_to_profile = df.sample(fraction=sample_frac, seed=random_state).to_pandas()
-        elif len(df) > 0:
-            df_to_profile = df.to_pandas()
-        else:
-            print(f"Skipping EDA for {title} as DataFrame is empty.")
-            return 
-    elif isinstance(df, pd.DataFrame):
-        if sample_frac < 1.0 and len(df) > 0:
-            df_to_profile = df.sample(frac=sample_frac, random_state=random_state)
-        elif len(df) == 0:
-            print(f"Skipping EDA for {title} as DataFrame is empty.")
-            return
-    else:
-        print("Error: DataFrame type not supported for EDA report.")
-        return
-
-    try:
-        profile = ProfileReport(
-            df_to_profile,
-            title=title,
-            progress_bar=True,
-            duplicates=None,
-            interactions=None 
-        )
-        profile.to_file(output_path)
-        print(f"Report saved to: {output_path}")
-    except Exception as e:
-        print(f"Error generating report '{title}': {e}")
-
 
 # Initialize global seed
 global_set_seed(2025)
@@ -538,13 +503,17 @@ Some notes about the parquet file format:
 Read all the parquet files into a `polars` data frame and a `DuckDB` table.
 
 ```{python}
-#| label: read-parquet-files
+#| label: read-parquet-polars
 
 data_dir = "../Data/credit-card-fraud/simulated-data/"
 
 path_parquet_files = glob.glob(os.path.join(data_dir, "*.parquet"))
 
 df_fraud = pl.read_parquet(path_parquet_files)
+```
+
+```{python}
+#| label: read-parquet-duckdb
 
 tbl_fraud = duckdb.query(f"""
     SELECT * 
@@ -607,7 +576,7 @@ df_fraud_pd = pd.read_parquet(path_parquet_files)
 display(df_fraud_pd.head())
 ```
 
-## Compare performance of `polars`, `DuckDB`, and `pandas`
+## Data Frame Benchmarks
 
 Calculate the fraud rate per CUSTOMER_ID using `polars`, `DuckDB`, and `pandas`. Show the fraud rate only for customers with more than 10 transactions. This will help us compare the performance of these libraries on a common task.
 
@@ -620,7 +589,7 @@ fraud_analysis_polars = (
     df_fraud
     .group_by(pl.col("CUSTOMER_ID"))
     .agg(
-        FRAUD_RATE = pl.col("TX_FRAUD").mean(),
+        FRAUD_RATE = pl.col("TX_FRAUD").mean(),  # FRAUD_RATE by CUSTOMER_ID
         TOTAL_FRAUDS = pl.col("TX_FRAUD").sum(),
         AVG_AMOUNT = pl.col("TX_AMOUNT").mean(),
         STD_AMOUNT = pl.col("TX_AMOUNT").std(),
@@ -661,7 +630,7 @@ fraud_analysis_duckdb = duckdb.query("""
     WITH customer_stats AS (
         SELECT 
             CUSTOMER_ID,
-            AVG(TX_FRAUD) AS FRAUD_RATE,
+            AVG(TX_FRAUD) AS FRAUD_RATE,  -- FRAUD_RATE by CUSTOMER_ID
             SUM(TX_FRAUD) AS TOTAL_FRAUDS,
             AVG(TX_AMOUNT) AS AVG_AMOUNT,
             STDDEV(TX_AMOUNT) AS STD_AMOUNT,
@@ -705,7 +674,7 @@ fraud_analysis_pandas = (
     df_fraud_pd
     .groupby("CUSTOMER_ID", sort=False)
     .agg(
-        FRAUD_RATE=('TX_FRAUD', 'mean'),
+        FRAUD_RATE=('TX_FRAUD', 'mean'),  # FRAUD_RATE by CUSTOMER_ID
         TOTAL_FRAUDS=('TX_FRAUD', 'sum'),
         AVG_AMOUNT=('TX_AMOUNT', 'mean'),
         STD_AMOUNT=('TX_AMOUNT', 'std'),
@@ -738,132 +707,88 @@ display(fraud_analysis_pandas.head(10))
 
 ```
 
-## Data Splitting (using Polars)
+## Prequential Data Splitting (using Polars)
 
-To evaluate our fraud detection models robustly, we need to split the data into training, tuning (validation), and test sets. Since transaction data is time-ordered, a random split is inappropriate as it can lead to data leakage (information from the future unintentionally influencing past predictions). Instead, we will perform a chronological split based on the `TX_DATETIME` column.
+To properly evaluate fraud detection models, we split the data **chronologically** into training, tuning (calibration), and test sets based on the `TX_DATETIME` column.
 
--   `df_train`: Transactions between 2018-04-01 (inclusive) and 2018-07-31 (inclusive).
--   `df_tuning`: Transactions between 2018-08-01 (inclusive) and 2018-08-31 (inclusive).
--   `df_test`: Transactions between 2018-09-01 (inclusive) and 2018-09-30 (inclusive).
+Also known as out-of-time validation, prequential data splitting ensures that future transactions do not influence model training or validation.
+
+The lab splits the data into three sets:
+
+-   `df_train`: Transactions before `2018-07-31` (inclusive).
+-   `df_tuning`: Transactions between `2018-08-01` (inclusive) and `2018-08-31` (inclusive).
+-   `df_test`: Transactions after `2018-09-01` (inclusive).
 
 ```{python}
-#| label: data-splitting-polars
+# | label: data-splitting-polars
+# Prequential data splitting using Polars
 
-if df_transactions.is_empty() or 'TX_DATETIME' not in df_transactions.columns or df_transactions['TX_DATETIME'].dtype != pl.Datetime:
-    print("Data splitting cannot proceed: df_transactions is empty, TX_DATETIME is missing, or not a datetime type.")
-    # Create empty dataframes to allow the lab to proceed without crashing
-    df_train = pl.DataFrame()
-    df_tuning = pl.DataFrame()
-    df_test = pl.DataFrame()
-else:
-    print("Splitting data chronologically...")
-    # Define date ranges for splitting
-    # Ensure TX_DATETIME is comparable with Polars datetime literals
-    # Polars datetime literals can be created with pl.datetime(year, month, day, hour, minute, second)
+# df_train: Transactions before 2018-07-31 (inclusive)
+df_train = (
+        df_fraud
+        .filter(pl.col("TX_DATETIME") <= pl.date(2018, 7, 31))
+        )
 
-    # Training set: 2018-04-01 to 2018-07-31
-    train_start_date = pl.datetime(2018, 4, 1)
-    train_end_date = pl.datetime(2018, 7, 31, 23, 59, 59) # Inclusive of the end day
+# df_tuning: Transactions between 2018-08-01 (inclusive) and 2018-08-31 (inclusive)
+df_tuning = (
+        df_fraud
+        .filter((pl.col("TX_DATETIME") >= pl.date(2018, 8, 1))
+        & (pl.col("TX_DATETIME") <= pl.date(2018, 8, 31)))
+        )
 
-    # Tuning set: 2018-08-01 to 2018-08-31
-    tuning_start_date = pl.datetime(2018, 8, 1)
-    tuning_end_date = pl.datetime(2018, 8, 31, 23, 59, 59)
-
-    # Test set: 2018-09-01 to 2018-09-30
-    test_start_date = pl.datetime(2018, 9, 1)
-    test_end_date = pl.datetime(2018, 9, 30, 23, 59, 59)
-
-    df_train = df_transactions.filter(
-        (pl.col("TX_DATETIME") >= train_start_date) & (pl.col("TX_DATETIME") <= train_end_date)
-    )
-
-    df_tuning = df_transactions.filter(
-        (pl.col("TX_DATETIME") >= tuning_start_date) & (pl.col("TX_DATETIME") <= tuning_end_date)
-    )
-
-    df_test = df_transactions.filter(
-        (pl.col("TX_DATETIME") >= test_start_date) & (pl.col("TX_DATETIME") <= test_end_date)
-    )
-
-    print("\n--- Data Split Verification ---")
-    print(f"df_train shape: {df_train.shape}")
-    if not df_train.is_empty():
-        print(f"  df_train TX_DATETIME range: {df_train['TX_DATETIME'].min()} to {df_train['TX_DATETIME'].max()}")
-    else:
-        print("  df_train is empty.")
-
-    print(f"df_tuning shape: {df_tuning.shape}")
-    if not df_tuning.is_empty():
-        print(f"  df_tuning TX_DATETIME range: {df_tuning['TX_DATETIME'].min()} to {df_tuning['TX_DATETIME'].max()}")
-    else:
-        print("  df_tuning is empty.")
-
-    print(f"df_test shape: {df_test.shape}")
-    if not df_test.is_empty():
-        print(f"  df_test TX_DATETIME range: {df_test['TX_DATETIME'].min()} to {df_test['TX_DATETIME'].max()}")
-    else:
-        print("  df_test is empty.")
-
-# For subsequent steps, we might need pandas DataFrames for some tools (like ydata-profiling or AutoGluonWrapper)
-# We will convert them as needed. For now, they are Polars DataFrames.
+# df_test: Transactions after 2018-09-01 (inclusive)
+df_test = (
+        df_fraud
+        .filter(pl.col("TX_DATETIME") >= pl.date(2018, 9, 1))
+        )
 
 ```
 
-------------------------------------------------------------------------
+```{python}
+#| label: sample-sizes
 
-# EDA: Comparing `df_train` and `df_tuning`
+df_train.shape, df_tuning.shape, df_test.shape
+```
 
-Before diving into feature engineering and modeling, it's crucial to understand our datasets. We will perform Exploratory Data Analysis (EDA) to compare the training set (`df_train`) and the tuning set (`df_tuning`). This helps identify any significant differences in distributions, missing values, or data characteristics that might indicate concept drift or issues with our chronological split. Such differences could affect how well a model trained on `df_train` generalizes to `df_tuning` and, consequently, to `df_test`.
+# EDA: Compare `df_train` and `df_tuning`
 
-We use `ydata-profiling` to generate comprehensive EDA reports. Due to the potential size of these reports, we will generate them to HTML files rather than embedding them directly in this document. You are encouraged to open and review these reports.
+Unfortunately, the `ydata_profiling` library does not support polars data frames. The lab will randomly sample 10% of each data frame and then convert to pandas data frames for profiling. This is a workaround to allow us to compare the two datasets using the `ydata_profiling` library.
+
+For the data dictionary, please refer to Chapter 3 of @leborgne2022fraud.
 
 ```{python}
 #| label: eda-train-tuning-comparison
 
-# Ensure df_train and df_tuning are not empty before generating reports
-if 'df_train' in locals() and not df_train.is_empty():
-    generate_eda_report(
-        df=df_train, 
-        title="Training Data Profile (df_train)", 
-        output_path="Lab04_eda_report_df_train_raw.html",
-        sample_frac=0.05 # Sample 5% for faster report generation if data is large
-    )
-else:
-    print("Skipping EDA for df_train as it is empty or not defined.")
+p_frac = 0.1
 
-if 'df_tuning' in locals() and not df_tuning.is_empty():
-    generate_eda_report(
-        df=df_tuning, 
-        title="Tuning Data Profile (df_tuning)", 
-        output_path="Lab04_eda_report_df_tuning_raw.html",
-        sample_frac=0.05 # Sample 5% for faster report generation
-    )
-else:
-    print("Skipping EDA for df_tuning as it is empty or not defined.")
+train_data_profile = ProfileReport(
+            df_train.sample(fraction=p_frac, seed=2025).to_pandas(), 
+            title="Train",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
 
-# Placeholder for ydata-profiling comparison if desired (manual step for students)
-# if 'df_train' in locals() and not df_train.is_empty() and \ 
-#    'df_tuning' in locals() and not df_tuning.is_empty():
-# try:
-#        train_profile = ProfileReport(df_train.sample(fraction=0.05, seed=2025).to_pandas(), title="Train Sample")
-#        tuning_profile = ProfileReport(df_tuning.sample(fraction=0.05, seed=2025).to_pandas(), title="Tuning Sample")
-#        comparison_report = train_profile.compare(tuning_profile)
-#        comparison_report.to_file("Lab04_eda_comparison_train_vs_tuning_raw.html")
-#        print("EDA comparison report between df_train and df_tuning saved.")
-# except Exception as e:
-# print(f"Could not generate comparison report: {e}")
-# else:
-# print("Skipping comparison EDA as one or both dataframes are empty.")
+tuning_data_profile = ProfileReport(
+            df_tuning.sample(fraction=p_frac*2, seed=2025).to_pandas(), 
+            title="Tuning",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
+
+compare_profile = train_data_profile.compare(tuning_data_profile)
+
+compare_profile.to_file("Lab04_eda_compare_train_tuning.html")
 
 ```
 
-**Review Points for EDA Reports:** \* **Distribution Shifts:** Are there noticeable changes in the distributions of key features like `TX_AMOUNT` between `df_train` and `df_tuning`? \* **Fraud Rate:** Is the `TX_FRAUD` rate consistent across the two datasets? Significant changes could indicate that the nature of fraud is evolving. \* **Missing Values:** Check for changes in patterns of missing data. \* **Cardinality:** For categorical features, observe if new categories appear in `df_tuning` that were not present in `df_train`.
-
-Any significant discrepancies should be noted as they might impact modeling choices or suggest the need for more adaptive modeling techniques.
 
 # Feature Engineering
 
-Feature engineering is a critical step in building effective machine learning models. It involves creating new features from existing data that can help the model better capture underlying patterns and improve predictive performance. For fraud detection, time-based features and features capturing customer or terminal behavior over time are often very informative.
+This lab demonstrates how to use pipelines for feature engineering on credit card transaction data. The objective is to create new features that enhance the effectiveness of fraud detection models.
+
+The feature engineering logic is based on Chapter 3 of @leborgne2022fraud, but has been adapted to use Polars expressions for improved speed and efficiency.
 
 ## Importance of Pipelines
 
@@ -876,55 +801,84 @@ When performing feature engineering, it's best practice to encapsulate the trans
 
 In this section, we will define functions that perform feature engineering using Polars expressions. These functions will then be wrapped using `sklearn.preprocessing.FunctionTransformer` to be included in a scikit-learn pipeline. This approach allows us to leverage Polars' performance for the transformations while maintaining compatibility with the scikit-learn ecosystem for modeling.
 
-## Polars Feature Creation Functions
+## Polars Feature Engineering Functions
 
 We will create functions to generate the following features. Each function will take a Polars DataFrame as input and return a Polars DataFrame with the new feature(s) added.
 
-Key columns expected: `TX_DATETIME`, `TX_AMOUNT`, `CUSTOMER_ID`, `TRANSACTION_ID`, `TX_FRAUD`, `TERMINAL_ID`.
+Date-related features:
 
-### Function 1: `is_weekend`
+1. TX_DURING_WEEKEND: whether the transaction occurred on a weekend (1 if weekend, 0 if weekday).
 
-This feature indicates if a transaction occurred on a weekend.
+2. TX_DURING_NIGHT: whether the transaction occurred during the night (1 if night, 0 if day).
+
+Customer features:
+
+3. CUSTOMER_ID_NB_TX_1DAY_WINDOW: number of transactions for the customer in the last 1 day.
+
+4. CUSTOMER_ID_AVG_AMOUNT_1DAY_WINDOW: average transaction amount for the customer in the last 1 day.
+
+5. CUSTOMER_ID_NB_TX_7DAY_WINDOW: number of transactions for the customer in the last 7 days.
+
+6. CUSTOMER_ID_AVG_AMOUNT_7DAY_WINDOW: average transaction amount for the customer in the last 7 days.
+
+7. CUSTOMER_ID_NB_TX_30DAY_WINDOW: number of transactions for the customer in the last 30 days.
+
+8. CUSTOMER_ID_AVG_AMOUNT_30DAY_WINDOW: average transaction amount for the customer in the last 30 days.
+
+Terminal features:
+
+9. TERMINAL_ID_NB_TX_1DAY_WINDOW: number of transactions for the terminal in the last 1 day. Lagged 7 days to account for a lag in fraud labeling.
+
+10. TERMINAL_ID_RISK_1DAY_WINDOW: proportion of **fraudulent** transactions for the terminal in the last 1 day. Lagged 7 days to account for a lag in fraud labeling.
+
+11. TERMINAL_ID_NB_TX_7DAY_WINDOW: number of transactions for the terminal in the last 7 days. Lagged 7 days to account for a lag in fraud labeling.
+
+12. TERMINAL_ID_RISK_7DAY_WINDOW: proportion of **fraudulent** transactions for the terminal in the last 7 days. Lagged 7 days to account for a lag in fraud labeling.
+
+13. TERMINAL_ID_NB_TX_30DAY_WINDOW: number of transactions for the terminal in the last 30 days. Lagged 7 days to account for a lag in fraud labeling.
+
+14. TERMINAL_ID_RISK_30DAY_WINDOW: proportion of **fraudulent** transactions for the terminal in the last 30 days. Lagged 7 days to account for a lag in fraud labeling.
+
+### Weekend Flag
+
+The feature indicates if a transaction occurred on a weekend.
 
 ```{python}
 #| label: feature-is-weekend
-
+#| 
 def fe_is_weekend(df: pl.DataFrame) -> pl.DataFrame:
     """Adds IS_WEEKEND feature (1 if weekend, 0 if weekday)."""
-    # Polars: weekday() returns 1 (Monday) to 7 (Sunday).
-    # So, Saturday (6) or Sunday (7) are weekends.
+    # Polars weekday(): Monday=1, Sunday=7. So, Saturday (6) or Sunday (7) are weekends.
     return df.with_columns(
-        IS_WEEKEND = pl.when(pl.col("TX_DATETIME").dt.weekday() >= 6).then(1).otherwise(0).cast(pl.UInt8)
+        TX_DURING_WEEKEND = (pl.col("TX_DATETIME").dt.weekday()
+                                .is_in([6, 7])
+                                .cast(pl.UInt8))
     )
 
-# Example of applying it (will be part of a pipeline later)
-# if not df_train.is_empty():
-#     df_train_with_weekend = fe_is_weekend(df_train)
-#     display(df_train_with_weekend.select(["TX_DATETIME", "IS_WEEKEND"]).head())
+
 ```
 
-### Function 2: `is_night`
+### Night Flag
 
-This feature indicates if a transaction occurred during the night (defined as hour \<= 6).
+The feature indicates if a transaction occurred during the night (defined as between midnight and 6:00 AM).
 
 ```{python}
 #| label: feature-is-night
 
 def fe_is_night(df: pl.DataFrame) -> pl.DataFrame:
-    """Adds IS_NIGHT feature (1 if hour <= 6, 0 otherwise)."""
+    """Adds IS_NIGHT feature (1 if hour < 6, 0 otherwise)."""
     return df.with_columns(
-        IS_NIGHT = pl.when(pl.col("TX_DATETIME").dt.hour() <= 6).then(1).otherwise(0).cast(pl.UInt8)
+        TX_DURING_NIGHT = pl.when(pl.col("TX_DATETIME").dt.hour() < 6)
+                            .then(1)
+                            .otherwise(0)
+                            .cast(pl.UInt8)
     )
 
-# Example of applying it
-# if not df_train.is_empty():
-#     df_train_with_night = fe_is_night(df_train)
-#     display(df_train_with_night.select(["TX_DATETIME", "IS_NIGHT"]).head())
 ```
 
-### Function 3: Customer Spending Behavior Features
+### Customer Features
 
-These features capture a customer's recent transaction count and average transaction amount over different time windows (1, 7, and 30 days).
+The features describe a customer's recent transaction count and average transaction amount over different rolling time windows (1, 7, and 30 days).
 
 ```{python}
 #| label: feature-customer-spending
@@ -964,7 +918,7 @@ def fe_customer_spending(df: pl.DataFrame, window_sizes_in_days: list = [1, 7, 3
     return df_with_features
 ```
 
-### Function 4: Terminal Risk Features
+### Terminal Features
 
 These features capture the number of transactions and the proportion of fraudulent transactions associated with a terminal over recent time windows. A delay period is introduced because fraud labels might not be available immediately.
 
@@ -1036,7 +990,7 @@ def fe_terminal_risk(df: pl.DataFrame, delay_period_days: int = 7, window_sizes_
     return df_with_features
 ```
 
-### Building the Feature Engineering Pipeline
+### Data Transformation Pipeline
 
 Now we will create a scikit-learn pipeline that applies these Polars-based feature engineering functions. We use `FunctionTransformer` to wrap our Polars functions. It's important that these transformers correctly handle the Polars DataFrame input and output Polars DataFrames if subsequent steps also expect Polars, or convert to pandas if downstream scikit-learn components require it (though AutoGluonSklearnWrapper can handle Polars input for feature name/number checks).
 
