@@ -801,7 +801,7 @@ When performing feature engineering, it's best practice to encapsulate the trans
 
 In this section, we will define functions that perform feature engineering using Polars expressions. These functions will then be wrapped using `sklearn.preprocessing.FunctionTransformer` to be included in a scikit-learn pipeline. This approach allows us to leverage Polars' performance for the transformations while maintaining compatibility with the scikit-learn ecosystem for modeling.
 
-## Polars Feature Engineering Functions
+## Polars Feature Functions
 
 We will create functions to generate the following features. Each function will take a Polars DataFrame as input and return a Polars DataFrame with the new feature(s) added.
 
@@ -882,115 +882,130 @@ The features describe a customer's recent transaction count and average transact
 
 ```{python}
 #| label: feature-customer-spending
-def fe_customer_spending(df: pl.DataFrame, window_sizes_in_days: list = [1, 7, 30]) -> pl.DataFrame:
+def fe_customer_spending(df: pl.DataFrame, window_sizes_in_days=[1, 7, 30]) -> pl.DataFrame:
     """
     Calculates customer spending features:
     - Count of transactions per customer over different window_sizes.
     - Average transaction amount per customer over different window_sizes.
     """
-    
-    # Ensure data is sorted by CUSTOMER_ID and TX_DATETIME for rolling operations
-    df_with_features = df.sort(["CUSTOMER_ID", "TX_DATETIME"])
-    
-    for window_size in window_sizes_in_days:
-        # Use rolling with by parameter to group by customer
-        df_roll = df_with_features.rolling(
-            index_column="TX_DATETIME", 
-            period=f"{window_size}d", 
-            by="CUSTOMER_ID", 
-            closed="left"
-        ).agg([
-            pl.count("TX_DATETIME").alias(f"CUSTOMER_ID_NB_TX_{window_size}DAY_WINDOW"),
-            pl.col("TX_AMOUNT").mean().alias(f"CUSTOMER_ID_AVG_AMOUNT_{window_size}DAY_WINDOW")
-        ])
-        
-        # Join the rolling features back to the original dataframe
-        df_with_features = df_with_features.join(
-            df_roll,
-            on=["CUSTOMER_ID", "TX_DATETIME"],
-            how="left"
+
+    df_int = (
+        df
+        .sort(pl.col("CUSTOMER_ID"), pl.col("TX_DATETIME")) # very important to sort
+        .with_columns(
+            pl.col("CUSTOMER_ID").cast(pl.UInt64)
         )
-    
-    # Fill nulls for new features
-    new_cols = [f"CUSTOMER_ID_NB_TX_{w}DAY_WINDOW" for w in window_sizes_in_days] + [f"CUSTOMER_ID_AVG_AMOUNT_{w}DAY_WINDOW" for w in window_sizes_in_days]
-    df_with_features = df_with_features.with_columns([pl.col(c).fill_null(0) for c in new_cols])
-    
-    return df_with_features
+    )
+
+    result_df = df_int
+    for window in window_sizes_in_days:
+        output_df = (
+            df_int
+            .rolling(index_column="TX_DATETIME"
+                , period=f"{window}d"
+                , closed="both"
+                , group_by="CUSTOMER_ID")
+            .agg(
+                pl.len()
+                .alias(f"CUSTOMER_ID_NB_TX_{window}DAY_WINDOW"),
+
+                pl.col("TX_AMOUNT").mean()
+                .alias(f"CUSTOMER_ID_AVG_AMOUNT_{window}DAY_WINDOW")
+            )
+        )
+
+        result_df = (
+            result_df
+            .join(output_df
+                , on=["CUSTOMER_ID", "TX_DATETIME"]
+                , how="left")
+        )
+
+    return result_df
 ```
 
 ### Terminal Features
 
-These features capture the number of transactions and the proportion of fraudulent transactions associated with a terminal over recent time windows. A delay period is introduced because fraud labels might not be available immediately.
+The features describe a point-of-sale terminal's recent transactions count and the proportion of fraudulent transactions over several rolling time windows (1, 7, 30 days). A 7-day delay period is introduced because fraud labels are not be available immediately.
 
 ```{python}
 #| label: feature-terminal-risk
-def fe_terminal_risk(df: pl.DataFrame, delay_period_days: int = 7, window_sizes_in_days: list = [1, 7, 30]) -> pl.DataFrame:
-    """Adds terminal risk features for various window sizes, considering a delay in fraud labeling."""
-    # Ensure data is sorted by TERMINAL_ID and TX_DATETIME
-    df = df.sort(["TERMINAL_ID", "TX_DATETIME"])
-    
-    expressions = []
-    for window_size in window_sizes_in_days:
-        # Count of transactions on the terminal in the window (delayed)
-        expr_nb_tx_terminal = (
-            pl.col("TRANSACTION_ID")
-            .rolling(index_column="TX_DATETIME", period=f"{window_size}d", offset=f"-{delay_period_days}d", closed="both")
-            .count()
-            .over("TERMINAL_ID")
-            .alias(f"TERMINAL_ID_NB_TX_{window_size}DAY_WINDOW")
+def fe_terminal_risk(
+    df: pl.DataFrame, 
+    delay_period_days: int = 7, 
+    window_sizes_in_days: list = [1, 7, 30]
+) -> pl.DataFrame:
+    """
+    Adds terminal risk features for various window sizes, considering a 7-day delay in fraud labeling.
+    For each window, computes:
+        - Number of transactions at the terminal in the window (lagged by delay_period_days)
+        - Proportion of fraudulent transactions at the terminal in the window (lagged)
+    """
+    # Sort by TERMINAL_ID and TX_DATETIME for correct rolling calculations
+    df_int = (
+        df
+        .sort(pl.col("TERMINAL_ID")
+            , pl.col("TX_DATETIME")
         )
-        expressions.append(expr_nb_tx_terminal)
-        
-        # Count of fraudulent transactions on the terminal in the window (delayed)
-        # Using name.suffix to make each expression unique
-        expr_nb_fraud_terminal = (
-            pl.col("TX_FRAUD") # Assumes TX_FRAUD is 0 or 1
-            .rolling(index_column="TX_DATETIME", period=f"{window_size}d", offset=f"-{delay_period_days}d", closed="both")
-            .sum()
-            .over("TERMINAL_ID")
-            .name.suffix(f"_FRAUD_{window_size}DAY_WINDOW")
+        .with_columns(
+            pl.col("TERMINAL_ID").cast(pl.UInt64)
         )
-        expressions.append(expr_nb_fraud_terminal)
+    )
 
-    # Add temporary columns first
-    df_with_features = df.with_columns(expressions)
-    
-    # Calculate risk and fill NaNs
-    risk_expressions = []
-    fill_expressions = []
-    
-    for window_size in window_sizes_in_days:
-        nb_tx_col = f"TERMINAL_ID_NB_TX_{window_size}DAY_WINDOW"
-        nb_fraud_col = f"TX_FRAUD_FRAUD_{window_size}DAY_WINDOW"  # This matches the name.suffix pattern
-        risk_col = f"TERMINAL_ID_RISK_{window_size}DAY_WINDOW"
-        
-        # Create risk expression
-        risk_expr = (
-            pl.when(pl.col(nb_tx_col) > 0)
-            .then(pl.col(nb_fraud_col) / (pl.col(nb_tx_col) + 1e-8))
-            .otherwise(0.0)
-            .alias(risk_col)
+    result_df = df_int
+    for window in window_sizes_in_days:
+
+        full_offset = window + delay_period_days
+
+        # Rolling window with delay (offset)
+        output_df = (
+            df_int
+            .rolling(
+                index_column="TX_DATETIME",
+                period=f"{window}d",
+                closed="both",
+                group_by="TERMINAL_ID",
+                offset=f"-{full_offset}d"  # Apply the delay period
+            )
+            .agg(
+                pl.len()
+                .alias(f"TID_NB_TX_{window}DAY_WINDOW"),
+
+                pl.col("TX_FRAUD").sum()
+                .alias(f"TID_NB_FRAUD_{window}DAY_WINDOW")
+            )
+
         )
-        risk_expressions.append(risk_expr)
-        
-        # Create fill expressions
-        fill_expr_tx = pl.col(nb_tx_col).fill_null(0).cast(pl.UInt32)
-        fill_expr_risk = pl.col(risk_col).fill_null(0.0).cast(pl.Float32)
-        fill_expressions.extend([fill_expr_tx, fill_expr_risk])
-    
-    # Apply risk calculations
-    df_with_features = df_with_features.with_columns(risk_expressions)
-    
-    # Apply fill operations
-    df_with_features = df_with_features.with_columns(fill_expressions)
-    
-    # Drop the temporary fraud count columns
-    df_with_features = df_with_features.drop([f"TX_FRAUD_FRAUD_{window_size}DAY_WINDOW" for window_size in window_sizes_in_days])
-    
-    return df_with_features
+
+        # Join rolling features back to main df
+        result_df = (
+            result_df
+            .join(output_df, on=["TERMINAL_ID", "TX_DATETIME"], how="left")
+        )
+
+        # Compute risk (proportion of frauds)
+        risk_col = f"TID_RISK_{window}DAY_WINDOW"
+        nb_tx_col = f"TID_NB_TX_{window}DAY_WINDOW"
+        nb_fraud_col = f"TID_NB_FRAUD_{window}DAY_WINDOW"
+
+        result_df = (
+            result_df
+            .with_columns(
+                pl.when(pl.col(nb_tx_col) > 0)
+                    .then(pl.col(nb_fraud_col) / (pl.col(nb_tx_col)))
+                    .otherwise(0.0)
+                .alias(risk_col)
+            )
+
+        )
+
+        # Drop the intermediate fraud count column
+        result_df = result_df.drop(nb_fraud_col)
+
+    return result_df
 ```
 
-### Data Transformation Pipeline
+## Data Pipeline
 
 Now we will create a scikit-learn pipeline that applies these Polars-based feature engineering functions. We use `FunctionTransformer` to wrap our Polars functions. It's important that these transformers correctly handle the Polars DataFrame input and output Polars DataFrames if subsequent steps also expect Polars, or convert to pandas if downstream scikit-learn components require it (though AutoGluonSklearnWrapper can handle Polars input for feature name/number checks).
 
