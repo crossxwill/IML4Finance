@@ -1063,7 +1063,6 @@ df_tuning_ft = split_data(df_fraud_ft, type="tuning")
 
 # EDA: Compare `df_train_ft` and `df_tuning_ft`
 
-
 ```{python}
 #| label: eda-train-tuning-comparison-ft
 
@@ -1101,14 +1100,38 @@ Let's define the features to be used for modeling. These will be the original `T
 
 ## Importance of Pipelines
 
-When performing feature engineering, it's best practice to encapsulate the transformation logic within pipelines (e.g., using scikit-learn's `Pipeline` and `FunctionTransformer` or custom transformers). This offers several advantages:
+In machine learning, especially with complex workflows like fraud detection, **pipelines** are essential tools. They help you chain multiple data processing steps (e.g., feature scaling, encoding, feature engineering) and a final estimator (your model) into a single object.
 
--   **Consistency:** Ensures that the same transformations are applied to training, tuning, and test datasets, preventing discrepancies.
--   **Reproducibility:** Makes the feature engineering process clear and easy to reproduce.
--   **Preventing Data Leakage:** Pipelines help manage the flow of data, especially when transformations depend on statistics calculated from the training set (e.g., mean imputation, scaling). Applying transformations correctly within a pipeline ensures that information from tuning/test sets does not leak into the training process.
--   **Deployment:** A saved pipeline can be easily deployed to process new, unseen data in a production environment.
+Here's why pipelines are important for your learning and practice:
 
-In this section, we will define functions that perform feature engineering using Polars expressions. These functions will then be wrapped using `sklearn.preprocessing.FunctionTransformer` to be included in a scikit-learn pipeline. This approach allows us to leverage Polars' performance for the transformations while maintaining compatibility with the scikit-learn ecosystem for modeling.
+*   **Workflow Organization & Readability**:
+    *   Pipelines clearly define the sequence of operations applied to your data.
+    *   This makes your code cleaner, easier to understand, and less prone to errors. Imagine applying 5 feature engineering steps and then training a model – a pipeline neatly encapsulates this.
+
+*   **Preventing Data Leakage (Crucial for Valid Evaluation)**:
+    *   When performing operations like feature scaling or imputation, these should be learned *only* from the training data and then *applied* to the validation/test data.
+    *   Pipelines, especially when used with cross-validation tools (like `GridSearchCV` or `cross_val_score`), ensure that data transformations are fitted correctly within each training fold, preventing information from the validation fold "leaking" into the training process. This leads to more reliable performance estimates.
+
+*   **Reproducibility**:
+    *   A pipeline bundles all your preprocessing and modeling steps. This makes it easier to reproduce your results consistently, as the exact sequence and configuration of steps are saved together.
+
+*   **Simplified Hyperparameter Tuning**:
+    *   You can tune hyperparameters of *both* the preprocessing steps and the model simultaneously using tools like `GridSearchCV` with a pipeline. For example, you could tune a parameter for a feature scaling method and a parameter for your classifier at the same time.
+
+*   **Deployment-Ready**:
+    *   A trained pipeline can be saved and loaded, making it easier to deploy your entire workflow (preprocessing + model) into a production environment.
+
+**Types of Pipelines You'll Encounter:**
+
+*   **`sklearn.pipeline.Pipeline`**: The standard scikit-learn pipeline, excellent for most preprocessing and modeling chains.
+*   **`imblearn.pipeline.Pipeline`**: This version is specifically designed for workflows that include resampling steps (like SMOTE or undersampling) from the `imbalanced-learn` library. It correctly handles the `fit_resample` method of samplers, ensuring resampling is applied appropriately during cross-validation (only on the training part of each fold).
+
+In this lab, while we perform feature engineering with Polars separately for efficiency, the concept of pipelining is vital when we move to modeling, especially if we were to integrate preprocessing steps directly with scikit-learn compatible models or when considering resampling strategies. The `AutoGluonSklearnWrapper` itself acts like a complex pipeline, managing many internal modeling steps.
+
+
+```{python}
+#| label: define-modeling-features-final
+// ...existing code...
 
 
 ```{python}
@@ -1175,11 +1198,9 @@ else:
 comparison_results = []
 ```
 
-## Strategy 1: "Do Nothing" (Train on Imbalanced Data)
+## Do-Nothing Approach
 
 **Concept Recap:** Train the model on the original, imbalanced training data. We will use ROC AUC as the initial `eval_metric` for AutoGluon to select the best base models, but we will also closely monitor PR-AUC. Probability calibration and F1-score optimization via threshold tuning are key.
-
-### AutoGluon Implementation (Strategy 1)
 
 ```{python}
 #| label: model-strategy1-do-nothing
@@ -1295,7 +1316,7 @@ else:
     # ag_model_s1.predictor.save() # This would save changes back to the model folder
 ```
 
-## Strategy 2: Use Class-Sensitive Evaluation Metrics (PR-AUC)
+## Class-Sensitive Evaluation Approach
 
 **Rationale:** When dealing with severe class imbalance, metrics like ROC-AUC can be misleading. ROC-AUC considers the True Positive Rate (TPR) and False Positive Rate (FPR). In highly imbalanced datasets, the number of true negatives (correctly identified legitimate transactions) is vast. Even a small percentage increase in false positives can lead to a large absolute number of misclassified legitimate transactions, but the FPR (FP / (FP + TN)) might remain low due to the enormous TN count, thus artificially inflating the ROC-AUC.
 
@@ -1303,7 +1324,6 @@ Precision-Recall AUC (PR-AUC), often referred to as "average_precision" in libra
 
 **Process:** 1. Train the model on the original, imbalanced dataset. 2. During model training and selection (e.g., hyperparameter tuning in AutoGluon), use PR-AUC (`average_precision`) as the primary evaluation metric to guide the selection of the best model architecture and hyperparameters. 3. After training, check the probability calibration of the selected model. 4. Use a tuning set to choose an optimal classification threshold that maximizes a business-relevant metric like the F1-score.
 
-### AutoGluon Implementation (Strategy 2)
 
 ```{python}
 #| label: model-strategy2-prauc
@@ -1408,11 +1428,9 @@ else:
     })
 ```
 
-## Strategy 3: Use Cost-Sensitive Learning (`sample_weight='balance_weight'`)
+## Cost-Sensitive Learning Approach
 
 **Concept Recap:** Cost-sensitive learning is achieved by assigning higher weights to the minority class (fraud) instances during training. AutoGluon handles this internally when `sample_weight='balance_weight'` is specified. We will use `average_precision` as the evaluation metric.
-
-### AutoGluon Implementation (Strategy 3)
 
 ```{python}
 #| label: model-strategy3-cost-sensitive
@@ -1520,11 +1538,16 @@ else:
     })
 ```
 
-## Strategy 4: Use Class-Based Resampling (SMOTE Example)
+## Resampling Approach
 
 **Concept Recap:** Modify the training data distribution to be more balanced. We will use SMOTE (Synthetic Minority Over-sampling Technique) to oversample the minority (fraud) class in the training set. The tuning and test sets remain unchanged. Probability calibration after training on resampled data is a critical concern.
 
-### Data Preparation (Resampling `df_train_ft`)
+### Random Undersampling of Majority Class (RUS)
+
+### Random Oversampling of Minority Class (ROS)
+
+
+
 
 ```{python}
 #| label: model-strategy4-resampling-prep
@@ -1565,7 +1588,7 @@ else:
 
 ```
 
-### AutoGluon Implementation (Strategy 4 - with SMOTE)
+### Synthetic Minority Over-sampling Technique (SMOTE)
 
 ```{python}
 #| label: model-strategy4-resampling-train
@@ -1707,7 +1730,9 @@ else:
     })
 ```
 
-### Comparison Table
+### Hybrid: SMOTE + RUS
+
+### Comparison of Resampling Strategies
 
 After running all strategies, we compile the results into a summary table to compare their effectiveness.
 
