@@ -723,24 +723,31 @@ The lab splits the data into three sets:
 # | label: data-splitting-polars
 # Prequential data splitting using Polars
 
+def split_data(df: pl.DataFrame
+            , type: str = "train") -> pl.DataFrame:
+    """
+    Splits the data into train, tuning, and test sets based on TX_DATETIME.
+    """
+    if type == "train":
+        return df.filter(pl.col("TX_DATETIME") <= pl.date(2018, 7, 31))
+    elif type == "tuning":
+        return df.filter((pl.col("TX_DATETIME") >= pl.date(2018, 8, 1)) 
+                        & (pl.col("TX_DATETIME") <= pl.date(2018, 8, 31)))
+    elif type == "test":
+        return df.filter(pl.col("TX_DATETIME") >= pl.date(2018, 9, 1))
+    else:
+        raise ValueError(f"Unknown split type: {type}")
+
+# Split the data into train, tuning, and test sets
+
 # df_train: Transactions before 2018-07-31 (inclusive)
-df_train = (
-        df_fraud
-        .filter(pl.col("TX_DATETIME") <= pl.date(2018, 7, 31))
-        )
+df_train = split_data(df_fraud, type="train")
 
 # df_tuning: Transactions between 2018-08-01 (inclusive) and 2018-08-31 (inclusive)
-df_tuning = (
-        df_fraud
-        .filter((pl.col("TX_DATETIME") >= pl.date(2018, 8, 1))
-        & (pl.col("TX_DATETIME") <= pl.date(2018, 8, 31)))
-        )
+df_tuning = split_data(df_fraud, type="tuning")
 
 # df_test: Transactions after 2018-09-01 (inclusive)
-df_test = (
-        df_fraud
-        .filter(pl.col("TX_DATETIME") >= pl.date(2018, 9, 1))
-        )
+df_test = split_data(df_fraud, type="test")
 
 ```
 
@@ -790,16 +797,6 @@ This lab demonstrates how to use pipelines for feature engineering on credit car
 
 The feature engineering logic is based on Chapter 3 of @leborgne2022fraud, but has been adapted to use Polars expressions for improved speed and efficiency.
 
-## Importance of Pipelines
-
-When performing feature engineering, it's best practice to encapsulate the transformation logic within pipelines (e.g., using scikit-learn's `Pipeline` and `FunctionTransformer` or custom transformers). This offers several advantages:
-
--   **Consistency:** Ensures that the same transformations are applied to training, tuning, and test datasets, preventing discrepancies.
--   **Reproducibility:** Makes the feature engineering process clear and easy to reproduce.
--   **Preventing Data Leakage:** Pipelines help manage the flow of data, especially when transformations depend on statistics calculated from the training set (e.g., mean imputation, scaling). Applying transformations correctly within a pipeline ensures that information from tuning/test sets does not leak into the training process.
--   **Deployment:** A saved pipeline can be easily deployed to process new, unseen data in a production environment.
-
-In this section, we will define functions that perform feature engineering using Polars expressions. These functions will then be wrapped using `sklearn.preprocessing.FunctionTransformer` to be included in a scikit-learn pipeline. This approach allows us to leverage Polars' performance for the transformations while maintaining compatibility with the scikit-learn ecosystem for modeling.
 
 ## Polars Feature Functions
 
@@ -893,32 +890,32 @@ def fe_customer_spending(df: pl.DataFrame, window_sizes_in_days=[1, 7, 30]) -> p
         df
         .sort(pl.col("CUSTOMER_ID"), pl.col("TX_DATETIME")) # very important to sort
         .with_columns(
-            pl.col("CUSTOMER_ID").cast(pl.UInt64)
+            pl.col("CUSTOMER_ID").cast(pl.UInt64),
+            pl.lit(1).alias("TX_COUNT")
         )
     )
 
     result_df = df_int
     for window in window_sizes_in_days:
-        output_df = (
-            df_int
-            .rolling(index_column="TX_DATETIME"
-                , period=f"{window}d"
-                , closed="both"
-                , group_by="CUSTOMER_ID")
-            .agg(
-                pl.len()
-                .alias(f"CUSTOMER_ID_NB_TX_{window}DAY_WINDOW"),
-
-                pl.col("TX_AMOUNT").mean()
-                .alias(f"CUSTOMER_ID_AVG_AMOUNT_{window}DAY_WINDOW")
-            )
-        )
-
         result_df = (
             result_df
-            .join(output_df
-                , on=["CUSTOMER_ID", "TX_DATETIME"]
-                , how="left")
+            .with_columns(
+                pl.col("TX_COUNT")
+                    .rolling_sum_by(by=pl.col("TX_DATETIME")
+                        , window_size=f"{window}d"
+                        , closed="both"
+                        )
+                    .over("CUSTOMER_ID")
+                .alias(f"CUSTOMER_ID_NB_TX_{window}DAY_WINDOW"),
+
+                pl.col("TX_AMOUNT")
+                    .rolling_mean_by(by=pl.col("TX_DATETIME")
+                        , window_size=f"{window}d"
+                        , closed="both"
+                        )
+                    .over("CUSTOMER_ID")
+                .alias(f"CUSTOMER_ID_AVG_AMOUNT_{window}DAY_WINDOW")
+            )
         )
 
     return result_df
@@ -948,7 +945,8 @@ def fe_terminal_risk(
             , pl.col("TX_DATETIME")
         )
         .with_columns(
-            pl.col("TERMINAL_ID").cast(pl.UInt64)
+            pl.col("TERMINAL_ID").cast(pl.UInt64),
+            pl.lit(1).alias("TX_COUNT")
         )
     )
 
@@ -958,38 +956,63 @@ def fe_terminal_risk(
         full_offset = window + delay_period_days
 
         # Rolling window with delay (offset)
-        output_df = (
-            df_int
-            .rolling(
-                index_column="TX_DATETIME",
-                period=f"{window}d",
-                closed="both",
-                group_by="TERMINAL_ID",
-                offset=f"-{full_offset}d"  # Apply the delay period
-            )
-            .agg(
-                pl.len()
-                .alias(f"TID_NB_TX_{window}DAY_WINDOW"),
-
-                pl.col("TX_FRAUD").sum()
-                .alias(f"TID_NB_FRAUD_{window}DAY_WINDOW")
-            )
-
-        )
-
-        # Join rolling features back to main df
         result_df = (
             result_df
-            .join(output_df, on=["TERMINAL_ID", "TX_DATETIME"], how="left")
+            .with_columns(
+                pl.col("TX_COUNT")
+                    .rolling_sum_by("TX_DATETIME"
+                        , window_size=f"{window}d"
+                        , closed="both"
+                        )
+                    .over("TERMINAL_ID")
+                .alias(f"TID_NB_TX_{window}DAY_WINDOW"),
+
+                pl.col("TX_COUNT")
+                    .rolling_sum_by("TX_DATETIME"
+                        , window_size=f"{full_offset}d"
+                        , closed="both"
+                        )
+                    .over("TERMINAL_ID")
+                .alias(f"TID_NB_TX_{full_offset}DAY_WINDOW"),
+
+
+                pl.col("TX_FRAUD")
+                    .rolling_sum_by("TX_DATETIME"
+                        , window_size=f"{window}d"
+                        , closed="both"
+                        )  
+                    .over("TERMINAL_ID")
+                .alias(f"TID_NB_FRAUD_{window}DAY_WINDOW"),
+
+                pl.col("TX_FRAUD")
+                    .rolling_sum_by("TX_DATETIME"
+                        , window_size=f"{full_offset}d"
+                        , closed="both"
+                        )  
+                    .over("TERMINAL_ID")
+                .alias(f"TID_NB_FRAUD_{full_offset}DAY_WINDOW")
+            )
+
         )
 
         # Compute risk (proportion of frauds)
         risk_col = f"TID_RISK_{window}DAY_WINDOW"
+
         nb_tx_col = f"TID_NB_TX_{window}DAY_WINDOW"
         nb_fraud_col = f"TID_NB_FRAUD_{window}DAY_WINDOW"
 
+        nb_tx_col_fulloffset = f"TID_NB_TX_{full_offset}DAY_WINDOW"
+        nb_fraud_col_fulloffset = f"TID_NB_FRAUD_{full_offset}DAY_WINDOW"
+
         result_df = (
             result_df
+            .with_columns(
+                (pl.col(nb_tx_col_fulloffset) - pl.col(nb_tx_col)).alias(nb_tx_col),
+                (pl.col(nb_fraud_col_fulloffset) - pl.col(nb_fraud_col)).alias(nb_fraud_col)
+            )
+            .select(pl.col("*")
+                .exclude([nb_tx_col_fulloffset, nb_fraud_col_fulloffset])
+                )
             .with_columns(
                 pl.when(pl.col(nb_tx_col) > 0)
                     .then(pl.col(nb_fraud_col) / (pl.col(nb_tx_col)))
@@ -1007,111 +1030,66 @@ def fe_terminal_risk(
 
 ## Data Pipeline
 
-Now we will create a scikit-learn pipeline that applies these Polars-based feature engineering functions. We use `FunctionTransformer` to wrap our Polars functions. It's important that these transformers correctly handle the Polars DataFrame input and output Polars DataFrames if subsequent steps also expect Polars, or convert to pandas if downstream scikit-learn components require it (though AutoGluonSklearnWrapper can handle Polars input for feature name/number checks).
-
-For simplicity in this lab, the `AutoGluonSklearnWrapper` is designed to eventually convert Polars DataFrames to Pandas DataFrames before feeding them into the core AutoGluon `TabularDataset` and `TabularPredictor`. Therefore, our `FunctionTransformer` wrappers should ideally output Pandas DataFrames if they are the last step before the estimator, or if there are intermediate scikit-learn steps that require Pandas. However, to leverage Polars speed, we can keep data in Polars format as long as possible.
-
-Let's define wrapper functions for `FunctionTransformer` that ensure the input is a Polars DataFrame and output is also a Polars DataFrame.
+The function applies each data transformation step in sequence using the `pipe` method from Polars. This allows for a clean and readable feature engineering pipeline.
 
 ```{python}
-#| label: feature-engineering-pipeline
+#| label: feature-engineering-pipeline-function
 
-# Wrapper function for FunctionTransformer to apply Polars functions
-# These take a DataFrame (assumed Pandas from sklearn context) and return Pandas
-# Define feature engineering functions (assuming these already exist)
-# fe_is_weekend, fe_is_night, fe_customer_spending, fe_terminal_risk
-
-# Create a Polars pipeline using pipe method
 def polars_feature_pipeline(df: pl.DataFrame) -> pl.DataFrame:
     """
     Apply all feature engineering steps in sequence using Polars pipe
     """
-    return (df
+    return (df.lazy()
             .pipe(fe_is_weekend)
             .pipe(fe_is_night)
-            .pipe(fe_customer_spending)  # Uses default window_sizes
-            .pipe(fe_terminal_risk))     # Uses default delay and window_sizes
-
-print("Feature engineering pipeline defined.")
-
-# Apply the pipeline to the datasets
-print("\nApplying feature engineering pipeline to df_train...")
-if not df_train.is_empty() and 'TX_FRAUD' in df_train.columns:
-    df_train_ft_pl = polars_feature_pipeline(df_train)
-    print(f"df_train_ft shape after feature engineering: {df_train_ft_pl.shape}")
-    # If you need pandas for AutoGluon:
-    df_train_ft = df_train_ft_pl.to_pandas()
-    # display(df_train_ft_pl.head())
-else:
-    print("Skipping feature engineering for df_train as it is empty or TX_FRAUD is missing.")
-    df_train_ft_pl = pl.DataFrame()
-    df_train_ft = pd.DataFrame()  # Empty df
-
-print("\nApplying feature engineering pipeline to df_tuning...")
-if not df_tuning.is_empty() and 'TX_FRAUD' in df_tuning.columns:
-    df_tuning_ft_pl = polars_feature_pipeline(df_tuning)
-    print(f"df_tuning_ft shape after feature engineering: {df_tuning_ft_pl.shape}")
-    # If you need pandas for AutoGluon:
-    df_tuning_ft = df_tuning_ft_pl.to_pandas()
-    # display(df_tuning_ft_pl.head())
-else:
-    print("Skipping feature engineering for df_tuning as it is empty or TX_FRAUD is missing.")
-    df_tuning_ft_pl = pl.DataFrame()
-    df_tuning_ft = pd.DataFrame()
-
-print("\nApplying feature engineering pipeline to df_test...")
-if not df_test.is_empty() and 'TX_FRAUD' in df_test.columns:
-    df_test_ft_pl = polars_feature_pipeline(df_test)
-    print(f"df_test_ft shape after feature engineering: {df_test_ft_pl.shape}")
-    # If you need pandas for AutoGluon:
-    df_test_ft = df_test_ft_pl.to_pandas()
-    # display(df_test_ft_pl.head())
-else:
-    print("Skipping feature engineering for df_test as it is empty or TX_FRAUD is missing.")
-    df_test_ft_pl = pl.DataFrame()
-    df_test_ft = pd.DataFrame()
-
-# Store the engineered features names
-if not df_train_ft_pl.is_empty():
-    engineered_feature_names = df_train_ft_pl.columns
-    # We need to exclude the original columns that are not features and the target
-    original_cols_to_exclude_from_features = ['TRANSACTION_ID', 'TX_DATETIME', 'CUSTOMER_ID', 'TERMINAL_ID', 'TX_FRAUD']
-    # Base features are usually TX_AMOUNT and the newly engineered ones.
-    # The wrapper will get feature names from X passed to .fit()
-else:
-    engineered_feature_names = []
-
-print(f"\nPotential engineered feature names (example from df_train_ft): {engineered_feature_names[:15]}...")
+            .pipe(fe_customer_spending
+                ,window_sizes_in_days=[1, 7, 30])
+            .pipe(fe_terminal_risk
+                ,delay_period_days=7
+                ,window_sizes_in_days=[1, 7, 30])
+            ) 
 ```
 
-# EDA of the Enhanced `df_train`
-
-After applying feature engineering, it's good practice to perform another round of EDA on the enhanced training dataset (`df_train_ft`). This helps to:
-
--   Understand the distributions of the newly created features.
--   Check for any unexpected values or relationships that might have arisen from the transformations.
--   Verify that the new features seem plausible and potentially informative for fraud detection.
-
-Again, we will generate an HTML report using `ydata-profiling`.
+Apply the data pipeline to `df_fraud` and then split the data into training and calibration sets. The test set will be created later.
 
 ```{python}
-#| label: eda-enhanced-train
+#| label: apply-feature-engineering
 
-if 'df_train_ft_pl' in locals() and not df_train_ft_pl.is_empty():
-    generate_eda_report(
-        df=df_train_ft_pl, 
-        title="Enhanced Training Data Profile (df_train_ft)", 
-        output_path="Lab04_eda_report_df_train_ft.html",
-        sample_frac=0.05 # Sample 5% if data is large
-    )
-else:
-    print("Skipping EDA for enhanced df_train as it is empty or not defined.")
+df_fraud_ft = polars_feature_pipeline(df_fraud).collect()
 
+df_train_ft = split_data(df_fraud_ft, type="train")
+df_tuning_ft = split_data(df_fraud_ft, type="tuning")
 ```
 
-**Review Points for Enhanced EDA Report:** \* **New Feature Distributions:** Examine histograms and summary statistics for features like `CUSTOMER_ID_NB_TX_1DAY_WINDOW`, `TERMINAL_ID_RISK_7DAY_WINDOW`, etc. Are the ranges sensible? \* **Correlations:** Check correlations between new features and the `TX_FRAUD` target, and also among the new features themselves (multicollinearity). \* **Missing Values:** Confirm that `fill_null(0)` in our feature engineering functions handled NaNs as expected, especially for the rolling window features at the beginning of a customer's or terminal's history.
+# EDA: Compare `df_train_ft` and `df_tuning_ft`
 
-------------------------------------------------------------------------
+
+```{python}
+#| label: eda-train-tuning-comparison-ft
+
+p_frac = 0.1
+
+ft_train_data_profile = ProfileReport(
+            df_train_ft.sample(fraction=p_frac, seed=2025).to_pandas(), 
+            title="Train-FT",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
+
+ft_tuning_data_profile = ProfileReport(
+            df_tuning_ft.sample(fraction=p_frac*2, seed=2025).to_pandas(), 
+            title="Tuning-FT",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
+
+ft_compare_profile = ft_train_data_profile.compare(ft_tuning_data_profile)
+
+ft_compare_profile.to_file("Lab04_eda_compare_train_tuning_ft.html")
+```
+
 
 # Modeling and Evaluation
 
@@ -1120,6 +1098,18 @@ In this section, we will implement and compare the different strategies for hand
 Key modeling choices: \* We will use the `AutoGluonSklearnWrapper` for training. \* We will primarily use `average_precision` (PR-AUC) as the `eval_metric` for AutoGluon, as it's more robust for imbalanced fraud data. For the "Do Nothing" approach, we might start with `roc_auc` but will also closely monitor `average_precision`. \* Threshold tuning for F1-score will be performed on the `df_tuning_ft` set. \* Final F1-score will be reported on the `df_test_ft` set using the optimized threshold.
 
 Let's define the features to be used for modeling. These will be the original `TX_AMOUNT` plus all the engineered features. We exclude IDs, raw datetime, and the target variable itself from the feature set `X`.
+
+## Importance of Pipelines
+
+When performing feature engineering, it's best practice to encapsulate the transformation logic within pipelines (e.g., using scikit-learn's `Pipeline` and `FunctionTransformer` or custom transformers). This offers several advantages:
+
+-   **Consistency:** Ensures that the same transformations are applied to training, tuning, and test datasets, preventing discrepancies.
+-   **Reproducibility:** Makes the feature engineering process clear and easy to reproduce.
+-   **Preventing Data Leakage:** Pipelines help manage the flow of data, especially when transformations depend on statistics calculated from the training set (e.g., mean imputation, scaling). Applying transformations correctly within a pipeline ensures that information from tuning/test sets does not leak into the training process.
+-   **Deployment:** A saved pipeline can be easily deployed to process new, unseen data in a production environment.
+
+In this section, we will define functions that perform feature engineering using Polars expressions. These functions will then be wrapped using `sklearn.preprocessing.FunctionTransformer` to be included in a scikit-learn pipeline. This approach allows us to leverage Polars' performance for the transformations while maintaining compatibility with the scikit-learn ecosystem for modeling.
+
 
 ```{python}
 #| label: define-modeling-features-final
