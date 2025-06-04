@@ -1099,7 +1099,7 @@ The section implements and compares different strategies for handling imbalanced
 -   **SMOTE Pipeline**: Applies SMOTE to generate synthetic samples for the minority class before model training.
 -   **Hybrid Pipeline**: Combines oversampling and SMOTE to balance the training set before model training.
 
-The section evalulates each strategy by using the tuning set and test set.
+The section evalutes each strategy by using the tuning set and test set.
 
 If the predicted probabilities are not well calibrated, we will calibrate them using isotonic regression.
 
@@ -1150,7 +1150,7 @@ y_test = df_test_ft[target_label].to_pandas()
 
 ## Do-Nothing Approach
 
-**Concept Recap:** Train the model on the original, imbalanced training data. We will use ROC AUC as the `eval_metric` for AutoGluon to select the best base models. Probability calibration and F1-score optimization via threshold tuning are key.
+**Concept Recap:** Train the model on the original, imbalanced training data. We will use `log_loss` as the `eval_metric` for AutoGluon to select the best base models.
 
 Setup AutoGluon parameters.
 
@@ -1163,7 +1163,7 @@ remove_ag_folder(model_folder_s1)
 
 predictor_args_s1 = {
     'problem_type': 'binary',
-    'eval_metric': 'roc_auc', 
+    'eval_metric': 'log_loss', 
     'path': model_folder_s1
 }
 
@@ -1206,6 +1206,17 @@ leaderboard_s1 = ag_model_s1_predictor.leaderboard(
 display(leaderboard_s1)
 ```
 
+Set the best model to CatBoost due to inference speed and performance.
+
+```{python}
+#| label: set-best-model-s1
+
+ag_model_s1_predictor.set_model_best('CatBoost')
+
+ag_model_s1.predictor.save()  # Save the predictor for later use
+
+```
+
 Check feature importance.
 
 ```{python}
@@ -1214,7 +1225,7 @@ Check feature importance.
 feature_importance_s1 = ag_model_s1_predictor.feature_importance(
     df_tuning_ft.to_pandas(),
     subsample_size = None,
-    num_shuffle_sets = 1
+    num_shuffle_sets = 5
 )
 
 display(feature_importance_s1)
@@ -1237,7 +1248,7 @@ pre_cal_disp_s1 = CalibrationDisplay.from_estimator(
         color = 'orange'
     )
 
-pre_cal_disp_s1.ax_.set_title("Pre-Calibration Plot")
+pre_cal_disp_s1.ax_.set_title("Calibration Plot (Tuning Set)")
 ```
 
 Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
@@ -1262,291 +1273,466 @@ Since the isotonic regression model was fitted on the tuning set, we can no long
 
 %matplotlib inline
 
-post_cal_disp_s1 = CalibrationDisplay.from_estimator(
-        estimator = cal_model_s1,
-        X = X_test,
-        y = y_test,
-        n_bins = 20,
-        name = 'Post-Calib Curve: Do Nothing Strategy',
-        color = 'blue'
-    )
+fig, ax = plt.subplots()
 
-post_cal_disp_s1.ax_.set_title("Post-Calibration Plot")
+for estimator, name, color in [(ag_model_s1, 'Uncalib_CatBoost', 'orange'),
+          (cal_model_s1, 'Calib_CatBoost', 'blue')]:
+
+  CalibrationDisplay.from_estimator(
+      estimator = estimator,
+      X = X_test,
+      y = y_test,
+      n_bins = 20,
+      name = name,
+      color = color,
+      ax = ax
+    )
+    
+ax.set_title("Calibration Plot (Test Set)")
+plt.show()
 ```
 
-***left off 5/30/2025***
+The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
+
+Evalulate the original decision threshold of 0.5 on the test set.
 
 ```{python}
-# Threshold Tuning for F1-score on df_tuning
-best_f1_s1 = 0
-best_threshold_s1 = 0.5 # Default
-thresholds = np.arange(0.01, 1.0, 0.01)
-f1_scores_tuning = []
-for threshold in thresholds:
-    y_pred_tuning_thresholded = (pred_proba_tuning_s1 >= threshold).astype(int)
-    current_f1 = f1_score(y_tuning, y_pred_tuning_thresholded)
-    f1_scores_tuning.append(current_f1)
-    if current_f1 > best_f1_s1:
-        best_f1_s1 = current_f1
-        best_threshold_s1 = threshold
-        
-print(f"Best F1-score on tuning set: {best_f1_s1:.4f} at threshold {best_threshold_s1:.2f}")
+#| label: evaluate-default-threshold-s1
 
-# Plot F1 scores vs thresholds
-plt.figure(figsize=(8, 6))
-plt.plot(thresholds, f1_scores_tuning, marker='.')
-plt.axvline(best_threshold_s1, color='r', linestyle='--', label=f'Best Threshold: {best_threshold_s1:.2f}')
-plt.title('F1 Score vs. Threshold on Tuning Set (Strategy 1)')
-plt.xlabel('Threshold')
-plt.ylabel('F1 Score')
-plt.legend()
-plt.grid(True)
-plt.show()
+leaderboard_s1_default = ag_model_s1_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
 
-# Evaluate on test set with optimal threshold
-pred_proba_test_s1 = ag_model_s1.predict_proba(X_test)[:, 1]
-y_pred_test_optimal_s1 = (pred_proba_test_s1 >= best_threshold_s1).astype(int)
-f1_optimal_s1_test = f1_score(y_test, y_pred_test_optimal_s1)
-print(f"F1-score on test set with optimal threshold ({best_threshold_s1:.2f}): {f1_optimal_s1_test:.4f}")
+display(leaderboard_s1_default)
 
-# Classification report for more details
-print("\nClassification Report on Test Set (Optimal Threshold, Strategy 1):")
-print(classification_report(y_test, y_pred_test_optimal_s1, target_names=['Legitimate', 'Fraud']))
-
-comparison_results.append({
-    "Strategy": strategy_name_1,
-    "Test ROC-AUC": roc_auc_s1_test,
-    "Test PR-AUC": pr_auc_s1_test,
-    "Test F1 (Optimized)": f1_optimal_s1_test,
-    "Optimized Threshold": best_threshold_s1,
-    "Calibration Note": calibration_note_s1
-})
-
-# Save the predictor with the tuned threshold for potential later use (optional)
-# ag_model_s1.predictor.set_decision_threshold(best_threshold_s1)
-# ag_model_s1.predictor.save() # This would save changes back to the model folder
 ```
+
+Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score.
+
+```{python}
+#| label: threshold-tuning-s1
+
+best_threshold_s1 = (ag_model_s1_predictor
+                .calibrate_decision_threshold(
+                data = df_tuning_ft.to_pandas(),
+                metric = 'f1',
+                decision_thresholds = 200)
+                )
+
+ag_model_s1_predictor.set_decision_threshold(best_threshold_s1)
+
+ag_model_s1_predictor.save()  # Save the predictor with the new threshold
+```
+
+Use the test set to evaluate the effectivness of the decision threshold.
+
+```{python}
+#| label: evaluate-threshold-s1
+
+leaderboard_s1_optimized = ag_model_s1_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
+
+display(leaderboard_s1_optimized)
+```
+
+Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score.
+
 
 ## Class-Sensitive Evaluation Approach
 
-**Rationale:** When dealing with severe class imbalance, metrics like ROC-AUC can be misleading. ROC-AUC considers the True Positive Rate (TPR) and False Positive Rate (FPR). In highly imbalanced datasets, the number of true negatives (correctly identified legitimate transactions) is vast. Even a small percentage increase in false positives can lead to a large absolute number of misclassified legitimate transactions, but the FPR (FP / (FP + TN)) might remain low due to the enormous TN count, thus artificially inflating the ROC-AUC.
+**Concept Recap:** Train the model on the original, imbalanced training data. We will use `average_precision` (aka PR-AUC) as the `eval_metric` for AutoGluon to select the best base models.
 
-Precision-Recall AUC (PR-AUC), often referred to as "average_precision" in libraries like scikit-learn and AutoGluon, is generally a more informative metric. It focuses on the performance on the positive (minority) class and is less sensitive to the large number of true negatives.
 
-**Process:** 1. Train the model on the original, imbalanced dataset. 2. During model training and selection (e.g., hyperparameter tuning in AutoGluon), use PR-AUC (`average_precision`) as the primary evaluation metric to guide the selection of the best model architecture and hyperparameters. 3. After training, check the probability calibration of the selected model. 4. Use a tuning set to choose an optimal classification threshold that maximizes a business-relevant metric like the F1-score.
+Setup AutoGluon parameters.
 
 ```{python}
-#| label: model-strategy2-prauc
+#| label: setup-autogluon-class-sensitive-evaluation
 
-if X_train.empty:
-    print("Skipping Strategy 2: Training data is empty.")
-else:
-    print("\n--- Strategy 2: Use Class-Sensitive Metrics (PR-AUC) ---")
-    strategy_name_2 = "2. PR-AUC (average_precision)"
-    model_folder_s2 = "Lab04_ag_models_s2_prauc"
-    remove_ag_folder(model_folder_s2)
+strategy_name_2 = "2. Class Sensitive Evaluation"
+model_folder_s2 = "Lab04_ag_models_s2_class_sensitive"
+remove_ag_folder(model_folder_s2)
 
-    predictor_args_s2 = {
-        'problem_type': 'binary',
-        'eval_metric': 'average_precision', # Key change: Use PR-AUC
-        'path': model_folder_s2
-    }
-    fit_args_s2 = {
-        'presets': 'medium_quality_faster_train',
-        'time_limit': 300,
-        'excluded_model_types': ['KNN', 'NN_TORCH', 'FASTAI']
-    }
+predictor_args_s2 = {
+    'problem_type': 'binary',
+    'eval_metric': 'average_precision', 
+    'path': model_folder_s2
+}
 
-    ag_model_s2 = AutoGluonSklearnWrapper(
-        label='TX_FRAUD',
-        predictor_args=predictor_args_s2,
-        fit_args=fit_args_s2
+fit_args_s2 = {'holdout_frac': 0.2,
+            'excluded_model_types': ['KNN'],
+            'presets': 'medium_quality',
+            'time_limit': 300}
+
+ag_wrapper_s2 = AutoGluonSklearnWrapper(
+    label=target_label,
+    predictor_args=predictor_args_s2,
+    fit_args=fit_args_s2
+)
+```
+
+Fit the model using AutoGluon.
+
+```{python}
+#| label: fit-autogluon-class-sensitive-evaluation
+#| 
+ag_model_s2 = ag_wrapper_s2.fit(X_train, y_train)
+
+ag_model_s2.predictor.save()  # Save the predictor for later use
+```
+
+Access the AutoGluon predictor object.
+```{python}
+#| label: access-autogluon-predictor-s2
+
+ag_model_s2_predictor = ag_model_s2.predictor
+
+```
+
+Check the leaderboard.
+
+```{python}
+#| label: leaderboard-s2
+#| 
+leaderboard_s2 = ag_model_s2_predictor.leaderboard(
+    df_tuning_ft.to_pandas()
+    , extra_metrics=['average_precision', 'f1']
+)
+display(leaderboard_s2)
+```
+
+Set the best model to CatBoost due to inference speed and performance.
+
+```{python}
+#| label: set-best-model-s2
+
+ag_model_s2_predictor.set_model_best('CatBoost')
+
+ag_model_s2.predictor.save()  # Save the predictor for later use
+
+```
+
+Check feature importance.
+
+```{python}
+#| label: feature-importance-s2
+
+feature_importance_s2 = ag_model_s2_predictor.feature_importance(
+    df_tuning_ft.to_pandas(),
+    subsample_size = None,
+    num_shuffle_sets = 5
+)
+
+display(feature_importance_s2)
+```
+
+Check probability calibration using the tuning set.
+
+```{python}
+#| label: calibration-s2
+#| 
+
+%matplotlib inline
+
+pre_cal_disp_s2 = CalibrationDisplay.from_estimator(
+        estimator = ag_model_s2,
+        X = X_tuning,
+        y = y_tuning,
+        n_bins = 20,
+        name = 'Pre-Calib Curve: Do Nothing Strategy',
+        color = 'orange'
+    )
+
+pre_cal_disp_s2.ax_.set_title("Calibration Plot (Tuning Set)")
+```
+
+Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
+
+```{python}
+cal_model_s2 = CalibratedClassifierCV(
+    estimator = ag_model_s2,
+    method='isotonic',
+    cv="prefit" # Use the fitted model from ag_model
+)
+
+global_set_seed()
+
+cal_model_s2.fit(X = X_tuning,
+            y = y_tuning)
+```
+
+Since the isotonic regression model was fitted on the tuning set, we can no longer use the tuning set for calibration evaluation. We will use the test set for calibration evaluation.
+
+```{python}
+#| label: calibration-s2-test
+
+%matplotlib inline
+
+fig, ax = plt.subplots()
+
+for estimator, name, color in [(ag_model_s2, 'Uncalib_CatBoost', 'orange'),
+          (cal_model_s2, 'Calib_CatBoost', 'blue')]:
+
+  CalibrationDisplay.from_estimator(
+      estimator = estimator,
+      X = X_test,
+      y = y_test,
+      n_bins = 20,
+      name = name,
+      color = color,
+      ax = ax
     )
     
-    print("Training AutoGluon model for Strategy 2...")
-    start_time    start_time = time.time()
-    ag_model_s2.fit(X_train, y_train)
-    end_time = time.time()
-    print(f"Strategy 2 model training finished in {end_time - start_time:.2f} seconds.")
-
-    # Performance Reporting
-    print("\n--- Performance on Test Set (Strategy 2) ---")
-    leaderboard_s2 = ag_model_s2.predictor.leaderboard(X_test, extra_metrics=['average_precision', 'f1', 'roc_auc'], silent=True)
-    display(leaderboard_s2)
-    
-    best_model_name_s2 = leaderboard_s2.iloc[0]['model']
-    # score_test is now average_precision
-    pr_auc_s2_test = leaderboard_s2.iloc[0]['score_test'] 
-    roc_auc_s2_test = leaderboard_s2.iloc[0]['roc_auc']
-    f1_default_s2_test = leaderboard_s2.iloc[0]['f1']
-    print(f"Best model: {best_model_name_s2}")
-    print(f"Test PR-AUC (average_precision, from leaderboard): {pr_auc_s2_test:.4f}")
-    print(f"Test ROC-AUC (from leaderboard): {roc_auc_s2_test:.4f}")
-    print(f"Test F1 Score at default 0.5 threshold (from leaderboard): {f1_default_s2_test:.4f}")
-
-    # Probability Calibration Check & Threshold Tuning
-    print("\n--- Probability Calibration & Threshold Tuning (Strategy 2) ---")
-    pred_proba_tuning_s2 = ag_model_s2.predict_proba(X_tuning)[:, 1]
-
-    plt.figure(figsize=(8, 6))
-    disp = CalibrationDisplay.from_predictions(y_tuning, pred_proba_tuning_s2, n_bins=10, name=best_model_name_s2)
-    plt.title("Calibration Curve (Strategy 2: PR-AUC)")
-    plt.grid(True)
-    plt.show()
-    calibration_note_s2 = "Review plot"
-
-    best_f1_s2 = 0
-    best_threshold_s2 = 0.5
-    thresholds = np.arange(0.01, 1.0, 0.01)
-    f1_scores_tuning_s2 = []
-    for threshold in thresholds:
-        y_pred_tuning_thresholded_s2 = (pred_proba_tuning_s2 >= threshold).astype(int)
-        current_f1 = f1_score(y_tuning, y_pred_tuning_thresholded_s2)
-        f1_scores_tuning_s2.append(current_f1)
-        if current_f1 > best_f1_s2:
-            best_f1_s2 = current_f1
-            best_threshold_s2 = threshold
-            
-    print(f"Best F1-score on tuning set: {best_f1_s2:.4f} at threshold {best_threshold_s2:.2f}")
-
-    plt.figure(figsize=(8, 6))
-    plt.plot(thresholds, f1_scores_tuning_s2, marker='.')
-    plt.axvline(best_threshold_s2, color='r', linestyle='--', label=f'Best Threshold: {best_threshold_s2:.2f}')
-    plt.title('F1 Score vs. Threshold on Tuning Set (Strategy 2)')
-    plt.xlabel('Threshold')
-    plt.ylabel('F1 Score')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-    # Evaluate on test set with optimal threshold
-    pred_proba_test_s2 = ag_model_s2.predict_proba(X_test)[:, 1]
-    y_pred_test_optimal_s2 = (pred_proba_test_s2 >= best_threshold_s2).astype(int)
-    f1_optimal_s2_test = f1_score(y_test, y_pred_test_optimal_s2)
-    print(f"F1-score on test set with optimal threshold ({best_threshold_s2:.2f}): {f1_optimal_s2_test:.4f}")
-
-    print("\nClassification Report on Test Set (Optimal Threshold, Strategy 2):")
-    print(classification_report(y_test, y_pred_test_optimal_s2, target_names=['Legitimate', 'Fraud']))
-
-    comparison_results.append({
-        "Strategy": strategy_name_2,
-        "Test ROC-AUC": roc_auc_s2_test,
-        "Test PR-AUC": pr_auc_s2_test,
-        "Test F1 (Optimized)": f1_optimal_s2_test,
-        "Optimized Threshold": best_threshold_s2,
-        "Calibration Note": calibration_note_s2
-    })
+ax.set_title("Calibration Plot (Test Set)")
+plt.show()
 ```
+
+The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
+
+Evalulate the original decision threshold of 0.5 on the test set.
+
+```{python}
+#| label: evaluate-default-threshold-s2
+
+leaderboard_s2_default = ag_model_s2_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
+
+display(leaderboard_s2_default)
+
+```
+
+Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score.
+
+```{python}
+#| label: threshold-tuning-s2
+
+best_threshold_s2 = (ag_model_s2_predictor
+                .calibrate_decision_threshold(
+                data = df_tuning_ft.to_pandas(),
+                metric = 'f1',
+                decision_thresholds = 200)
+                )
+
+ag_model_s2_predictor.set_decision_threshold(best_threshold_s2)
+
+ag_model_s2_predictor.save()  # Save the predictor with the new threshold
+```
+
+Use the test set to evaluate the effectivness of the decision threshold.
+
+```{python}
+#| label: evaluate-threshold-s2
+
+leaderboard_s2_optimized = ag_model_s2_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
+
+display(leaderboard_s2_optimized)
+```
+
+Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score.
+
 
 ## Cost-Sensitive Learning Approach
 
 **Concept Recap:** Cost-sensitive learning is achieved by assigning higher weights to the minority class (fraud) instances during training. AutoGluon handles this internally when `sample_weight='balance_weight'` is specified. We will use `average_precision` as the evaluation metric.
 
+Setup AutoGluon parameters.
+
 ```{python}
-#| label: model-strategy3-cost-sensitive
+#| label: setup-autogluon-cost-sensitive
 
-if X_train.empty:
-    print("Skipping Strategy 3: Training data is empty.")
-else:
-    print("\n--- Strategy 3: Cost-Sensitive Learning (balance_weight) ---")
-    strategy_name_3 = "3. Cost-Sensitive (balance_weight)"
-    model_folder_s3 = "Lab04_ag_models_s3_cost_sensitive"
-    remove_ag_folder(model_folder_s3)
+strategy_name_3 = "3. Cost Sensitive Learning"
+model_folder_s3 = "Lab04_ag_models_s3_cost_sensitive"
+remove_ag_folder(model_folder_s3)
 
-    predictor_args_s3 = {
-        'problem_type': 'binary',
-        'eval_metric': 'average_precision',
-        'path': model_folder_s3,
-        'sample_weight': 'balance_weight' # Key change: Apply class balancing via sample weights
+predictor_args_s3 = {
+    'problem_type': 'binary',
+    'eval_metric': 'average_precision', 
+    'path': model_folder_s3
+}
 
-    }
-    fit_args_s3 = {
-        'presets': 'medium_quality_faster_train',
-        'time_limit': 300,
-        'excluded_model_types': ['KNN', 'NN_TORCH', 'FASTAI']
-    }
+fit_args_s3 = {'holdout_frac': 0.2,
+            'excluded_model_types': ['KNN'],
+            'presets': 'medium_quality',
+            'time_limit': 300,
+            'sample_weight': 'balance_weight'}  # Use balance weights for cost-sensitive learning
 
-    ag_model_s3 = AutoGluonSklearnWrapper(
-        label='TX_FRAUD',
-        predictor_args=predictor_args_s3,
-        fit_args=fit_args_s3
+ag_wrapper_s3 = AutoGluonSklearnWrapper(
+    label=target_label,
+    predictor_args=predictor_args_s3,
+    fit_args=fit_args_s3
+)
+```
+
+Fit the model using AutoGluon.
+
+```{python}
+ag_model_s3 = ag_wrapper_s3.fit(X_train, y_train)
+
+ag_model_s3.predictor.save()  # Save the predictor for later use
+```
+
+Access the AutoGluon predictor object.
+```{python}
+#| label: access-autogluon-predictor-s3
+
+ag_model_s3_predictor = ag_model_s3.predictor
+
+```
+
+Check the leaderboard.
+
+```{python}
+#| label: leaderboard-s3
+leaderboard_s3 = ag_model_s3_predictor.leaderboard(
+    df_tuning_ft.to_pandas()
+    , extra_metrics=['average_precision', 'f1']
+)
+display(leaderboard_s3)
+```
+
+Set the best model to CatBoost due to inference speed and performance.
+
+```{python}
+#| label: set-best-model-s3
+
+ag_model_s3_predictor.set_model_best('CatBoost')
+
+ag_model_s3.predictor.save()  # Save the predictor for later use
+
+```
+
+Check feature importance.
+
+```{python}
+#| label: feature-importance-s3
+
+feature_importance_s3 = ag_model_s3_predictor.feature_importance(
+    df_tuning_ft.to_pandas(),
+    subsample_size = None,
+    num_shuffle_sets = 5
+)
+
+display(feature_importance_s3)
+```
+
+Check probability calibration using the tuning set.
+
+```{python}
+#| label: calibration-s3
+#| 
+
+%matplotlib inline
+
+pre_cal_disp_s3 = CalibrationDisplay.from_estimator(
+        estimator = ag_model_s3,
+        X = X_tuning,
+        y = y_tuning,
+        n_bins = 20,
+        name = 'Pre-Calib Curve: Do Nothing Strategy',
+        color = 'orange'
+    )
+
+pre_cal_disp_s3.ax_.set_title("Calibration Plot (Tuning Set)")
+```
+
+Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
+
+```{python}
+cal_model_s3 = CalibratedClassifierCV(
+    estimator = ag_model_s3,
+    method='isotonic',
+    cv="prefit" # Use the fitted model from ag_model
+)
+
+global_set_seed()
+
+cal_model_s3.fit(X = X_tuning,
+            y = y_tuning)
+```
+
+Since the isotonic regression model was fitted on the tuning set, we can no longer use the tuning set for calibration evaluation. We will use the test set for calibration evaluation.
+
+```{python}
+#| label: calibration-s3-test
+
+%matplotlib inline
+
+fig, ax = plt.subplots()
+
+for estimator, name, color in [(ag_model_s3, 'Uncalib_CatBoost', 'orange'),
+          (cal_model_s3, 'Calib_CatBoost', 'blue')]:
+
+  CalibrationDisplay.from_estimator(
+      estimator = estimator,
+      X = X_test,
+      y = y_test,
+      n_bins = 20,
+      name = name,
+      color = color,
+      ax = ax
     )
     
-    print("Training AutoGluon model for Strategy 3...")
-    start_time = time.time()
-    # Note: The AutoGluonSklearnWrapper is set up to handle 'balance_weight' in predictor_args.
-    # No explicit sample_weight array needs to be passed to .fit() for this case.
-    ag_model_s3.fit(X_train, y_train)
-    end_time = time.time()
-    print(f"Strategy 3 model training finished in {end_time - start_time:.2f} seconds.")
-
-    # Performance Reporting
-    print("\n--- Performance on Test Set (Strategy 3) ---")
-    leaderboard_s3 = ag_model_s3.predictor.leaderboard(X_test, extra_metrics=['average_precision', 'f1', 'roc_auc'], silent=True)
-    display(leaderboard_s3)
-    
-    best_model_name_s3 = leaderboard_s3.iloc[0]['model']
-    pr_auc_s3_test = leaderboard_s3.iloc[0]['score_test'] # average_precision
-    roc_auc_s3_test = leaderboard_s3.iloc[0]['roc_auc']
-    f1_default_s3_test = leaderboard_s3.iloc[0]['f1']
-    print(f"Best model: {best_model_name_s3}")
-    print(f"Test PR-AUC (average_precision, from leaderboard): {pr_auc_s3_test:.4f}")
-    print(f"Test ROC-AUC (from leaderboard): {roc_auc_s3_test:.4f}")
-    print(f"Test F1 Score at default 0.5 threshold (from leaderboard): {f1_default_s3_test:.4f}")
-
-    # Probability Calibration Check & Threshold Tuning
-    print("\n--- Probability Calibration & Threshold Tuning (Strategy 3) ---")
-    pred_proba_tuning_s3 = ag_model_s3.predict_proba(X_tuning)[:, 1]
-
-    plt.figure(figsize=(8, 6))
-    disp = CalibrationDisplay.from_predictions(y_tuning, pred_proba_tuning_s3, n_bins=10, name=best_model_name_s3)
-    plt.title("Calibration Curve (Strategy 3: Cost-Sensitive)")
-    plt.grid(True)
-    plt.show()
-    calibration_note_s3 = "Review plot"
-
-    best_f1_s3 = 0
-    best_threshold_s3 = 0.5
-    thresholds = np.arange(0.01, 1.0, 0.01)
-    f1_scores_tuning_s3 = []
-    for threshold in thresholds:
-        y_pred_tuning_thresholded_s3 = (pred_proba_tuning_s3 >= threshold).astype(int)
-        current_f1 = f1_score(y_tuning, y_pred_tuning_thresholded_s3)
-        f1_scores_tuning_s3.append(current_f1)
-        if current_f1 > best_f1_s3:
-            best_f1_s3 = current_f1
-            best_threshold_s3 = threshold
-            
-    print(f"Best F1-score on tuning set: {best_f1_s3:.4f} at threshold {best_threshold_s3:.2f}")
-
-    plt.figure(figsize=(8, 6))
-    plt.plot(thresholds, f1_scores_tuning_s3, marker='.')
-    plt.axvline(best_threshold_s3, color='r', linestyle='--', label=f'Best Threshold: {best_threshold_s3:.2f}')
-    plt.title('F1 Score vs. Threshold on Tuning Set (Strategy 3)')
-    plt.xlabel('Threshold')
-    plt.ylabel('F1 Score')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-    # Evaluate on test set with optimal threshold
-    pred_proba_test_s3 = ag_model_s3.predict_proba(X_test)[:, 1]
-    y_pred_test_optimal_s3 = (pred_proba_test_s3 >= best_threshold_s3).astype(int)
-    f1_optimal_s3_test = f1_score(y_test, y_pred_test_optimal_s3)
-    print(f"F1-score on test set with optimal threshold ({best_threshold_s3:.2f}): {f1_optimal_s3_test:.4f}")
-
-    print("\nClassification Report on Test Set (Optimal Threshold, Strategy 3):")
-    print(classification_report(y_test, y_pred_test_optimal_s3, target_names=['Legitimate', 'Fraud']))
-
-    comparison_results.append({
-        "Strategy": strategy_name_3,
-        "Test ROC-AUC": roc_auc_s3_test,
-        "Test PR-AUC": pr_auc_s3_test,
-        "Test F1 (Optimized)": f1_optimal_s3_test,
-        "Optimized Threshold": best_threshold_s3,
-        "Calibration Note": calibration_note_s3
-    })
+ax.set_title("Calibration Plot (Test Set)")
+plt.show()
 ```
+
+The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
+
+Evalulate the original decision threshold of 0.5 on the test set.
+
+```{python}
+#| label: evaluate-default-threshold-s3
+
+leaderboard_s3_default = ag_model_s3_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
+
+display(leaderboard_s3_default)
+
+```
+
+Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score.
+
+```{python}
+#| label: threshold-tuning-s3
+
+best_threshold_s3 = (ag_model_s3_predictor
+                .calibrate_decision_threshold(
+                data = df_tuning_ft.to_pandas(),
+                metric = 'f1',
+                decision_thresholds = 200)
+                )
+
+ag_model_s3_predictor.set_decision_threshold(best_threshold_s3)
+
+ag_model_s3_predictor.save()  # Save the predictor with the new threshold
+```
+
+Use the test set to evaluate the effectivness of the decision threshold.
+
+```{python}
+#| label: evaluate-threshold-s3
+
+leaderboard_s3_optimized = ag_model_s3_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
+
+display(leaderboard_s3_optimized)
+```
+
+Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score.
+
+**stopped here 6/4**
+
 
 ## Resampling Approach
 
