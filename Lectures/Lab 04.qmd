@@ -1554,14 +1554,14 @@ remove_ag_folder(model_folder_s3)
 predictor_args_s3 = {
     'problem_type': 'binary',
     'eval_metric': 'average_precision', 
-    'path': model_folder_s3
+    'path': model_folder_s3,
+    'sample_weight': 'balance_weight' # Use balance weights for cost-sensitive learning
 }
 
 fit_args_s3 = {'holdout_frac': 0.2,
             'excluded_model_types': ['KNN'],
             'presets': 'medium_quality',
-            'time_limit': 300,
-            'sample_weight': 'balance_weight'}  # Use balance weights for cost-sensitive learning
+            'time_limit': 300}  
 
 ag_wrapper_s3 = AutoGluonSklearnWrapper(
     label=target_label,
@@ -1573,7 +1573,7 @@ ag_wrapper_s3 = AutoGluonSklearnWrapper(
 Fit the model using AutoGluon.
 
 ```{python}
-ag_model_s3 = ag_wrapper_s3.fit(X_train, y_train)
+ag_model_s3 = ag_wrapper_s3.fit(X_train, y_train) 
 
 ag_model_s3.predictor.save()  # Save the predictor for later use
 ```
