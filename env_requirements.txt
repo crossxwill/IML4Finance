@@ -229,7 +229,6 @@ patsy==1.0.2
 pdf2image==1.17.0
 phik==0.12.5
 pillow==11.3.0
-pip @ file:///home/conda/feedstock_root/build_artifacts/pip_1762776163052/work
 platformdirs==4.5.0
 plotly==6.5.0
 plum-dispatch==2.6.0
@@ -269,8 +268,6 @@ pytorch-lightning==2.6.0
 pytorch-metric-learning==2.8.1
 pytz==2025.2
 pywavelets==1.9.0
-pywin32==311
-pywinpty==3.0.2
 pyyaml==6.0.3
 pyzmq==27.1.0
 raiutils==0.4.2

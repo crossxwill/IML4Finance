@@ -14,10 +14,6 @@ dependencies:
   - python=3.12.12
   - setuptools=80.9.0
   - tk=8.6.13
-  - ucrt=10.0.26100.0
   - uv=0.9.14
-  - vc=14.3
-  - vc14_runtime=14.44.35208
-  - vcomp14=14.44.35208
   - wheel=0.45.1
 prefix: C:\Users\chiuw\miniforge3\envs\env_uv_202512
