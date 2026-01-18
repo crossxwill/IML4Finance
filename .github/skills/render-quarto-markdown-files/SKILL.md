@@ -1,6 +1,6 @@
 ---
 name: quarto-qmd-cli-rendering
-description: Render Quarto .qmd files from the command line (single files and projects), including output formats, parameters, and sequential rendering on low-RAM systems.
+description: Render or build or compile Quarto .qmd files from the command line.
 ---
 
 ## Goal
@@ -12,6 +12,8 @@ Include a short note that the terminal will show per-cell progress lines like:
 Cell 1/3 '{cell-label}'.....Done
 Cell 2/3 '{cell-label}'.....Done
 Cell 3/3 '{cell-label}'.....Done
+
+Output created: {file-name}
 ```
 
 Some cells finish quickly while others can take a long time; the agent should be patient and wait for completion. For example, the following terminal indicates that cell 2 is still running:
