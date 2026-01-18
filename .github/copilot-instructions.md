@@ -2,44 +2,39 @@
 
 ## Dependencies
 
-The project uses conda-forge (conda) to manage `uv` and `nodejs` dependencies. If you want to run `conda`, `npm`, or `uv` commands, you must first activate the correct conda environment by running:
+The project uses `conda-forge` (conda) to manage dependencies. If you want to run `conda`, `npm`, `npx`, `uvx` or `uv` commands, you must first activate the correct conda environment by running:
 
 ```bash
-conda activate env_uv_202601
+conda activate env_uv_202512
 ```
 
 If the environment has not yet been created, you can create it by running:
 
 ```bash
-conda env create -f environment_uv_202601.yml
+conda env create -f conda_env_uv_202512.yml
 ```
 
 If a user is unable to execute any `conda` commands, direct the user Miniforge URL: [https://github.com/conda-forge/miniforge](https://github.com/conda-forge/miniforge).
 
-Python dependencies are managed using `uv` (installed inside a conda environment). To install Python dependencies, run:
-
-```bash
-uv sync
-```
-
 If you want to add new Python dependencies, you can do so by running:
 
 ```bash
-uv add <package-name>
+uv pip install <package-name>
 ```
-
-Avoid `conda install` or `pip install` for managing Python dependencies, as this may lead to inconsistencies in the `uv` environment.
 
 ## Running commads in terminal, command line, or PowerShell
 
 Always use this pattern when running commands in the terminal:
 
 ```bash
-conda activate env_uv_202601
-.venv\Scripts\activate
+conda activate env_uv_202512
 
 <command to run>
 ```
+
+## Copilot Agent Skills
+
+Copilot Agent Skills are available in `.github/skills/`.
 
 ## Project Purpose
 
@@ -50,11 +45,8 @@ The repo is for a graduate-level course called "Interpretable Machine Learning f
 The project primarily uses:
 
 * AutoGluon (tabular models and AutoML)
-* DuckDB (Parquet querying)
-* ydata-profiling (EDA reports)
 * SHAP (model explainability)
 * dice-ml (counterfactuals)
-* feature-engine (feature engineering)
 * imbalanced-learn (sampling and imbalance handling for fraud detection)
 * pandas / polars (data wrangling)
 * plotnine / yellowbrick (visualization)
@@ -71,3 +63,8 @@ The project primarily uses:
 * Prefer editing `.qmd` or `.py` sources instead of generated `.html` files.
 * Keep outputs and model artifact folders unchanged unless explicitly requested.
 * Avoid Jupyter notebooks (`.ipynb` files); use `.py` or `.qmd` files for code instead.
+
+## NEVER DO THIS!!!
+
+* Never delete files. Commands like `Remove-Item` or `rm` are strictly forbidden. If files should be deleted, tell the user to manually delete the files.
+* Do not edit `LICENSE.txt` files.

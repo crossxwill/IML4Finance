@@ -531,7 +531,7 @@ class AutoGluonSklearnWrapper(ClassifierMixin, BaseEstimator):
 
         self.is_fitted_ = True
 
-        return self
+        return self 
 
     def predict(self, X):
         """
@@ -782,8 +782,9 @@ def show_pdp(wrappedAGModel: BaseEstimator,
             list_categ_features: list,
             df: pd.DataFrame,
             xGTzero: bool = False,
-            sampSize: int = 5000,
-            n_jobs: int = 4) -> None:
+            sampSize: int = 5000) -> None:
+
+    N_JOBS = 4
 
     for feature in list_features:
         fig = plt.figure(figsize=(8, 4))
@@ -802,17 +803,10 @@ def show_pdp(wrappedAGModel: BaseEstimator,
             grid_resolution=100,
             ax=ax,
             random_state=2025,
-            n_jobs=n_jobs,
+            n_jobs=N_JOBS,
         )
 
-        # On Windows, joblib's default process-based backend can terminate workers
-        # when pickling / loading heavy models. Use threads but keep n_jobs > 1.
-        if n_jobs is not None and n_jobs != 1:
-            from joblib import parallel_backend
-            with parallel_backend('threading'):
-                _ = PartialDependenceDisplay.from_estimator(**pdp_kwargs)
-        else:
-            _ = PartialDependenceDisplay.from_estimator(**pdp_kwargs)
+        _ = PartialDependenceDisplay.from_estimator(**pdp_kwargs)
 
         ax.set_title(f"Partial Dependence for {feature}")
 
@@ -854,7 +848,6 @@ show_pdp(wrappedAGModel = ag_model,
         list_features = all_features, 
         list_categ_features = categorical_features, 
     df = train_data.drop(columns=[label]),
-    n_jobs = 4,
         )
 ```
 
@@ -887,8 +880,7 @@ show_pdp(wrappedAGModel = ag_model,
         list_features = numeric_features, 
         list_categ_features = categorical_features, 
     df = train_data.drop(columns=[label]), 
-    xGTzero = True,
-    n_jobs = 4)
+    xGTzero = True)
 
 ```
 
@@ -1585,7 +1577,7 @@ ag_model_wrapper_method = Pipeline([
         remainder='passthrough'
     )),
     ('feature_selection', SequentialFeatureSelector(
-        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=1),
+        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=4),
     direction='forward',
     scoring='roc_auc',
     tol=0.005,
@@ -1604,12 +1596,10 @@ ag_model_wrapper_method = Pipeline([
 
 global_set_seed()
 
-from joblib import parallel_backend
-with parallel_backend('threading'):
-    ag_model_wrapper_method.fit(
-        X=train_data_wide.drop(columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']),
-        y=train_data_wide[label],
-    )
+ag_model_wrapper_method.fit(
+    X=train_data_wide.drop(columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']),
+    y=train_data_wide[label],
+)
 ```
 
 Check leaderboard using the test set.

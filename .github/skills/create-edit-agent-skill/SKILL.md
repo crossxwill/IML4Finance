@@ -1,41 +1,47 @@
 ---
 name: create-edit-agent-skill
-description: Official skill generator for GitHub Copilot Agent Skills; scaffolds new skills with correct directory structure and validation, and is the upstream dependency for authoring or modifying any other skill in this repository.
+description: Official skill generator for VS Code Agent Skills; scaffolds new skills with correct directory structure and validation, and is the upstream dependency for authoring or modifying any other skill in this repository.
 ---
 
 # Create Agent Skill
 
-This skill scaffolds high-quality Agent Skills that comply with VS Code, GitHub Copilot standards, and "Progressive Loading" best practices.
+This skill scaffolds high-quality Agent Skills that comply with VS Code standards and "progressive disclosure" best practices.
 
 ## Capabilities
-- **Scaffold**: Creates the `.github/skills/<name>/` directory structure including `scripts/` and `templates/`.
-- **Template**: Generates a valid `SKILL.md` optimized for the Agent's context window.
-- **Validate**: Verifies the structure using the attached Python script.
+- **Scaffold**: Creates the `.github/skills/<name>/` directory structure with a required `SKILL.md` and optional resource folders.
+- **Template**: Generates a valid `SKILL.md` optimized for the agent's context window.
+- **Validate**: Verifies the structure and frontmatter using the attached Python script.
 
 ## Instructions
 
 ### 1. Analyze the Request
 Determine the *goal* of the new skill.
-- **Name**: Convert to kebab-case (e.g., "analyze-logs").
-- **Description**: **CRITICAL**. This is the *only* field the Agent reads initially. It must be highly descriptive and action-oriented so the Agent selects it automatically without user prompting.
+- **Name**:
+   - Convert to kebab-case (e.g., "analyze-logs").
+   - Prefer short, verb-led names that describe the action.
+   - Keep names under 64 characters.
+   - The skill folder name must exactly match `name`.
+- **Description**: **CRITICAL**. This is the primary field the agent uses to decide whether to load the skill. It must clearly state what the skill does and when to use it (file types, tools, workflows, triggers).
 
 ### 2. Generate Files
-Create the following structure in the workspace to support modularity:
+Create the following structure in the workspace to support modularity. Only create the resource folders you actually need.
 
 ```text
 .github/skills/<skill-name>/
 ├── SKILL.md           # The core instruction file
-├── templates/         # (Optional) Markdown templates for standardized responses
-└── scripts/           # (Optional) Python/Node.js scripts for complex logic
+├── scripts/           # (Optional) Executable helpers for deterministic/repeated work
+├── templates/         # (Optional) Response templates / standardized formats
+├── references/        # (Optional) Long-form docs loaded only when needed
+└── assets/            # (Optional) Files used in outputs (images, templates, boilerplate)
 ```
 
 ### 3. Apply the Skill Template
-Use this format for the new `SKILL.md`. Note the use of relative paths for scripts and templates:
+Use this format for the new `SKILL.md`. Put "when to use" details in `description`, because that is used for skill selection.
 
 ```markdown
 ---
 name: <kebab-case-name>
-description: <Detailed description of WHAT this skill does. Agent uses this to decide whether to load the full skill.>
+description: <Detailed description of WHAT this skill does and WHEN to use it.>
 ---
 
 # <Human Readable Title>
@@ -56,7 +62,7 @@ description: <Detailed description of WHAT this skill does. Agent uses this to d
 
 ### 4. Verify Structure
 After creating the files, run the validation script to ensure compliance:
-`python .github/skills/create-agent-skill/scripts/validate.py .github/skills/<skill-name>`
+`python .github/skills/create-edit-agent-skill/scripts/validate.py .github/skills/<skill-name>`
 
 ## Examples
 
@@ -69,6 +75,8 @@ After creating the files, run the validation script to ensure compliance:
 - Instructions: "Run `./scripts/extract_pdf.py` to parse the file, then display results using `./templates/summary_format.md`."
 
 ## Best Practices
-- **Progressive Loading**: Keep the `SKILL.md` file concise. Offload complex logic to files in `./scripts/` and long text formats to `./templates/`. The Agent reads the `SKILL.md` *after* selection, so a smaller file saves tokens and reduces latency.
-- **Relative Paths**: Always refer to scripts and templates using relative paths (e.g., `./scripts/myscript.py`).
-- **Description is Key**: If the Agent isn't using your skill, the description is likely too vague. Make it keyword-rich.
+- **Concise is key**: Keep `SKILL.md` focused on essential workflow. Offload details into `references/` and keep those files discoverable from `SKILL.md`.
+- **Progressive disclosure**: Prefer a small `SKILL.md` + optional `references/` files; load detailed docs only when needed.
+- **Avoid clutter**: Do not add extra documentation files (README, changelog, etc.) that don't directly help the agent execute tasks.
+- **Relative paths**: Refer to resources using relative paths (e.g., `./scripts/myscript.py`).
+- **Description is key**: If the agent isn't using your skill, the `description` is likely too vague—make triggers explicit.
