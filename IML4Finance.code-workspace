@@ -14,7 +14,10 @@
 			"/^python c:\\\\Users\\\\chiuw\\\\IML4Finance\\\\\\.github\\\\skills\\\\create-edit-agent-skill\\\\scripts\\\\validate\\.py c:\\\\Users\\\\chiuw\\\\IML4Finance\\\\\\.github\\\\skills\\\\custom-sklearn-estimator$/": {
 				"approve": true,
 				"matchCommandLine": true
-			}
+			},
+			"conda": true,
+			".venv\\Scripts\\activate": true,
+			"quarto": true
 		}
 	}
 }

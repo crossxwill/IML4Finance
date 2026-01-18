@@ -1,91 +1,67 @@
 ---
 name: quarto-qmd-cli-rendering
-description: Render or compile Quarto .qmd files from the command line (single files and projects), including output formats and parameterized renders.
+description: Render Quarto .qmd files from the command line (single files and projects), including output formats, parameters, and sequential rendering on low-RAM systems.
 ---
 
 ## Goal
 
-When asked to “render”, “build”, “preview”, or “compile” a Quarto `.qmd`, use the `quarto` CLI and provide copy-pastable commands plus brief explanations.
+When asked to “render”, “build”, “preview”, or “compile” a Quarto `.qmd`, respond with `quarto` CLI commands that are copy-pastable and include brief, practical notes.
+Include a short note that the terminal will show per-cell progress lines like:
+
+```
+Cell 1/3 '{cell-label}'.....Done
+Cell 2/3 '{cell-label}'.....Done
+Cell 3/3 '{cell-label}'.....Done
+```
+
+Some cells finish quickly while others can take a long time; the agent should be patient and wait for completion. For example, the following terminal indicates that cell 2 is still running:
+
+```
+Cell 1/3 '{cell-label}'.....Done
+Cell 2/3 '{cell-label}'.....
+```
 
 ## Assumptions
 
-- Quarto CLI is installed and available as `quarto` in PATH.
-- The target `.qmd` file path is known, and the command is run from a terminal in the relevant directory (or uses an explicit path).
+- Quarto CLI is installed and available as `quarto`.
+- The user can run commands from a terminal in the relevant directory, or will provide an explicit path.
+- The target output format is either defined in YAML, or the user will specify it.
 
-## Core rule
+## Core rules
 
-Always put the target input file (for example `report.qmd`) as the **first** command line argument to `quarto render`.
+- Single-file render: use `quarto render <file.qmd>` (put the file path immediately after `render`).
+- Project/directory render: use `quarto render` (current directory) or `quarto render <dir>` (named project directory).
+- Prefer explicit success signaling in scripts: append `&& echo "Render finished"` (don’t rely on Quarto verbosity).
+- If the user says “render sequentially” or “low RAM”, render one file at a time (do not suggest parallel execution).
 
 ## Render a single `.qmd`
 
-Use this pattern:
+Minimal pattern:
 
 ```bash
-quarto render path/to/report.qmd
+quarto render path/to/report.qmd && echo "Render finished"
 ```
 
-To specify output format explicitly:
+## Sequential rendering (low RAM)
 
-```bash
-quarto render path/to/report.qmd --to html
-quarto render path/to/report.qmd --to pdf
-quarto render path/to/report.qmd --to docx
-```
+Use sequential rendering when the user requests:
+- “One at a time.”
+- “No parallelism.”
+- “Low RAM” or “don’t run everything at once.”
+- “Render each qmd and stop on error.”
 
-Quarto’s own tutorial shows `--to html` and `--to docx` examples using this exact `quarto render <file> --to <format>` pattern.
-
-## Render a project or directory
-
-If the user asks to “render everything” in a folder or project, run `quarto render` on the directory, or `cd` into it and run `quarto render` with no file argument:
-
-```bash
-quarto render subdir
-# or
-cd subdir
-quarto render
-```
-
-Quarto will render all valid Quarto input files (including `.qmd`) in that directory when rendering a directory/project.
-
-## Parameterized renders (optional)
-
-If the user mentions parameters (for example “run with alpha=0.2”), use Quarto render parameters:
-
-- Inline parameters with `-P`:
-
-```bash
-quarto render report.qmd -P alpha:0.2 -P ratio:0.3
-```
-
-- Parameters from a YAML file with `--execute-params`:
-
-```bash
-quarto render report.qmd --execute-params params.yml
-```
-
-These patterns are documented in community Quarto rendering guides and match Quarto CLI usage.
-
-## What to output in responses
-
-When generating an answer for the user, include:
-
-- The exact command(s) to run (minimal, copy-pasteable).
-- If multiple files/formats are mentioned, show a small set of commands (2–4 max) and ask a clarifying question if the target format is unclear.
-- A reminder that `<file>.qmd` must come first in `quarto render <file>.qmd ...`.
-
-## Clarifying questions Copilot should ask
-
-Ask one question if needed:
-
-- “Which output format do you want (html, pdf, docx)?”
-- “Is this a single file render, or a Quarto project render?”
-- “Should code execute during render, or is this a render of existing outputs?”
+Instructions:
+1. Render exactly one file:
+   - `quarto render <file.qmd> && echo "Render finished"`
+2. Wait until the command exits (i.e., when the terminal shows "Render finished") before proceeding to the next file.
+3. If it fails, fix the current `.qmd`, then re-run the same command until it succeeds.
+4. Continue to the next `.qmd` only after the current one succeeds.
+5. The command succeeds when there are no error messages in the terminal and you see `Render finished`.
 
 ## Skill scope
 
 Use this skill when:
-- The user references `.qmd`, “Quarto”, “render”, “build”, “preview”, or “compile” from CLI.
-- The user wants commands for CI, Makefiles, or scripts (provide the same CLI commands).
+- The user mentions `.qmd`, Quarto, “render/build/compile/preview”, CI, Makefiles, or scripting.
 
 Do not use this skill when:
-- The user explicitly wants GUI instructions only (RStudio/VS Code UI) without CLI commands.
+- The user explicitly wants GUI-only steps (RStudio/VS Code) with no CLI commands.

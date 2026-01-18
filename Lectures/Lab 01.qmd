@@ -15,6 +15,9 @@ number-sections: true
 ```{python}
 # System utilities
 import os
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+
 import shutil
 import random
 import torch
@@ -27,7 +30,7 @@ import matplotlib.pyplot as plt
 
 # Machine learning - scikit-learn
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
-from sklearn.utils.validation import check_is_fitted
+from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder
@@ -37,7 +40,6 @@ from sklearn.inspection import PartialDependenceDisplay
 from sklearn.compose import make_column_transformer, make_column_selector
 from sklearn.ensemble import ExtraTreesClassifier
 from sklearn import set_config
-from sklearnex import patch_sklearn
 
 # Specialized ML libraries
 from autogluon.tabular import TabularPredictor, TabularDataset
@@ -375,7 +377,7 @@ def global_set_seed(seed_value=2025):
 Create a scikit-learn compatible wrapper for `autogluon`.
 
 ```{python}
-class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
+class AutoGluonSklearnWrapper(ClassifierMixin, BaseEstimator):
     """
     Scikit-learn compatible wrapper for AutoGluon TabularPredictor
     
@@ -413,22 +415,65 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
     is_fitted_ : bool
         Whether the estimator has been fitted
     """
+    _estimator_type = "classifier"
+
+    def _more_tags(self):
+        return {"estimator_type": "classifier"}
+
+    def __sklearn_tags__(self):
+        tags = super().__sklearn_tags__()
+        tags.estimator_type = "classifier"
+        return tags
     
-    def __init__(self, label, predictor_args=None, fit_args=None):
+    def __init__(self, label, predictor_args=None, fit_args=None, n_jobs=None):
         self.label = label
         self.predictor_args = predictor_args if predictor_args else {}
         self.fit_args = fit_args if fit_args else {}
-        self.predictor = None
-        self.classes_ = None
-        self.n_features_in_ = None
-        self.feature_names_ = None
-        self.is_fitted_ = False
+        self.n_jobs = n_jobs
+
+    def _validate_features(self, X):
+        """Validate feature names/counts and return a DataFrame with training features."""
+        if hasattr(X, "columns"):
+            cols = list(X.columns)
+            if cols != self.feature_names_:
+                raise ValueError("Feature names do not match training data.")
+            return X.copy()
+
+        if X.shape[1] != len(self.feature_names_):
+            raise ValueError("Number of features does not match training data.")
+
+        return pd.DataFrame(X, columns=self.feature_names_)
 
     def __sklearn_is_fitted__(self):
         """Official scikit-learn API for checking fitted status"""
-        return self.is_fitted_
+        return getattr(self, "is_fitted_", False)
 
-    def fit(self, X, y):
+    def __getstate__(self):
+        """Make the wrapper pickle-friendly for joblib/Parallel."""
+        state = self.__dict__.copy()
+        predictor_path = state.get("predictor_path_", None)
+        predictor = state.get("predictor_", None)
+        if predictor_path is None and predictor is not None:
+            predictor_path = predictor.path
+        if predictor_path is not None:
+            state["predictor_path_"] = os.path.abspath(predictor_path)
+        state["predictor_"] = None
+        return state
+
+    def __setstate__(self, state):
+        """Restore predictor on unpickle."""
+        self.__dict__.update(state)
+        predictor_path = self.__dict__.get("predictor_path_", None)
+        if predictor_path:
+            self.predictor_ = TabularPredictor.load(predictor_path)
+        self.is_fitted_ = predictor_path is not None
+
+    @property
+    def predictor(self):
+        """Backward-compatible access to the fitted AutoGluon predictor."""
+        return getattr(self, "predictor_", None)
+
+    def fit(self, X, y=None, sample_weight=None):
         """
         Fit AutoGluon model using scikit-learn interface
         
@@ -438,31 +483,52 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
             Training data
         y : array-like of shape (n_samples,)
             Target values
+
+        sample_weight : array-like of shape (n_samples,), optional
+            Sample weights to pass to AutoGluon if configured
             
         Returns
         -------
         self : object
             Fitted estimator
         """
-        self._check_feature_names(X, reset=True)
-        self._check_n_features(X, reset=True)
-        
-        # Convert to DataFrame with preserved feature names
-        train_data = pd.DataFrame(X, columns=self.feature_names_)
-        train_data[self.label] = y
-        train_data = TabularDataset(train_data)
-        
-        # Initialize and fit AutoGluon predictor
-        self.predictor = TabularPredictor(
-            label=self.label, 
-            **self.predictor_args
-        ).fit(train_data, **self.fit_args)
-        
-        # Store sklearn-specific attributes
-        if self.predictor.problem_type in ['binary', 'multiclass']:
-            # Convert class labels to a NumPy array
-            self.classes_ = np.array(self.predictor.class_labels)
-            
+        X_checked, y_checked = check_X_y(X, y, accept_sparse=False, dtype=None)
+        y = y_checked
+
+        if hasattr(X, "columns"):
+            self.feature_names_ = list(X.columns)
+            train_df = X.copy()
+        else:
+            self.feature_names_ = [f"feat_{i}" for i in range(X_checked.shape[1])]
+            train_df = pd.DataFrame(X_checked, columns=self.feature_names_)
+
+        self.n_features_in_ = train_df.shape[1]
+
+        predictor_args = dict(self.predictor_args)
+        if sample_weight is not None:
+            weight_col = predictor_args.get("sample_weight")
+            if weight_col is None:
+                weight_col = "sample_weight"
+                predictor_args["sample_weight"] = weight_col
+            train_df[weight_col] = sample_weight
+
+        train_df[self.label] = y
+        train_data = TabularDataset(train_df)
+
+        fit_args = dict(self.fit_args)
+        if self.n_jobs is not None and fit_args.get("num_cpus") is None:
+            fit_args["num_cpus"] = self.n_jobs
+
+        self.predictor_ = TabularPredictor(
+            label=self.label,
+            **predictor_args
+        ).fit(train_data, **fit_args)
+
+        self.predictor_path_ = os.path.abspath(self.predictor_.path)
+
+        if self.predictor_.problem_type in ['binary', 'multiclass']:
+            self.classes_ = np.array(self.predictor_.class_labels)
+
         self.is_fitted_ = True
 
         return self
@@ -482,13 +548,14 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
             Predicted class labels
         """
         check_is_fitted(self)
-        self._check_feature_names(X)
-        self._check_n_features(X)
+        if hasattr(X, "columns"):
+            check_array(X, accept_sparse=False, dtype=None)
+            df = self._validate_features(X)
+        else:
+            X_checked = check_array(X, accept_sparse=False, dtype=None)
+            df = self._validate_features(X_checked)
 
-        df = pd.DataFrame(X, columns=self.feature_names_)
-        df = TabularDataset(df)
-
-        return self.predictor.predict(df).values
+        return self.predictor_.predict(TabularDataset(df)).values
 
     def predict_proba(self, X):
         """
@@ -505,57 +572,18 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
             Class probabilities
         """
         check_is_fitted(self)
-        self._check_feature_names(X)
-        self._check_n_features(X)
+        if hasattr(X, "columns"):
+            check_array(X, accept_sparse=False, dtype=None)
+            df = self._validate_features(X)
+        else:
+            X_checked = check_array(X, accept_sparse=False, dtype=None)
+            df = self._validate_features(X_checked)
 
-        df = pd.DataFrame(X, columns=self.feature_names_)
-        df = TabularDataset(df)
-
-        return self.predictor.predict_proba(df).values
-
-    def get_params(self, deep=True):
-        """Get parameters for this estimator"""
-        return {
-            'label': self.label,
-            'predictor_args': self.predictor_args,
-            'fit_args': self.fit_args
-        }
-
-    def set_params(self, **params):
-        """Set parameters for this estimator"""
-        for param, value in params.items():
-            if param == 'label':
-                self.label = value
-            else:
-                self.predictor_args[param] = value
-        return self
-
-    def _check_n_features(self, X, reset=False):
-        """Validate number of features"""
-        n_features = X.shape[1]
-        if reset:
-            self.n_features_in_ = n_features
-        elif n_features != self.n_features_in_:
-            raise ValueError(f"Expected {self.n_features_in_} features, got {n_features}")
-
-    def _check_feature_names(self, X, reset=False):
-        """Validate feature names (AutoGluon requirement)"""
-        if reset:
-            if isinstance(X, np.ndarray):
-                self.feature_names_ = [f'feat_{i}' for i in range(X.shape[1])]
-            else:
-                self.feature_names_ = X.columns.tolist()
-        elif hasattr(X, 'columns'):
-            if list(X.columns) != self.feature_names_:
-                raise ValueError("Feature names mismatch between fit and predict")
+        return self.predictor_.predict_proba(TabularDataset(df)).values
 
 ```
 
-Use Intel-accelerated `sklearnex` to speed up the training process.
-
-```{python}
-patch_sklearn()
-```
+Use the standard scikit-learn stack to keep the lab dependency-light and portable.
 
 Setup data frames for `autogluon`.
 
@@ -601,7 +629,8 @@ ag_model = Pipeline([
                                     fit_args={'holdout_frac': 0.2,
                                                 'excluded_model_types': ['KNN'],
                                                 'presets': 'medium_quality',
-                                                'time_limit': 180}))
+                                                'time_limit': 180},
+                                    n_jobs=4))
 ])
 
 global_set_seed()
@@ -700,10 +729,10 @@ for estimator, name, color in [(ag_model, 'Uncalib_CatBoost', 'orange'),
       estimator = estimator,
       X = test_data.drop(columns=[label]),
       y = test_data[label],
-      n_bins = 20,
+        n_bins = 20,
       name = name,
       color = color,
-      ax = ax
+        ax = ax
     )
     
 ax.set_title("Calibration Plot")
@@ -753,44 +782,53 @@ def show_pdp(wrappedAGModel: BaseEstimator,
             list_categ_features: list,
             df: pd.DataFrame,
             xGTzero: bool = False,
-            sampSize: int = 40000) -> None:
+            sampSize: int = 5000,
+            n_jobs: int = 4) -> None:
 
-  for feature in list_features:
+    for feature in list_features:
+        fig = plt.figure(figsize=(8, 4))
+        ax = fig.add_subplot(111)
 
-    fig = plt.figure(figsize=(8, 4))
-    ax = fig.add_subplot(111)
+        plt.rcParams.update({'font.size': 16})
 
-    plt.rcParams.update({'font.size': 16})
+        pdp_kwargs = dict(
+            estimator=wrappedAGModel,
+            X=df.sample(sampSize, random_state=2025),
+            features=[feature],
+            categorical_features=list_categ_features,
+            method='brute',
+            kind="average",
+            percentiles=(0.0001, 0.9999),
+            grid_resolution=100,
+            ax=ax,
+            random_state=2025,
+            n_jobs=n_jobs,
+        )
 
-    disp = PartialDependenceDisplay.from_estimator(
-        estimator = wrappedAGModel,
-        X = df.sample(sampSize, random_state=2025),
-        features = [feature],
-        categorical_features = list_categ_features,
-        method = 'brute',
-        kind = "average",
-        percentiles=(0.0001, 0.9999),
-        grid_resolution=100,
-        ax = ax,
-        random_state=2025,
-        n_jobs = -1
-    )
+        # On Windows, joblib's default process-based backend can terminate workers
+        # when pickling / loading heavy models. Use threads but keep n_jobs > 1.
+        if n_jobs is not None and n_jobs != 1:
+            from joblib import parallel_backend
+            with parallel_backend('threading'):
+                _ = PartialDependenceDisplay.from_estimator(**pdp_kwargs)
+        else:
+            _ = PartialDependenceDisplay.from_estimator(**pdp_kwargs)
 
-    ax.set_title(f"Partial Dependence for {feature}")
-    
-    # Set y-axis lower limit for all axes in the current figure
-    for a in fig.get_axes():
-      coordy = a.get_ylim()
-      a.set_ylim(bottom=0, top=coordy[1]*1.1)
+        ax.set_title(f"Partial Dependence for {feature}")
 
-    if xGTzero:
-      # Set x-axis from 0 to the max
-      for a in fig.get_axes():
-        max_val = np.percentile(df[feature].values, 99.99)
-        a.set_xlim(left=0, right=max_val)
+        # Set y-axis lower limit for all axes in the current figure
+        for a in fig.get_axes():
+            coordy = a.get_ylim()
+            a.set_ylim(bottom=0, top=coordy[1]*1.1)
 
-    plt.show()
-    plt.close('all')  # Prevent figure overload
+        if xGTzero:
+            # Set x-axis from 0 to the max
+            for a in fig.get_axes():
+                max_val = np.percentile(df[feature].values, 99.99)
+                a.set_xlim(left=0, right=max_val)
+
+        plt.show()
+        plt.close('all')  # Prevent figure overload
 
 ```
 
@@ -815,7 +853,8 @@ Unlike permutation feature importance, PDPs do not depend on the true labels. In
 show_pdp(wrappedAGModel = ag_model,
         list_features = all_features, 
         list_categ_features = categorical_features, 
-        df = train_data.drop(columns=[label]),
+    df = train_data.drop(columns=[label]),
+    n_jobs = 4,
         )
 ```
 
@@ -847,8 +886,9 @@ Zoom-in on the plots where the feature values are greater than or equal to 0.
 show_pdp(wrappedAGModel = ag_model,
         list_features = numeric_features, 
         list_categ_features = categorical_features, 
-        df = train_data.drop(columns=[label]), 
-        xGTzero = True)
+    df = train_data.drop(columns=[label]), 
+    xGTzero = True,
+    n_jobs = 4)
 
 ```
 
@@ -1461,7 +1501,7 @@ ag_model_embedded_method = Pipeline([
         remainder='passthrough'
     )),
     ('feature_selection', SelectFromModel(
-        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=-1),
+        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=4),
         threshold=0.01
     )),
     ('autogluon', AutoGluonSklearnWrapper(label=label,
@@ -1545,11 +1585,12 @@ ag_model_wrapper_method = Pipeline([
         remainder='passthrough'
     )),
     ('feature_selection', SequentialFeatureSelector(
-        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=-1),
+        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=1),
     direction='forward',
     scoring='roc_auc',
     tol=0.005,
-    n_jobs=-1
+    n_jobs=4,
+    cv=3
     )),
     ('autogluon', AutoGluonSklearnWrapper(label=label,
                                     predictor_args={'problem_type': 'binary',
@@ -1563,9 +1604,12 @@ ag_model_wrapper_method = Pipeline([
 
 global_set_seed()
 
-ag_model_wrapper_method.fit(X = train_data_wide.drop(
-                    columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']),
-                        y = train_data_wide[label])
+from joblib import parallel_backend
+with parallel_backend('threading'):
+    ag_model_wrapper_method.fit(
+        X=train_data_wide.drop(columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']),
+        y=train_data_wide[label],
+    )
 ```
 
 Check leaderboard using the test set.

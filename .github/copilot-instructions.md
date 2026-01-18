@@ -30,6 +30,17 @@ uv add <package-name>
 
 Avoid `conda install` or `pip install` for managing Python dependencies, as this may lead to inconsistencies in the `uv` environment.
 
+## Running commads in terminal, command line, or PowerShell
+
+Always use this pattern when running commands in the terminal:
+
+```bash
+conda activate env_uv_202601
+.venv\Scripts\activate
+
+<command to run>
+```
+
 ## Project Purpose
 
 The repo is for a graduate-level course called "Interpretable Machine Learning for Finance" (IML4Finance). The course focuses on teaching students how to apply interpretable machine learning techniques to financial data and problems. The course covers various topics, including feature engineering, model selection, evaluation metrics, and interpretability methods specific to finance.

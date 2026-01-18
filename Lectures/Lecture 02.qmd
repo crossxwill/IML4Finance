@@ -385,15 +385,12 @@ from sklearn.inspection import PartialDependenceDisplay
 from sklearn.compose import make_column_transformer, make_column_selector
 from sklearn.ensemble import ExtraTreesClassifier
 from sklearn import set_config
-from sklearnex import patch_sklearn
 
 # Specialized ML libraries
 from autogluon.tabular import TabularPredictor, TabularDataset
 from ydata_profiling import ProfileReport
 from scikitplot.metrics import plot_cumulative_gain, plot_lift_curve
 from PyALE import ale
-
-patch_sklearn()
 
 class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
     """
