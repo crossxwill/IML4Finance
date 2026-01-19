@@ -1,0 +1,40 @@
+name: env_iml4finance_2026
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11.14
+  - pyale=1.2.0
+  - joblib=1.4.2
+  - pandoc=3.4
+  - scikit-explain=0.1.4
+  - autogluon=1.2.0
+  - uv=0.9.26
+  - nodejs=24.12.0
+  - ydata-profiling=4.12.2
+  - yellowbrick=1.5
+  - dice-ml=0.9
+  - jupyter=1.1.1
+  - pandas=2.2.3
+  - imbalanced-learn=0.13.0
+  - sqlalchemy=2.0.45
+  - eli5=0.13.0
+  - pandarallel=1.6.5
+  - jupyterlab=4.3.8
+  - scikit-learn=1.5.2
+  - python-duckdb=1.1.3
+  - quarto=1.6.43
+  - deno=1.46.3
+  - shap=0.46.0
+  - plotnine=0.14.6
+  - feature_engine=1.8.3
+  - seaborn=0.13.2
+  - lxml=6.0.2
+  - openpyxl=3.1.5
+  - playwright=1.57.0
+  - pypdf=6.6.0
+  - python-pptx=1.0.2
+  - pip:
+      - mljar-scikit-plot==0.3.12
+      - polars==1.37.1
+      - polars-runtime-32==1.37.1
+prefix: C:\Users\chiuw\miniforge3\envs\env_iml4finance_2026

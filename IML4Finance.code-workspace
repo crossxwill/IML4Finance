@@ -17,7 +17,21 @@
 			},
 			"conda": true,
 			".venv\\Scripts\\activate": true,
-			"quarto": true
+			"quarto": true,
+			"gh": true,
+			"/^conda activate env_AutoGluon_202601; copilot --help$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^copilot help config$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^copilot help commands$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"copilot": true
 		}
 	}
 }

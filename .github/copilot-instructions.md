@@ -5,13 +5,15 @@
 The project uses `conda-forge` (conda) to manage dependencies. If you want to run `conda`, `npm`, `npx`, `uvx` or `uv` commands, you must first activate the correct conda environment by running:
 
 ```bash
-conda activate env_uv_202512
+conda activate {.env_name}
 ```
+
+The `.env_name` is env_iml4finance_2026.
 
 If the environment has not yet been created, you can create it by running:
 
 ```bash
-conda env create -f conda_env_uv_202512.yml
+conda env create -f {.env_name}.yml
 ```
 
 If a user is unable to execute any `conda` commands, direct the user Miniforge URL: [https://github.com/conda-forge/miniforge](https://github.com/conda-forge/miniforge).
@@ -19,22 +21,26 @@ If a user is unable to execute any `conda` commands, direct the user Miniforge U
 If you want to add new Python dependencies, you can do so by running:
 
 ```bash
+mamba install <package-name>
+```
+
+If the package is not available on conda-forge, then use `uv` to install the package from PyPI:
+
+```bash
 uv pip install <package-name>
 ```
 
-## Running commads in terminal, command line, or PowerShell
+Keep in mind that the same package could have different names on conda-forge and PyPI. Always try conda-forge first.
+
+## Running commands in terminal, command line, or PowerShell
 
 Always use this pattern when running commands in the terminal:
 
 ```bash
-conda activate env_uv_202512
+conda activate {.env_name}
 
 <command to run>
 ```
-
-## Copilot Agent Skills
-
-Copilot Agent Skills are available in `.github/skills/`.
 
 ## Project Purpose
 
@@ -63,6 +69,10 @@ The project primarily uses:
 * Prefer editing `.qmd` or `.py` sources instead of generated `.html` files.
 * Keep outputs and model artifact folders unchanged unless explicitly requested.
 * Avoid Jupyter notebooks (`.ipynb` files); use `.py` or `.qmd` files for code instead.
+
+## Rendering Guidelines
+
+When rendering or building or compiling a quarto file (qmd), refer to the agent skill: `.github\skills\render-quarto-markdown-files\SKILL.md`. Be very patient with rendering, could take hours.
 
 ## NEVER DO THIS!!!
 
