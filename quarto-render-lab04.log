@@ -1,0 +1,541 @@
+
+Executing 'Lab 04.quarto_ipynb'
+
+  Cell 1/68: 'setup-imports'................................
+Done
+
+  Cell 2/68: 'setup-helpers'................................
+Done
+
+  Cell 3/68: 'read-parquet-polars'..........................
+Done
+
+  Cell 4/68: 'read-parquet-duckdb'..........................
+Done
+
+  Cell 5/68: 'num-parquet-files'............................
+Done
+
+  Cell 6/68: 'peek-polars'..................................
+Done
+
+  Cell 7/68: 'peek-duckdb'..................................
+Done
+
+  Cell 8/68: 'column-info-polars'...........................
+Done
+
+  Cell 9/68: 'column-info-duckdb'...........................
+Done
+
+  Cell 10/68: ''.............................................
+Done
+
+  Cell 11/68: 'fraud-rate-polars-complex'....................
+Done
+
+  Cell 12/68: 'print-polars-fraud-rate'......................
+Done
+
+  Cell 13/68: 'fraud-rate-duckdb-complex'....................
+Done
+
+  Cell 14/68: 'print-duckdb-fraud-rate'......................
+Done
+
+  Cell 15/68: 'fraud-rate-pandas-complex'....................
+Done
+
+  Cell 16/68: 'print-pandas-fraud-rate'......................
+Done
+
+  Cell 17/68: 'data-splitting-polars'........................
+Done
+
+  Cell 18/68: 'sample-sizes'.................................
+Done
+
+  Cell 19/68: 'eda-train-tuning-comparison'..................
+Done
+
+  Cell 20/68: 'feature-is-weekend'...........................
+Done
+
+  Cell 21/68: 'feature-is-night'.............................
+Done
+
+  Cell 22/68: 'feature-customer-spending'....................
+Done
+
+  Cell 23/68: 'feature-terminal-risk'........................
+Done
+
+  Cell 24/68: 'feature-engineering-pipeline-function'........
+Done
+
+  Cell 25/68: 'apply-feature-engineering'....................
+Done
+
+  Cell 26/68: 'eda-train-tuning-comparison-ft'...............
+Done
+
+  Cell 27/68: 'define-modeling-features'.....................
+Done
+
+  Cell 28/68: ''.............................................
+Done
+
+  Cell 29/68: 'setup-autogluon-do-nothing'...................
+Done
+
+  Cell 30/68: ''.............................................
+Done
+
+  Cell 31/68: 'access-autogluon-predictor-s1'................
+Done
+
+  Cell 32/68: 'leaderboard-s1'...............................
+Done
+
+  Cell 33/68: 'set-best-model-s1'............................
+Done
+
+  Cell 34/68: 'feature-importance-s1'........................
+Done
+
+  Cell 35/68: 'calibration-s1'...............................
+Done
+
+  Cell 36/68: ''.............................................
+Done
+
+  Cell 37/68: 'calibration-s1-test'..........................
+Done
+
+  Cell 38/68: 'evaluate-default-threshold-s1'................
+Done
+
+  Cell 39/68: 'threshold-tuning-s1'..........................
+Done
+
+  Cell 40/68: 'evaluate-threshold-s1'........................
+Done
+
+  Cell 41/68: 'setup-autogluon-class-sensitive-evaluation'...
+Done
+
+  Cell 42/68: 'fit-autogluon-class-sensitive-evaluation'.....
+Done
+
+  Cell 43/68: 'access-autogluon-predictor-s2'................
+Done
+
+  Cell 44/68: 'leaderboard-s2'...............................
+Done
+
+  Cell 45/68: 'set-best-model-s2'............................
+Done
+
+  Cell 46/68: 'feature-importance-s2'........................
+Done
+
+  Cell 47/68: 'calibration-s2'...............................
+Done
+
+  Cell 48/68: ''.............................................
+Done
+
+  Cell 49/68: 'calibration-s2-test'..........................
+Done
+
+  Cell 50/68: 'evaluate-default-threshold-s2'................
+Done
+
+  Cell 51/68: 'threshold-tuning-s2'..........................
+Done
+
+  Cell 52/68: 'evaluate-threshold-s2'........................
+Done
+
+  Cell 53/68: 'setup-autogluon-cost-sensitive'...............
+Done
+
+  Cell 54/68: ''.............................................
+Done
+
+  Cell 55/68: 'access-autogluon-predictor-s3'................
+Done
+
+  Cell 56/68: 'leaderboard-s3'...............................
+Done
+
+  Cell 57/68: 'set-best-model-s3'............................
+Done
+
+  Cell 58/68: 'feature-importance-s3'........................
+Done
+
+  Cell 59/68: 'calibration-s3'...............................
+Done
+
+  Cell 60/68: ''.............................................
+Done
+
+  Cell 61/68: 'calibration-s3-test'..........................
+Done
+
+  Cell 62/68: 'evaluate-default-threshold-s3'................
+Done
+
+  Cell 63/68: 'threshold-tuning-s3'..........................
+Done
+
+  Cell 64/68: 'evaluate-threshold-s3'........................
+Done
+
+  Cell 65/68: 'model-strategy4-resampling-prep'..............
+Done
+
+  Cell 66/68: 'model-strategy4-resampling-train'.............
+(ERROR) 
+
+An error occurred while executing the following cell:
+------------------
+
+if X_train.empty or X_train_smote.empty:
+    print("Skipping Strategy 4 training: Training data (original or resampled) is empty.")
+else:
+    print("\n--- Strategy 4: Class-Based Resampling (SMOTE) ---")
+    strategy_name_4 = "4. Resampling (SMOTE)"
+    model_folder_s4 = "Lab04_ag_models_s4_smote"
+    remove_ag_folder(model_folder_s4)
+
+    predictor_args_s4 = {
+        'problem_type': 'binary',
+        'eval_metric': 'average_precision', # Continue using PR-AUC
+        'path': model_folder_s4
+    }
+
+    fit_args_s4 = {
+        'holdout_frac': 0.2,
+        'excluded_model_types': ['KNN'],
+        'presets': 'medium_quality',
+        'time_limit': 300
+    }
+
+    ag_model_s4 = AutoGluonSklearnWrapper(
+        label='TX_FRAUD',
+        predictor_args=predictor_args_s4,
+        fit_args=fit_args_s4
+    )
+    
+    print("Training AutoGluon model for Strategy 4 on SMOTE data...")
+    start_time = time.time()
+    ag_model_s4.fit(X_train_smote, y_train_smote) # Train on resampled data
+    end_time = time.time()
+    print(f"Strategy 4 model training finished in {end_time - start_time:.2f} seconds.")
+
+    # Performance Reporting
+    print("\n--- Performance on Test Set (Strategy 4) ---")
+    leaderboard_s4 = ag_model_s4.predictor.leaderboard(df_test_ft.to_pandas(), extra_metrics=['average_precision', 'f1', 'roc_auc'], silent=True)
+    display(leaderboard_s4)
+    
+    best_model_name_s4 = leaderboard_s4.iloc[0]['model']
+    pr_auc_s4_test = leaderboard_s4.iloc[0]['score_test'] # average_precision
+    roc_auc_s4_test = leaderboard_s4.iloc[0]['roc_auc']
+    f1_default_s4_test = leaderboard_s4.iloc[0]['f1']
+    print(f"Best model: {best_model_name_s4}")
+    print(f"Test PR-AUC (average_precision, from leaderboard): {pr_auc_s4_test:.4f}")
+    print(f"Test ROC-AUC (from leaderboard): {roc_auc_s4_test:.4f}")
+    print(f"Test F1 Score at default 0.5 threshold (from leaderboard): {f1_default_s4_test:.4f}")
+
+    # Probability Calibration Check & Threshold Tuning
+    print("\n--- Probability Calibration & Threshold Tuning (Strategy 4) ---")
+    pred_proba_tuning_s4_raw = ag_model_s4.predict_proba(X_tuning)[:, 1]
+
+    plt.figure(figsize=(10, 7))
+    disp_raw = CalibrationDisplay.from_predictions(y_tuning, pred_proba_tuning_s4_raw, n_bins=10, name=f"{best_model_name_s4} (Raw from SMOTE)")
+    plt.title("Calibration Curve (Strategy 4: SMOTE - Before Calibration)")
+    plt.grid(True)
+    plt.show()
+    calibration_note_s4 = "Review plot; SMOTE often miscalibrates. Explicit calibration likely needed."
+    print(calibration_note_s4)
+
+    # Explicit Probability Calibration Step for resampled model (if needed)
+    # We use CalibratedClassifierCV on the *predictions* of the AutoGluon model.
+    # This requires fitting CalibratedClassifierCV on the tuning set predictions.
+    # For simplicity with AutoGluon, which is an ensemble, we might re-calibrate its best model's predictions.
+    # However, AutoGluon's internal models might already have some calibration.
+    # Let's demonstrate a conceptual recalibration on the tuning set predictions if they look off.
+    
+    print("\nAttempting to calibrate probabilities from SMOTE model using Isotonic Regression on tuning set...")
+    # We fit the calibrator on the tuning set's raw probabilities and tuning labels
+    isotonic_calibrator = CalibratedClassifierCV(estimator=None, method='isotonic', cv='prefit') 
+    # To use CalibratedClassifierCV with a pre-fitted model's probabilities, we need to wrap it slightly
+    # or directly use IsotonicRegression from sklearn.calibration.
+    # For this lab, we'll use a simpler path: fit IsotonicRegression on (pred_proba_tuning_s4_raw, y_tuning)
+    # and then apply it to pred_proba_tuning_s4_raw for threshold tuning, and pred_proba_test_s4_raw for final eval.
+    
+    from sklearn.isotonic import IsotonicRegression
+    iso_reg = IsotonicRegression(out_of_bounds='clip') # y_min=0, y_max=1 by default for clip
+    # Fit on tuning probabilities and tuning labels
+    # Reshape pred_proba_tuning_s4_raw if it gives shape warning for IsotonicRegression
+    try:
+        iso_reg.fit(pred_proba_tuning_s4_raw, y_tuning)
+        pred_proba_tuning_s4_calibrated = iso_reg.predict(pred_proba_tuning_s4_raw)
+        print("Probabilities calibrated using Isotonic Regression for threshold tuning.")
+        
+        # Display calibrated curve
+        plt.figure(figsize=(10, 7))
+        disp_calib = CalibrationDisplay.from_predictions(y_tuning, pred_proba_tuning_s4_calibrated, n_bins=10, name=f"{best_model_name_s4} (Calibrated)")
+        plt.title("Calibration Curve (Strategy 4: SMOTE - After Isotonic Calibration)")
+        plt.grid(True)
+        plt.show()
+        calibration_note_s4 += " Applied Isotonic."
+        # Use calibrated probabilities for threshold tuning
+        pred_proba_tuning_for_thresholding = pred_proba_tuning_s4_calibrated
+    except Exception as e:
+        print(f"Could not fit IsotonicRegression (e.g. if all probabilities are same): {e}. Using raw probabilities.")
+        pred_proba_tuning_for_thresholding = pred_proba_tuning_s4_raw # Fallback to raw if calibration failed
+
+
+    best_f1_s4 = 0
+    best_threshold_s4 = 0.5
+    thresholds = np.arange(0.01, 1.0, 0.01)
+    f1_scores_tuning_s4 = []
+    for threshold in thresholds:
+        y_pred_tuning_thresholded_s4 = (pred_proba_tuning_for_thresholding >= threshold).astype(int)
+        current_f1 = f1_score(y_tuning, y_pred_tuning_thresholded_s4)
+        f1_scores_tuning_s4.append(current_f1)
+        if current_f1 > best_f1_s4:
+            best_f1_s4 = current_f1
+            best_threshold_s4 = threshold
+            
+    print(f"Best F1-score on (potentially calibrated) tuning probabilities: {best_f1_s4:.4f} at threshold {best_threshold_s4:.2f}")
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(thresholds, f1_scores_tuning_s4, marker='.')
+    plt.axvline(best_threshold_s4, color='r', linestyle='--', label=f'Best Threshold: {best_threshold_s4:.2f}')
+    plt.title('F1 Score vs. Threshold on (Potentially Calibrated) Tuning Probs (Strategy 4)')
+    plt.xlabel('Threshold')
+    plt.ylabel('F1 Score')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    # Evaluate on test set with optimal threshold, using calibrated probabilities for test set too
+    pred_proba_test_s4_raw = ag_model_s4.predict_proba(X_test)[:, 1]
+    if 'iso_reg' in locals() and hasattr(iso_reg, 'is_fitted_') and iso_reg.is_fitted_ : # Check if calibrator was successfully fitted
+         pred_proba_test_s4_final = iso_reg.predict(pred_proba_test_s4_raw)
+    else:
+         pred_proba_test_s4_final = pred_proba_test_s4_raw # Fallback to raw if calibration failed
+         
+    y_pred_test_optimal_s4 = (pred_proba_test_s4_final >= best_threshold_s4).astype(int)
+    f1_optimal_s4_test = f1_score(y_test, y_pred_test_optimal_s4)
+    print(f"F1-score on test set with optimal threshold ({best_threshold_s4:.2f}) using (potentially calibrated) probabilities: {f1_optimal_s4_test:.4f}")
+
+    print("\nClassification Report on Test Set (Optimal Threshold, Strategy 4):")
+    print(classification_report(y_test, y_pred_test_optimal_s4, target_names=['Legitimate', 'Fraud']))
+
+    comparison_results.append({
+        "Strategy": strategy_name_4,
+        "Test ROC-AUC": roc_auc_s4_test,
+        "Test PR-AUC": pr_auc_s4_test,
+        "Test F1 (Optimized)": f1_optimal_s4_test,
+        "Optimized Threshold": best_threshold_s4,
+        "Calibration Note": calibration_note_s4
+    })
+------------------
+
+----- stderr -----
+Verbosity: 2 (Standard Logging)
+----- stderr -----
+=================== System Info ===================
+AutoGluon Version:  1.2
+Python Version:     3.11.14
+Operating System:   Windows
+Platform Machine:   AMD64
+Platform Version:   10.0.26200
+CPU Count:          20
+Memory Avail:       17.48 GB / 31.75 GB (55.1%)
+Disk Space Avail:   616.06 GB / 951.67 GB (64.7%)
+===================================================
+----- stderr -----
+Presets specified: ['medium_quality']
+----- stderr -----
+Beginning AutoGluon training ... Time limit = 300s
+----- stderr -----
+AutoGluon will save models to "C:\Users\chiuw\IML4Finance\Lectures\Lab04_ag_models_s4_smote"
+----- stderr -----
+Train Data Rows:    2301270
+----- stderr -----
+Train Data Columns: 15
+----- stderr -----
+Label Column:       TX_FRAUD
+----- stderr -----
+Problem Type:       binary
+----- stderr -----
+Preprocessing data ...
+----- stdout -----
+
+--- Strategy 4: Class-Based Resampling (SMOTE) ---
+Removed existing AutoGluon folder: Lab04_ag_models_s4_smote
+Training AutoGluon model for Strategy 4 on SMOTE data...
+----- stderr -----
+Selected class <--> label mapping:  class 1 = 1, class 0 = 0
+----- stderr -----
+Using Feature Generators to preprocess the data ...
+----- stderr -----
+Fitting AutoMLPipelineFeatureGenerator...
+----- stderr -----
+	Available Memory:                    17880.43 MB
+----- stderr -----
+	Train Data (Original)  Memory Usage: 179.96 MB (1.0% of available memory)
+----- stderr -----
+	Inferring data type of each feature based on column values. Set feature_metadata_in to manually specify special dtypes of the features.
+----- stderr -----
+	Stage 1 Generators:
+----- stderr -----
+		Fitting AsTypeFeatureGenerator...
+----- stderr -----
+			Note: Converting 2 features to boolean dtype as they only contain 2 unique values.
+----- stderr -----
+	Stage 2 Generators:
+----- stderr -----
+		Fitting FillNaFeatureGenerator...
+----- stderr -----
+	Stage 3 Generators:
+----- stderr -----
+		Fitting IdentityFeatureGenerator...
+----- stderr -----
+	Stage 4 Generators:
+----- stderr -----
+		Fitting DropUniqueFeatureGenerator...
+----- stderr -----
+	Stage 5 Generators:
+----- stderr -----
+		Fitting DropDuplicatesFeatureGenerator...
+----- stderr -----
+	Types of features in original data (raw dtype, special dtypes):
+----- stderr -----
+		('float', []) : 7 | ['TX_AMOUNT', 'CID_AVG_AMOUNT_1DAY_WINDOW', 'CID_AVG_AMOUNT_7DAY_WINDOW', 'CID_AVG_AMOUNT_30DAY_WINDOW', 'TID_RISK_1DAY_WINDOW', ...]
+----- stderr -----
+		('int', [])   : 8 | ['TX_DURING_WEEKEND', 'TX_DURING_NIGHT', 'CID_NB_TX_1DAY_WINDOW', 'CID_NB_TX_7DAY_WINDOW', 'CID_NB_TX_30DAY_WINDOW', ...]
+----- stderr -----
+	Types of features in processed data (raw dtype, special dtypes):
+----- stderr -----
+		('float', [])     : 7 | ['TX_AMOUNT', 'CID_AVG_AMOUNT_1DAY_WINDOW', 'CID_AVG_AMOUNT_7DAY_WINDOW', 'CID_AVG_AMOUNT_30DAY_WINDOW', 'TID_RISK_1DAY_WINDOW', ...]
+----- stderr -----
+		('int', [])       : 6 | ['CID_NB_TX_1DAY_WINDOW', 'CID_NB_TX_7DAY_WINDOW', 'CID_NB_TX_30DAY_WINDOW', 'TID_NB_TX_1DAY_WINDOW', 'TID_NB_TX_7DAY_WINDOW', ...]
+----- stderr -----
+		('int', ['bool']) : 2 | ['TX_DURING_WEEKEND', 'TX_DURING_NIGHT']
+----- stderr -----
+	3.1s = Fit runtime
+----- stderr -----
+	15 features in original data used to generate 15 features in processed data.
+----- stderr -----
+	Train Data (Processed) Memory Usage: 179.96 MB (1.0% of available memory)
+----- stderr -----
+Data preprocessing and feature engineering runtime = 3.41s ...
+----- stderr -----
+AutoGluon will gauge predictive performance using evaluation metric: 'average_precision'
+----- stderr -----
+	This metric expects predicted probabilities rather than predicted class labels, so you'll need to use predict_proba() instead of predict()
+----- stderr -----
+	To change this, specify the eval_metric parameter of Predictor()
+----- stderr -----
+Automatically generating train/validation split with holdout_frac=0.2, Train Rows: 1841016, Val Rows: 460254
+----- stderr -----
+User-specified model hyperparameters to be fit:
+{
+	'NN_TORCH': [{}],
+	'GBM': [{'extra_trees': True, 'ag_args': {'name_suffix': 'XT'}}, {}, {'learning_rate': 0.03, 'num_leaves': 128, 'feature_fraction': 0.9, 'min_data_in_leaf': 3, 'ag_args': {'name_suffix': 'Large', 'priority': 0, 'hyperparameter_tune_kwargs': None}}],
+	'CAT': [{}],
+	'XGB': [{}],
+	'FASTAI': [{}],
+	'RF': [{'criterion': 'gini', 'ag_args': {'name_suffix': 'Gini', 'problem_types': ['binary', 'multiclass']}}, {'criterion': 'entropy', 'ag_args': {'name_suffix': 'Entr', 'problem_types': ['binary', 'multiclass']}}, {'criterion': 'squared_error', 'ag_args': {'name_suffix': 'MSE', 'problem_types': ['regression', 'quantile']}}],
+	'XT': [{'criterion': 'gini', 'ag_args': {'name_suffix': 'Gini', 'problem_types': ['binary', 'multiclass']}}, {'criterion': 'entropy', 'ag_args': {'name_suffix': 'Entr', 'problem_types': ['binary', 'multiclass']}}, {'criterion': 'squared_error', 'ag_args': {'name_suffix': 'MSE', 'problem_types': ['regression', 'quantile']}}],
+	'KNN': [{'weights': 'uniform', 'ag_args': {'name_suffix': 'Unif'}}, {'weights': 'distance', 'ag_args': {'name_suffix': 'Dist'}}],
+}
+----- stderr -----
+Excluded models: ['KNN'] (Specified by `excluded_model_types`)
+----- stderr -----
+Fitting 11 L1 models, fit_strategy="sequential" ...
+----- stderr -----
+Fitting model: LightGBMXT ... Training model for up to 296.59s of the 296.59s of remaining time.
+----- stdout -----
+[1000]	valid_set's binary_logloss: 0.0328349	valid_set's average_precision: 0.999232
+----- stdout -----
+[2000]	valid_set's binary_logloss: 0.0234915	valid_set's average_precision: 0.999611
+----- stderr -----
+	Ran out of time, early stopping on iteration 2011. Best iteration is:
+	[2011]	valid_set's binary_logloss: 0.0234259	valid_set's average_precision: 0.999613
+----- stderr -----
+	0.9996	 = Validation score   (average_precision)
+----- stderr -----
+	296.87s	 = Training   runtime
+----- stderr -----
+	7.39s	 = Validation runtime
+----- stderr -----
+Fitting model: WeightedEnsemble_L2 ... Training model for up to 296.59s of the -7.94s of remaining time.
+----- stderr -----
+	Ensemble Weights: {'LightGBMXT': 1.0}
+----- stderr -----
+	0.9996	 = Validation score   (average_precision)
+----- stderr -----
+	0.11s	 = Training   runtime
+----- stderr -----
+	0.09s	 = Validation runtime
+----- stderr -----
+AutoGluon training complete, total runtime = 309.11s ... Best model: WeightedEnsemble_L2 | Estimated inference throughput: 61529.5 rows/s (460254 batch size)
+----- stderr -----
+TabularPredictor saved. To load, use: predictor = TabularPredictor.load("C:\Users\chiuw\IML4Finance\Lectures\Lab04_ag_models_s4_smote")
+----- stdout -----
+Strategy 4 model training finished in 309.15 seconds.
+
+--- Performance on Test Set (Strategy 4) ---
+----- stdout -----
+Best model: LightGBMXT
+Test PR-AUC (average_precision, from leaderboard): 0.8779
+Test ROC-AUC (from leaderboard): 0.9686
+Test F1 Score at default 0.5 threshold (from leaderboard): 0.7372
+
+--- Probability Calibration & Threshold Tuning (Strategy 4) ---
+----- stdout -----
+Review plot; SMOTE often miscalibrates. Explicit calibration likely needed.
+
+Attempting to calibrate probabilities from SMOTE model using Isotonic Regression on tuning set...
+Probabilities calibrated using Isotonic Regression for threshold tuning.
+----- stdout -----
+Best F1-score on (potentially calibrated) tuning probabilities: 0.8646 at threshold 0.37
+----- stdout -----
+F1-score on test set with optimal threshold (0.37) using (potentially calibrated) probabilities: 0.6678
+
+Classification Report on Test Set (Optimal Threshold, Strategy 4):
+              precision    recall  f1-score   support
+
+  Legitimate       1.00      0.99      1.00    285326
+       Fraud       0.53      0.90      0.67      2547
+
+    accuracy                           0.99    287873
+   macro avg       0.77      0.94      0.83    287873
+weighted avg       0.99      0.99      0.99    287873
+------------------
+
+[31m---------------------------------------------------------------------------[39m
+[31mNameError[39m                                 Traceback (most recent call last)
+[36mCell[39m[36m [39m[32mIn[198][39m[32m, line 136[39m
+[32m    133[39m [38;5;28mprint[39m([33m"[39m[38;5;130;01m\n[39;00m[33mClassification Report on Test Set (Optimal Threshold, Strategy 4):[39m[33m"[39m)
+[32m    134[39m [38;5;28mprint[39m(classification_report(y_test, y_pred_test_optimal_s4, target_names=[[33m'[39m[33mLegitimate[39m[33m'[39m, [33m'[39m[33mFraud[39m[33m'[39m]))
+[32m--> [39m[32m136[39m [43mcomparison_results[49m.append({
+[32m    137[39m     [33m"[39m[33mStrategy[39m[33m"[39m: strategy_name_4,
+[32m    138[39m     [33m"[39m[33mTest ROC-AUC[39m[33m"[39m: roc_auc_s4_test,
+[32m    139[39m     [33m"[39m[33mTest PR-AUC[39m[33m"[39m: pr_auc_s4_test,
+[32m    140[39m     [33m"[39m[33mTest F1 (Optimized)[39m[33m"[39m: f1_optimal_s4_test,
+[32m    141[39m     [33m"[39m[33mOptimized Threshold[39m[33m"[39m: best_threshold_s4,
+[32m    142[39m     [33m"[39m[33mCalibration Note[39m[33m"[39m: calibration_note_s4
+[32m    143[39m })
+
+[31mNameError[39m: name 'comparison_results' is not defined
+
+

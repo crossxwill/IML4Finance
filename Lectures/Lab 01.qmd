@@ -15,13 +15,14 @@ number-sections: true
 ```{python}
 # System utilities
 import os
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["OMP_NUM_THREADS"] = "1"
-
 import shutil
 import random
 import torch
 import numpy as np
+import psutil
+
+# Set n_jobs to half the number of physical cores
+num_jobs = max(1, int(psutil.cpu_count(logical=False) / 2))
 
 # Data manipulation and visualization
 import duckdb
@@ -629,8 +630,8 @@ ag_model = Pipeline([
                                     fit_args={'holdout_frac': 0.2,
                                                 'excluded_model_types': ['KNN'],
                                                 'presets': 'medium_quality',
-                                                'time_limit': 180},
-                                    n_jobs=4))
+                                                'time_limit': 180*1.5},
+                                    n_jobs=num_jobs))
 ])
 
 global_set_seed()
@@ -784,7 +785,7 @@ def show_pdp(wrappedAGModel: BaseEstimator,
             xGTzero: bool = False,
             sampSize: int = 5000) -> None:
 
-    N_JOBS = 4
+    N_JOBS = num_jobs
 
     for feature in list_features:
         fig = plt.figure(figsize=(8, 4))
@@ -1417,7 +1418,7 @@ ag_model_filter_method = Pipeline([
                                     fit_args={'holdout_frac': 0.2,
                                                 'excluded_model_types': ['KNN', 'NN_TORCH'],
                                                 'presets': 'medium_quality',
-                                                'time_limit': 180}))
+                                                'time_limit': 180*1.5}))
 ])
 
 global_set_seed()
@@ -1493,7 +1494,7 @@ ag_model_embedded_method = Pipeline([
         remainder='passthrough'
     )),
     ('feature_selection', SelectFromModel(
-        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=4),
+        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=num_jobs),
         threshold=0.01
     )),
     ('autogluon', AutoGluonSklearnWrapper(label=label,
@@ -1503,7 +1504,7 @@ ag_model_embedded_method = Pipeline([
                                     fit_args={'holdout_frac': 0.2,
                                                 'excluded_model_types': ['KNN', 'NN_TORCH'],
                                                 'presets': 'medium_quality',
-                                                'time_limit': 180}))
+                                                'time_limit': 180*1.5}))
 ])
 
 global_set_seed()
@@ -1577,11 +1578,11 @@ ag_model_wrapper_method = Pipeline([
         remainder='passthrough'
     )),
     ('feature_selection', SequentialFeatureSelector(
-        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=4),
+        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=num_jobs),
     direction='forward',
     scoring='roc_auc',
     tol=0.005,
-    n_jobs=4,
+    n_jobs=num_jobs,
     cv=3
     )),
     ('autogluon', AutoGluonSklearnWrapper(label=label,
@@ -1591,7 +1592,7 @@ ag_model_wrapper_method = Pipeline([
                                     fit_args={'holdout_frac': 0.2,
                                                 'excluded_model_types': ['KNN', 'NN_TORCH'],
                                                 'presets': 'medium_quality',
-                                                'time_limit': 180}))
+                                                'time_limit': 180*1.5}))
 ])
 
 global_set_seed()

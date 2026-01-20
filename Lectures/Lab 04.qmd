@@ -1146,6 +1146,8 @@ y_tuning = df_tuning_ft[target_label].to_pandas()
 
 X_test = df_test_ft[final_features].to_pandas()
 y_test = df_test_ft[target_label].to_pandas()
+
+comparison_results = []
 ```
 
 ## Do-Nothing Approach
@@ -1797,6 +1799,14 @@ else:
     predictor_args_s4 = {
         'problem_type': 'binary',
         'eval_metric': 'average_precision', # Continue using PR-AUC
+        'path': model_folder_s4
+    }
+
+    fit_args_s4 = {
+        'holdout_frac': 0.2,
+        'excluded_model_types': ['KNN'],
+        'presets': 'medium_quality',
+        'time_limit': 300
     }
 
     ag_model_s4 = AutoGluonSklearnWrapper(
@@ -1813,7 +1823,7 @@ else:
 
     # Performance Reporting
     print("\n--- Performance on Test Set (Strategy 4) ---")
-    leaderboard_s4 = ag_model_s4.predictor.leaderboard(X_test, extra_metrics=['average_precision', 'f1', 'roc_auc'], silent=True)
+    leaderboard_s4 = ag_model_s4.predictor.leaderboard(df_test_ft.to_pandas(), extra_metrics=['average_precision', 'f1', 'roc_auc'], silent=True)
     display(leaderboard_s4)
     
     best_model_name_s4 = leaderboard_s4.iloc[0]['model']
@@ -1852,7 +1862,7 @@ else:
     # For this lab, we'll use a simpler path: fit IsotonicRegression on (pred_proba_tuning_s4_raw, y_tuning)
     # and then apply it to pred_proba_tuning_s4_raw for threshold tuning, and pred_proba_test_s4_raw for final eval.
     
-    from sklearn.calibration import IsotonicRegression
+    from sklearn.isotonic import IsotonicRegression
     iso_reg = IsotonicRegression(out_of_bounds='clip') # y_min=0, y_max=1 by default for clip
     # Fit on tuning probabilities and tuning labels
     # Reshape pred_proba_tuning_s4_raw if it gives shape warning for IsotonicRegression

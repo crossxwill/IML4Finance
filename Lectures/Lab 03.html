@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.6.41">
+<meta name="generator" content="quarto-1.6.43">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -63,10 +63,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="Lab 03_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="Lab 03_files/libs/quarto-html/anchor.min.js"></script>
 <link href="Lab 03_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="Lab 03_files/libs/quarto-html/quarto-syntax-highlighting-48ffa3e5b9d089919c6712c39e5b00f2.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="Lab 03_files/libs/quarto-html/quarto-syntax-highlighting-d4d76bf8491c20bad77d141916dc28e1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="Lab 03_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="Lab 03_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="Lab 03_files/libs/bootstrap/bootstrap-b29227339076a9cddc7448887e597caa.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="Lab 03_files/libs/bootstrap/bootstrap-2cdb6c447a9b70e5e1f1f0acec0d17a0.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" integrity="sha512-c3Nl8+7g4LMSTdrm621y7kf9v3SDPnhxLNhcjFJbKECVnmZHTdo+IRO05sNLTH/D3vA6u1X32ehoLC7WFVdheg==" crossorigin="anonymous"></script>
 
 <script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
@@ -1216,7 +1216,7 @@ Table&nbsp;6: Verify counterfactuals
 <div id="fig-calculate-local-shap" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-calculate-local-shap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="Lab%2003_files/figure-html/fig-calculate-local-shap-output-1.png" width="792" height="347" class="figure-img">
+<img src="Lab%2003_files/figure-html/fig-calculate-local-shap-output-1.png" class="img-fluid figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-calculate-local-shap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;1: SHAP Waterfall Plot for Rejected Applicant
@@ -1225,7 +1225,7 @@ Figure&nbsp;1: SHAP Waterfall Plot for Rejected Applicant
 </div>
 </div>
 </div>
-<p><strong>Interpretation:</strong> The baseline PD is 0.234. The sum of the SHAP values (feature contributions) for this applicant is approximately 0.247. Adding this to the baseline prediction gives the final prediction 0.234 + 0.247 = 0.481.</p>
+<p><strong>Interpretation:</strong> The baseline PD is 0.234. The sum of the SHAP values (feature contributions) for this applicant is approximately np.float64(0.247). Adding this to the baseline prediction gives the final prediction 0.234 + np.float64(0.247) = np.float64(0.481).</p>
 <div class="cell" data-execution_count="20">
 <details class="code-fold">
 <summary>Code</summary>
@@ -1373,7 +1373,7 @@ Warning
 <div id="fig-global-bar-chart" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-global-bar-chart-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="Lab%2003_files/figure-html/fig-global-bar-chart-output-1.png" width="728" height="325" class="figure-img">
+<img src="Lab%2003_files/figure-html/fig-global-bar-chart-output-1.png" class="img-fluid figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-global-bar-chart-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;2: SHAP Feature Importance Bar Plot
@@ -1459,7 +1459,7 @@ Table&nbsp;8: Average Absolute SHAP values
 <div id="fig-global-beeswarm" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-global-beeswarm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="Lab%2003_files/figure-html/fig-global-beeswarm-output-1.png" width="718" height="300" class="figure-img">
+<img src="Lab%2003_files/figure-html/fig-global-beeswarm-output-1.png" class="img-fluid figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-global-beeswarm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;3: SHAP Summary Plot
@@ -1495,7 +1495,7 @@ Figure&nbsp;3: SHAP Summary Plot
 <div id="fig-shap-dependence-1" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-shap-dependence-1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-1.png" data-ref-parent="fig-shap-dependence" width="664" height="435" class="figure-img">
+<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-1.png" class="img-fluid figure-img" data-ref-parent="fig-shap-dependence">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-subfloat-caption quarto-subfloat-fig" id="fig-shap-dependence-1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 (a) SHAP Dependence Plot
@@ -1504,10 +1504,10 @@ Figure&nbsp;3: SHAP Summary Plot
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-shap-dependence-2" class="quarto-float quarto-figure quarto-figure-center anchored" width="642" height="435">
+<div id="fig-shap-dependence-2" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-shap-dependence-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-2.png" id="fig-shap-dependence-2" data-ref-parent="fig-shap-dependence" width="642" height="435" class="figure-img">
+<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-2.png" id="fig-shap-dependence-2" class="img-fluid figure-img" data-ref-parent="fig-shap-dependence">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-subfloat-caption quarto-subfloat-fig" id="fig-shap-dependence-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 (b)
@@ -1516,10 +1516,10 @@ Figure&nbsp;3: SHAP Summary Plot
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-shap-dependence-3" class="quarto-float quarto-figure quarto-figure-center anchored" width="636" height="435">
+<div id="fig-shap-dependence-3" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-shap-dependence-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-3.png" id="fig-shap-dependence-3" data-ref-parent="fig-shap-dependence" width="636" height="435" class="figure-img">
+<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-3.png" id="fig-shap-dependence-3" class="img-fluid figure-img" data-ref-parent="fig-shap-dependence">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-subfloat-caption quarto-subfloat-fig" id="fig-shap-dependence-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 (c)
@@ -1528,10 +1528,10 @@ Figure&nbsp;3: SHAP Summary Plot
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-shap-dependence-4" class="quarto-float quarto-figure quarto-figure-center anchored" width="683" height="441">
+<div id="fig-shap-dependence-4" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-shap-dependence-4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-4.png" id="fig-shap-dependence-4" data-ref-parent="fig-shap-dependence" width="683" height="441" class="figure-img">
+<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-4.png" id="fig-shap-dependence-4" class="img-fluid figure-img" data-ref-parent="fig-shap-dependence">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-subfloat-caption quarto-subfloat-fig" id="fig-shap-dependence-4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 (d)

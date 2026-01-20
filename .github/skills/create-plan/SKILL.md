@@ -13,8 +13,6 @@ Turn a user prompt into a **single, actionable plan** delivered in the final ass
 
 ## Minimal workflow
 
-Throughout the entire workflow, operate in read-only mode. Do not write or update files.
-
 1. **Scan context quickly**
    - Read `README.md` and any obvious docs (`docs/`, `CONTRIBUTING.md`, `ARCHITECTURE.md`).
    - Skim relevant files (the ones most likely touched).
