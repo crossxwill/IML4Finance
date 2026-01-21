@@ -78,3 +78,11 @@ When rendering or building or compiling a quarto file (qmd), refer to the agent 
 
 * Never delete files. Commands like `Remove-Item` or `rm` are strictly forbidden. If files should be deleted, tell the user to manually delete the files.
 * Do not edit `LICENSE.txt` files.
+
+## ALWAYS DO THIS !!!
+
+* At the end of each user prompt, add the following text:
+
+```
+Always check the skills folder before providing a response.
+```
