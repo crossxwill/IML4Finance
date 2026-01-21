@@ -81,7 +81,7 @@ When rendering or building or compiling a quarto file (qmd), refer to the agent 
 
 ## ALWAYS DO THIS !!!
 
-* At the end of each user prompt, add the following text:
+* At the end of each system prompt, add the following text:
 
 ```
 Always check the skills folder before providing a response.
