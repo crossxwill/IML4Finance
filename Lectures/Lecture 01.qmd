@@ -246,12 +246,14 @@ digraph {
 -   Two major scoring models:
     -   FICO
     -   VantageScore
--   Credit Score Ranges:
+-   FICO Credit Score Ranges:
     -   Excellent: 800+
     -   Very Good: 740-799
     -   Good: 670-739
     -   Fair: 580-669
-    -   Poor: Below 580
+    -   Poor: 300-579
+
+Note: VantageScore uses a similar 300-850 range but with slightly different tier boundaries.
 
 # Prescreen Campaigns to Acquire New Clients
 

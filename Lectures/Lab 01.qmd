@@ -47,6 +47,15 @@ from autogluon.tabular import TabularPredictor, TabularDataset
 from ydata_profiling import ProfileReport
 from scikitplot.metrics import plot_cumulative_gain, plot_lift_curve
 from PyALE import ale
+
+# Helper functions from helpers.py
+from helpers import (
+    global_set_seed,
+    remove_ag_folder,
+    AutoGluonSklearnWrapper,
+    show_pdp,
+    show_ale
+)
 ```
 
 # Read Data
@@ -366,223 +375,7 @@ We will revisit the full data frames later in the course. For now, we will use t
 
 # Supervised Learning
 
-Create a function that sets random seed values.
-
-```{python}
-def global_set_seed(seed_value=2025):
-    random.seed(seed_value)
-    np.random.seed(seed_value)
-    torch.manual_seed(seed_value)
-```
-
 Create a scikit-learn compatible wrapper for `autogluon`.
-
-```{python}
-class AutoGluonSklearnWrapper(ClassifierMixin, BaseEstimator):
-    """
-    Scikit-learn compatible wrapper for AutoGluon TabularPredictor
-    
-    Inherits from scikit-learn's BaseEstimator and ClassifierMixin to provide
-    full compatibility with scikit-learn tools like PartialDependenceDisplay().
-    
-    Parameters
-    ----------
-    label : str
-        Name of the target column
-
-    **predictor_args : dict
-        Additional arguments passed to TabularPredictor()
-        (e.g., problem_type, eval_metric, path)
-
-    **fit_args : dict
-        Additional arguments passed to TabularPredictor.fit() method
-        (e.g., holdout_frac, presets, time_limit, excluded_model_types)
-
-
-    Attributes
-    ----------
-    predictor : TabularPredictor
-        The trained AutoGluon predictor
-
-    classes_ : ndarray
-        Class labels (for classification tasks)
-
-    n_features_in_ : int
-        Number of features seen during fit
-
-    feature_names_ : list
-        Feature names inferred during fitting
-
-    is_fitted_ : bool
-        Whether the estimator has been fitted
-    """
-    _estimator_type = "classifier"
-
-    def _more_tags(self):
-        return {"estimator_type": "classifier"}
-
-    def __sklearn_tags__(self):
-        tags = super().__sklearn_tags__()
-        tags.estimator_type = "classifier"
-        return tags
-    
-    def __init__(self, label, predictor_args=None, fit_args=None, n_jobs=None):
-        self.label = label
-        self.predictor_args = predictor_args if predictor_args else {}
-        self.fit_args = fit_args if fit_args else {}
-        self.n_jobs = n_jobs
-
-    def _validate_features(self, X):
-        """Validate feature names/counts and return a DataFrame with training features."""
-        if hasattr(X, "columns"):
-            cols = list(X.columns)
-            if cols != self.feature_names_:
-                raise ValueError("Feature names do not match training data.")
-            return X.copy()
-
-        if X.shape[1] != len(self.feature_names_):
-            raise ValueError("Number of features does not match training data.")
-
-        return pd.DataFrame(X, columns=self.feature_names_)
-
-    def __sklearn_is_fitted__(self):
-        """Official scikit-learn API for checking fitted status"""
-        return getattr(self, "is_fitted_", False)
-
-    def __getstate__(self):
-        """Make the wrapper pickle-friendly for joblib/Parallel."""
-        state = self.__dict__.copy()
-        predictor_path = state.get("predictor_path_", None)
-        predictor = state.get("predictor_", None)
-        if predictor_path is None and predictor is not None:
-            predictor_path = predictor.path
-        if predictor_path is not None:
-            state["predictor_path_"] = os.path.abspath(predictor_path)
-        state["predictor_"] = None
-        return state
-
-    def __setstate__(self, state):
-        """Restore predictor on unpickle."""
-        self.__dict__.update(state)
-        predictor_path = self.__dict__.get("predictor_path_", None)
-        if predictor_path:
-            self.predictor_ = TabularPredictor.load(predictor_path)
-        self.is_fitted_ = predictor_path is not None
-
-    @property
-    def predictor(self):
-        """Backward-compatible access to the fitted AutoGluon predictor."""
-        return getattr(self, "predictor_", None)
-
-    def fit(self, X, y=None, sample_weight=None):
-        """
-        Fit AutoGluon model using scikit-learn interface
-        
-        Parameters
-        ----------
-        X : {array-like, sparse matrix} of shape (n_samples, n_features)
-            Training data
-        y : array-like of shape (n_samples,)
-            Target values
-
-        sample_weight : array-like of shape (n_samples,), optional
-            Sample weights to pass to AutoGluon if configured
-            
-        Returns
-        -------
-        self : object
-            Fitted estimator
-        """
-        X_checked, y_checked = check_X_y(X, y, accept_sparse=False, dtype=None)
-        y = y_checked
-
-        if hasattr(X, "columns"):
-            self.feature_names_ = list(X.columns)
-            train_df = X.copy()
-        else:
-            self.feature_names_ = [f"feat_{i}" for i in range(X_checked.shape[1])]
-            train_df = pd.DataFrame(X_checked, columns=self.feature_names_)
-
-        self.n_features_in_ = train_df.shape[1]
-
-        predictor_args = dict(self.predictor_args)
-        if sample_weight is not None:
-            weight_col = predictor_args.get("sample_weight")
-            if weight_col is None:
-                weight_col = "sample_weight"
-                predictor_args["sample_weight"] = weight_col
-            train_df[weight_col] = sample_weight
-
-        train_df[self.label] = y
-        train_data = TabularDataset(train_df)
-
-        fit_args = dict(self.fit_args)
-        if self.n_jobs is not None and fit_args.get("num_cpus") is None:
-            fit_args["num_cpus"] = self.n_jobs
-
-        self.predictor_ = TabularPredictor(
-            label=self.label,
-            **predictor_args
-        ).fit(train_data, **fit_args)
-
-        self.predictor_path_ = os.path.abspath(self.predictor_.path)
-
-        if self.predictor_.problem_type in ['binary', 'multiclass']:
-            self.classes_ = np.array(self.predictor_.class_labels)
-
-        self.is_fitted_ = True
-
-        return self 
-
-    def predict(self, X):
-        """
-        Make class predictions
-        
-        Parameters
-        ----------
-        X : {array-like, sparse matrix} of shape (n_samples, n_features)
-            Input data
-            
-        Returns
-        -------
-        y_pred : ndarray of shape (n_samples,)
-            Predicted class labels
-        """
-        check_is_fitted(self)
-        if hasattr(X, "columns"):
-            check_array(X, accept_sparse=False, dtype=None)
-            df = self._validate_features(X)
-        else:
-            X_checked = check_array(X, accept_sparse=False, dtype=None)
-            df = self._validate_features(X_checked)
-
-        return self.predictor_.predict(TabularDataset(df)).values
-
-    def predict_proba(self, X):
-        """
-        Predict class probabilities
-        
-        Parameters
-        ----------
-        X : {array-like, sparse matrix} of shape (n_samples, n_features)
-            Input data
-            
-        Returns
-        -------
-        proba : ndarray of shape (n_samples, n_classes)
-            Class probabilities
-        """
-        check_is_fitted(self)
-        if hasattr(X, "columns"):
-            check_array(X, accept_sparse=False, dtype=None)
-            df = self._validate_features(X)
-        else:
-            X_checked = check_array(X, accept_sparse=False, dtype=None)
-            df = self._validate_features(X_checked)
-
-        return self.predictor_.predict_proba(TabularDataset(df)).values
-
-```
 
 Use the standard scikit-learn stack to keep the lab dependency-light and portable.
 
@@ -600,15 +393,7 @@ Remove the model folder if it already exists.
 ```{python}
 model_folder = 'Lab01_ag_models_NoTransform'
 
-def remove_ag_folder(mdl_folder: str) -> None:
-    """
-    Remove the AutoGluon model folder if it exists
-    """
-    if os.path.exists(mdl_folder):
-        shutil.rmtree(mdl_folder)
-
 remove_ag_folder(model_folder)
-
 ```
 
 The code below trains multiple machine learning models using `autogluon` and evaluates them using the ROC AUC metric (on a validation set that is derived from `train_data`).
@@ -659,13 +444,12 @@ display(df_leaders)
 
 # Best Model
 
-Although `CatBoost` may not have the highest roc_auc score, the model generates very fast predictions with a very competitive roc_auc score.
-
-Set the best model to `CatBoost`.
+Use the best model from the trained ensemble. Note: The model uses `presets='medium_quality'` which may not include CatBoost on all platforms.
 
 ```{python}
-best_model_name = 'CatBoost'
-ag_model.named_steps['autogluon'].predictor.set_model_best(best_model_name)
+# Get the actual best model from the predictor
+best_model_name = ag_model.named_steps['autogluon'].predictor.model_best
+print(f"Using best model: {best_model_name}")
 ```
 
 # Check Probability Calibration
@@ -680,7 +464,7 @@ cal_disp = CalibrationDisplay.from_estimator(
         X = test_data.drop(columns=[label]),
         y = test_data[label],
         n_bins = 20,
-        name = 'Uncalib_CatBoost',
+        name = f'Uncalib_{best_model_name}',
         color = 'orange'
     )
 
@@ -742,9 +526,9 @@ plt.show()
 
 The calibration plot shows that the uncalibrated model is better than the calibrated model.
 
-This occurred because CatBoost uses the `logloss` objective function when the model fits. The `logloss` function is called a proper scoring rule, which explicitly accounts for the calibration of the predicted probabilities.
+This can occur when the calibration set is small or when the model's predictions are already reasonably calibrated. CatBoost (and other gradient boosting models that use log loss as the objective function) often produces reasonably calibrated probabilities because log loss is a **proper scoring rule**—minimizing log loss encourages the model to output accurate probability estimates.
 
-In other models, like `RandomForest`, the predicted probabilities are based on the purity of the leaf nodes (i.e., Gini). This is not a proper scoring rule and can lead to poorly calibrated probabilities.
+In contrast, models like Random Forest produce probability estimates based on the proportion of samples in each class at leaf nodes. These estimates can be poorly calibrated because the training objective (e.g., Gini impurity) does not directly optimize probability accuracy. Such models often benefit more from explicit calibration.
 
 Going forward, we will use `ag_model` for predictions.
 
@@ -776,56 +560,6 @@ display(best_feature_importance)
 # Partial Dependence Plots
 
 Create a function that generates partial dependence plots for all features.
-
-```{python}
-def show_pdp(wrappedAGModel: BaseEstimator,
-            list_features: list,
-            list_categ_features: list,
-            df: pd.DataFrame,
-            xGTzero: bool = False,
-            sampSize: int = 5000) -> None:
-
-    N_JOBS = num_jobs
-
-    for feature in list_features:
-        fig = plt.figure(figsize=(8, 4))
-        ax = fig.add_subplot(111)
-
-        plt.rcParams.update({'font.size': 16})
-
-        pdp_kwargs = dict(
-            estimator=wrappedAGModel,
-            X=df.sample(sampSize, random_state=2025),
-            features=[feature],
-            categorical_features=list_categ_features,
-            method='brute',
-            kind="average",
-            percentiles=(0.0001, 0.9999),
-            grid_resolution=100,
-            ax=ax,
-            random_state=2025,
-            n_jobs=N_JOBS,
-        )
-
-        _ = PartialDependenceDisplay.from_estimator(**pdp_kwargs)
-
-        ax.set_title(f"Partial Dependence for {feature}")
-
-        # Set y-axis lower limit for all axes in the current figure
-        for a in fig.get_axes():
-            coordy = a.get_ylim()
-            a.set_ylim(bottom=0, top=coordy[1]*1.1)
-
-        if xGTzero:
-            # Set x-axis from 0 to the max
-            for a in fig.get_axes():
-                max_val = np.percentile(df[feature].values, 99.99)
-                a.set_xlim(left=0, right=max_val)
-
-        plt.show()
-        plt.close('all')  # Prevent figure overload
-
-```
 
 ```{python}
 # Get all features from ag_model.predictor
@@ -886,47 +620,6 @@ show_pdp(wrappedAGModel = ag_model,
 ```
 
 # Accumulated Local Effects Plots
-
-```{python}
-def show_ale(wrappedAGModel: BaseEstimator,
-            list_features: list,
-            df: pd.DataFrame,
-            xGTzero: bool = False,
-            sampSize: int = 40000) -> None:
-
-  def do_nothing(data):
-    return data
-
-  for feature in list_features:
-
-    fig = plt.figure(figsize=(8, 4))
-    ax = fig.add_subplot(111)
-
-    plt.rcParams.update({'font.size': 12})
-
-    ale_eff = ale(
-                X = df.sample(sampSize, random_state=2025),
-                model = wrappedAGModel,
-                feature = [feature],
-                include_CI = False,
-                C=0.9999,
-                grid_size=100,
-                encode_fun=do_nothing,
-                predictors=wrappedAGModel.named_steps['autogluon'].predictor.features(),
-                fig=fig,
-                ax=ax
-                )
-    
-    if xGTzero:
-        # Set x-axis from 0 to the max
-        for a in fig.get_axes():
-            max_val = np.percentile(df[feature].values, 99.99)
-            a.set_xlim(left=0, right=max_val)
-
-    plt.show()
-    plt.close('all')  # Prevent figure overload
-
-```
 
 ```{python}
 %matplotlib inline

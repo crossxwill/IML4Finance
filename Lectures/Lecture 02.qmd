@@ -94,7 +94,7 @@ execute:
 -   **Home Equity Products**:
     -   Home equity loans: Secured, term loan, fixed rate
     -   HELOCs: Secured, line of credit, variable rate, draw period followed by amortizing period
--   **Student Loans**: Unsecured, term loan, fixed rate
+-   **Student Loans**: Unsecured, term loan. Federal student loans typically have fixed rates, while private student loans may have fixed or variable rates.
 
 # Credit Scoring Systems
 
@@ -169,21 +169,26 @@ execute:
 
 ## PDO: Mathematical Details - Part 1 {.smaller}
 
--   **Mathematical relationship**: Let $p$ be the probability of default and define the odds as $\frac{p}{1-p}$; then: $$\text{Score} = A - B \cdot \ln\left(\frac{p}{1-p}\right)$$
-    -   Here, $B$ is defined as $\text{PDO}/\ln(2)$.
-    -   The scaling factor ($1 / \ln(2)$) ensures that an increase of PDO points in the score exactly doubles the odds of being a "good" borrower.
+-   **Mathematical relationship**: Let $p$ be the probability of default. The score is calculated as:
+
+$$\text{Score} = A - B \cdot \ln\left(\frac{p}{1-p}\right)$$
+
+where:
+    -   $\frac{p}{1-p}$ represents the **odds of default** (the ratio of default probability to non-default probability).
+    -   $B$ is defined as $\text{PDO}/\ln(2)$. This factor converts log-odds into score points such that adding PDO points to the score exactly halves the odds of default (or equivalently, doubles the odds of being a "good" borrower).
     -   $A$ is a scaling constant (reference score) to position the score in the desired range.
--   **Ambiguity in odds definition**: The "odds of being a good borrower" $\frac{1-p}{p}$ is the inverse of the "odds of default" $\frac{p}{1-p}$. In the formula above, as the score increases by PDO points, the odds of default are halved, which is equivalent to saying the odds of being a good borrower are doubled.
+-   **Key insight**: As the score increases by PDO points, the odds of default are halved. This means higher scores indicate lower default risk.
 
 ## PDO: Mathematical Details - Part 2 {.smaller}
 
 -   For PDO = 40:
     1.  Calculate $B = 40 / \ln(2) \approx 40 / 0.693 \approx 57.7$.
     2.  If a 650 score corresponds to a 5% default probability ($p=0.05$):
-        -   Compute the odds: $\frac{0.05}{1-0.05} = \frac{0.05}{0.95} \approx 0.0526$ and $\ln(0.0526) \approx -2.944$.
+        -   Compute the odds of default: $\frac{p}{1-p} = \frac{0.05}{0.95} \approx 0.0526$ and $\ln(0.0526) \approx -2.944$.
         -   Then, $650 = A - 57.7 \cdot (-2.944) = A + 169.7$.
         -   Solve for $A \approx 650 - 169.7 \approx 480.3$.
     3.  Final formula: $$\text{Score} = 480.3 - 57.7 \cdot \ln\left(\frac{p}{1-p}\right)$$
+    4.  Verification: A score of 690 ($650 + 40$) should have odds of default equal to $0.0526 / 2 = 0.0263$, which corresponds to $p \approx 2.6\%$ default probability.
 
 ## Industry Standards
 
@@ -192,7 +197,7 @@ execute:
 -   **FICO** and **VantageScore** do not disclose exact PDO values
 -   **Typical PDO values**: Range from 20 to 40 points
 -   Credit scoring systems may change PDO when they publish new versions of their models (e.g., FICO 8, FICO 9)
--   A low PDO (like 20) indicates a less sensitive scoring model, while a high PDO (like 40) indicates a more sensitive model
+-   A higher PDO (like 40) means **more** points are needed to double the odds of good performance. A lower PDO (like 20) means **fewer** points are needed for the same effect, indicating a more sensitive or discriminating score where small score differences translate to larger changes in odds.
 
 ## Credit Scores as Risk Rankings {.smaller}
 
@@ -770,11 +775,12 @@ kgb_predictor = AutoGluonSklearnWrapper(
 
 kgb_predictor.fit(X_kgb_train, y_kgb_train)
 
-# Set the best model to CatBoost
+# Use the best model from the trained ensemble
+# Note: CatBoost may not be available if not trained, so we use the actual best model
 
-best_model_name = 'CatBoost'
-
-kgb_predictor.predictor.set_model_best(best_model_name)
+# Get the actual best model name from the predictor
+best_model_name = kgb_predictor.predictor.model_best
+# kgb_predictor.predictor.set_model_best(best_model_name)  # Already set by training
 
 # Get predictions on the entire TTD test population
 ttd_predictions = kgb_predictor.predict_proba(X_ttd_test_features)
@@ -1140,9 +1146,9 @@ bureau_proxy_predictor = AutoGluonSklearnWrapper(
 
 bureau_proxy_predictor.fit(X_bureau_proxy_train, y_bureau_proxy_train)
 
-# Set the best model to CatBoost
-best_model = 'CatBoost'  # Specify the best model
-bureau_proxy_predictor.predictor.set_model_best(best_model)
+# Use the best model from the trained ensemble
+best_model = bureau_proxy_predictor.predictor.model_best
+# bureau_proxy_predictor.predictor.set_model_best(best_model)  # Already set by training
 
 # Get predictions
 bureau_proxy_predictions = bureau_proxy_predictor.predict_proba(X_ttd_test_features)

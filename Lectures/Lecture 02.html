@@ -28,7 +28,7 @@
       vertical-align: middle;
     }
   </style>
-  <link rel="stylesheet" href="Lecture 02_files/libs/revealjs/dist/theme/quarto-034c394c4af08a7d4a6a53426ad1c07f.css">
+  <link rel="stylesheet" href="Lecture 02_files/libs/revealjs/dist/theme/quarto-a8d3b5b656991b64a331e7eb52262584.css">
   <link href="Lecture 02_files/libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
   <link href="Lecture 02_files/libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
   <link href="Lecture 02_files/libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
@@ -280,7 +280,7 @@
 <li class="fragment">Home equity loans: Secured, term loan, fixed rate</li>
 <li class="fragment">HELOCs: Secured, line of credit, variable rate, draw period followed by amortizing period</li>
 </ul></li>
-<li class="fragment"><strong>Student Loans</strong>: Unsecured, term loan, fixed rate</li>
+<li class="fragment"><strong>Student Loans</strong>: Unsecured, term loan. Federal student loans typically have fixed rates, while private student loans may have fixed or variable rates.</li>
 </ul>
 </section></section>
 <section>
@@ -396,14 +396,10 @@
 <section id="pdo-mathematical-details---part-1" class="slide level2 smaller">
 <h2>PDO: Mathematical Details - Part 1</h2>
 <ul>
-<li class="fragment"><strong>Mathematical relationship</strong>: Let <span class="math inline">\(p\)</span> be the probability of default and define the odds as <span class="math inline">\(\frac{p}{1-p}\)</span>; then: <span class="math display">\[\text{Score} = A - B \cdot \ln\left(\frac{p}{1-p}\right)\]</span>
-<ul>
-<li class="fragment">Here, <span class="math inline">\(B\)</span> is defined as <span class="math inline">\(\text{PDO}/\ln(2)\)</span>.</li>
-<li class="fragment">The scaling factor (<span class="math inline">\(1 / \ln(2)\)</span>) ensures that an increase of PDO points in the score exactly doubles the odds of being a “good” borrower.</li>
-<li class="fragment"><span class="math inline">\(A\)</span> is a scaling constant (reference score) to position the score in the desired range.</li>
-</ul></li>
-<li class="fragment"><strong>Ambiguity in odds definition</strong>: The “odds of being a good borrower” <span class="math inline">\(\frac{1-p}{p}\)</span> is the inverse of the “odds of default” <span class="math inline">\(\frac{p}{1-p}\)</span>. In the formula above, as the score increases by PDO points, the odds of default are halved, which is equivalent to saying the odds of being a good borrower are doubled.</li>
+<li class="fragment"><strong>Mathematical relationship</strong>: Let <span class="math inline">\(p\)</span> be the probability of default. The score is calculated as:</li>
 </ul>
+<p><span class="math display">\[\text{Score} = A - B \cdot \ln\left(\frac{p}{1-p}\right)\]</span></p>
+<p>where: - <span class="math inline">\(\frac{p}{1-p}\)</span> represents the <strong>odds of default</strong> (the ratio of default probability to non-default probability). - <span class="math inline">\(B\)</span> is defined as <span class="math inline">\(\text{PDO}/\ln(2)\)</span>. This factor converts log-odds into score points such that adding PDO points to the score exactly halves the odds of default (or equivalently, doubles the odds of being a “good” borrower). - <span class="math inline">\(A\)</span> is a scaling constant (reference score) to position the score in the desired range. - <strong>Key insight</strong>: As the score increases by PDO points, the odds of default are halved. This means higher scores indicate lower default risk.</p>
 </section>
 <section id="pdo-mathematical-details---part-2" class="slide level2 smaller">
 <h2>PDO: Mathematical Details - Part 2</h2>
@@ -413,11 +409,12 @@
 <li class="fragment">Calculate <span class="math inline">\(B = 40 / \ln(2) \approx 40 / 0.693 \approx 57.7\)</span>.</li>
 <li class="fragment">If a 650 score corresponds to a 5% default probability (<span class="math inline">\(p=0.05\)</span>):
 <ul>
-<li class="fragment">Compute the odds: <span class="math inline">\(\frac{0.05}{1-0.05} = \frac{0.05}{0.95} \approx 0.0526\)</span> and <span class="math inline">\(\ln(0.0526) \approx -2.944\)</span>.</li>
+<li class="fragment">Compute the odds of default: <span class="math inline">\(\frac{p}{1-p} = \frac{0.05}{0.95} \approx 0.0526\)</span> and <span class="math inline">\(\ln(0.0526) \approx -2.944\)</span>.</li>
 <li class="fragment">Then, <span class="math inline">\(650 = A - 57.7 \cdot (-2.944) = A + 169.7\)</span>.</li>
 <li class="fragment">Solve for <span class="math inline">\(A \approx 650 - 169.7 \approx 480.3\)</span>.</li>
 </ul></li>
 <li class="fragment">Final formula: <span class="math display">\[\text{Score} = 480.3 - 57.7 \cdot \ln\left(\frac{p}{1-p}\right)\]</span></li>
+<li class="fragment">Verification: A score of 690 (<span class="math inline">\(650 + 40\)</span>) should have odds of default equal to <span class="math inline">\(0.0526 / 2 = 0.0263\)</span>, which corresponds to <span class="math inline">\(p \approx 2.6\%\)</span> default probability.</li>
 </ol></li>
 </ul>
 </section>
@@ -429,7 +426,7 @@
 <li class="fragment"><strong>FICO</strong> and <strong>VantageScore</strong> do not disclose exact PDO values</li>
 <li class="fragment"><strong>Typical PDO values</strong>: Range from 20 to 40 points</li>
 <li class="fragment">Credit scoring systems may change PDO when they publish new versions of their models (e.g., FICO 8, FICO 9)</li>
-<li class="fragment">A low PDO (like 20) indicates a less sensitive scoring model, while a high PDO (like 40) indicates a more sensitive model</li>
+<li class="fragment">A higher PDO (like 40) means <strong>more</strong> points are needed to double the odds of good performance. A lower PDO (like 20) means <strong>fewer</strong> points are needed for the same effect, indicating a more sensitive or discriminating score where small score differences translate to larger changes in odds.</li>
 </ul>
 </section>
 <section id="credit-scores-as-risk-rankings" class="slide level2 smaller">
@@ -452,7 +449,7 @@
 <section id="credit-application-process" class="slide level2">
 <h2>Credit Application Process</h2>
 
-<img data-src=".\Images/gpt4o-applicant-process.png" class="quarto-figure quarto-figure-center r-stretch"></section>
+<img data-src="./Images/gpt4o-applicant-process.png" class="quarto-figure quarto-figure-center r-stretch"></section>
 <section id="through-the-door-ttd-population" class="slide level2 smaller">
 <h2>Through-the-Door (TTD) Population</h2>
 <ul>
@@ -593,7 +590,7 @@ Figure&nbsp;1: Selection Bias Visualization
 <section id="simulation-results" class="slide level2 smaller">
 <h2>Simulation Results</h2>
 <div class="cell" data-tbl-number="true" data-execution_count="3">
-<div id="tbl-simulation-summary" class="cell quarto-float quarto-figure quarto-figure-center" data-tbl-number="true" data-execution_count="3">
+<div id="tbl-simulation-summary" class="cell quarto-float quarto-figure quarto-figure-center" data-execution_count="3" data-tbl-number="true">
 <figure class="quarto-float quarto-float-tbl">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-simulation-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table&nbsp;1: Summary Statistics
@@ -603,33 +600,33 @@ Table&nbsp;1: Summary Statistics
 <style type="text/css">
 </style>
 
-<table id="T_6d65a" class="do-not-create-environment cell caption-top" data-quarto-postprocess="true">
+<table id="T_c4955" class="do-not-create-environment cell caption-top" data-quarto-postprocess="true">
 <thead>
 <tr class="header">
-<th id="T_6d65a_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Metric</th>
-<th id="T_6d65a_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Value</th>
+<th id="T_c4955_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Metric</th>
+<th id="T_c4955_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Value</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td id="T_6d65a_row0_col0" class="data row0 col0">TTD population size</td>
-<td id="T_6d65a_row0_col1" class="data row0 col1">300,000</td>
+<td id="T_c4955_row0_col0" class="data row0 col0">TTD population size</td>
+<td id="T_c4955_row0_col1" class="data row0 col1">300,000</td>
 </tr>
 <tr class="even">
-<td id="T_6d65a_row1_col0" class="data row1 col0">KGB population size</td>
-<td id="T_6d65a_row1_col1" class="data row1 col1">114,722</td>
+<td id="T_c4955_row1_col0" class="data row1 col0">KGB population size</td>
+<td id="T_c4955_row1_col1" class="data row1 col1">114,722</td>
 </tr>
 <tr class="odd">
-<td id="T_6d65a_row2_col0" class="data row2 col0">Rejection rate</td>
-<td id="T_6d65a_row2_col1" class="data row2 col1">61.8%</td>
+<td id="T_c4955_row2_col0" class="data row2 col0">Rejection rate</td>
+<td id="T_c4955_row2_col1" class="data row2 col1">61.8%</td>
 </tr>
 <tr class="even">
-<td id="T_6d65a_row3_col0" class="data row3 col0">Overall default rate in TTD</td>
-<td id="T_6d65a_row3_col1" class="data row3 col1">11.7%</td>
+<td id="T_c4955_row3_col0" class="data row3 col0">Overall default rate in TTD</td>
+<td id="T_c4955_row3_col1" class="data row3 col1">11.7%</td>
 </tr>
 <tr class="odd">
-<td id="T_6d65a_row4_col0" class="data row4 col0">Default rate in KGB</td>
-<td id="T_6d65a_row4_col1" class="data row4 col1">1.2%</td>
+<td id="T_c4955_row4_col0" class="data row4 col0">Default rate in KGB</td>
+<td id="T_c4955_row4_col1" class="data row4 col1">1.2%</td>
 </tr>
 </tbody>
 </table>
@@ -650,7 +647,7 @@ Table&nbsp;1: Summary Statistics
 <section id="underestimating-risk-for-rejected-applicants" class="slide level2 smaller">
 <h2>Underestimating Risk for Rejected Applicants</h2>
 <div class="cell" data-tbl-number="true" data-execution_count="5">
-<div id="tbl-risk-by-population" class="cell quarto-float quarto-figure quarto-figure-center" data-tbl-number="true" data-execution_count="5">
+<div id="tbl-risk-by-population" class="cell quarto-float quarto-figure quarto-figure-center" data-execution_count="5" data-tbl-number="true">
 <figure class="quarto-float quarto-float-tbl">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-risk-by-population-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table&nbsp;2: True vs.&nbsp;Predicted PD
@@ -660,27 +657,27 @@ Table&nbsp;2: True vs.&nbsp;Predicted PD
 <style type="text/css">
 </style>
 
-<table id="T_95ac0" class="do-not-create-environment cell caption-top" data-quarto-postprocess="true">
+<table id="T_16d1b" class="do-not-create-environment cell caption-top" data-quarto-postprocess="true">
 <thead>
 <tr class="header">
-<th id="T_95ac0_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">approved</th>
-<th id="T_95ac0_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">num_loans</th>
-<th id="T_95ac0_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">predicted_default_prob</th>
-<th id="T_95ac0_level0_col3" class="col_heading level0 col3" data-quarto-table-cell-role="th">true_default_prob</th>
+<th id="T_16d1b_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">approved</th>
+<th id="T_16d1b_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">num_loans</th>
+<th id="T_16d1b_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">predicted_default_prob</th>
+<th id="T_16d1b_level0_col3" class="col_heading level0 col3" data-quarto-table-cell-role="th">true_default_prob</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td id="T_95ac0_row0_col0" class="data row0 col0">False</td>
-<td id="T_95ac0_row0_col1" class="data row0 col1">37035</td>
-<td id="T_95ac0_row0_col2" class="data row0 col2">0.029444</td>
-<td id="T_95ac0_row0_col3" class="data row0 col3">0.181625</td>
+<td id="T_16d1b_row0_col0" class="data row0 col0">False</td>
+<td id="T_16d1b_row0_col1" class="data row0 col1">37035</td>
+<td id="T_16d1b_row0_col2" class="data row0 col2">0.027473</td>
+<td id="T_16d1b_row0_col3" class="data row0 col3">0.181625</td>
 </tr>
 <tr class="even">
-<td id="T_95ac0_row1_col0" class="data row1 col0">True</td>
-<td id="T_95ac0_row1_col1" class="data row1 col1">22965</td>
-<td id="T_95ac0_row1_col2" class="data row1 col2">0.012437</td>
-<td id="T_95ac0_row1_col3" class="data row1 col3">0.012837</td>
+<td id="T_16d1b_row1_col0" class="data row1 col0">True</td>
+<td id="T_16d1b_row1_col1" class="data row1 col1">22965</td>
+<td id="T_16d1b_row1_col2" class="data row1 col2">0.012247</td>
+<td id="T_16d1b_row1_col3" class="data row1 col3">0.012837</td>
 </tr>
 </tbody>
 </table>
@@ -714,7 +711,7 @@ Figure&nbsp;3: Model Comparison: KGB vs Augmented (Naive)
 <section id="impact-of-naive-augmentation" class="slide level2 smaller">
 <h2>Impact of Naive Augmentation</h2>
 <div class="cell" data-message="false" data-tbl-number="true" data-execution_count="9">
-<div id="tbl-mae-comparison" class="cell quarto-float quarto-figure quarto-figure-center" data-tbl-number="true" data-execution_count="9" data-message="false">
+<div id="tbl-mae-comparison" class="cell quarto-float quarto-figure quarto-figure-center" data-message="false" data-tbl-number="true" data-execution_count="9">
 <figure class="quarto-float quarto-float-tbl">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-mae-comparison-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table&nbsp;3: Mean Absolute Error (MAE) Comparison
@@ -724,34 +721,34 @@ Table&nbsp;3: Mean Absolute Error (MAE) Comparison
 <style type="text/css">
 </style>
 
-<table id="T_1c570" class="do-not-create-environment cell caption-top" data-quarto-postprocess="true">
+<table id="T_c8bad" class="do-not-create-environment cell caption-top" data-quarto-postprocess="true">
 <thead>
 <tr class="header">
-<th id="T_1c570_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Model</th>
-<th id="T_1c570_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Score Range</th>
-<th id="T_1c570_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">MAE</th>
+<th id="T_c8bad_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Model</th>
+<th id="T_c8bad_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Score Range</th>
+<th id="T_c8bad_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">MAE</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td id="T_1c570_row0_col0" class="data row0 col0">Augmented (Naive)</td>
-<td id="T_1c570_row0_col1" class="data row0 col1">Rejected (&lt; 680)</td>
-<td id="T_1c570_row0_col2" class="data row0 col2">53.4%</td>
+<td id="T_c8bad_row0_col0" class="data row0 col0">Augmented (Naive)</td>
+<td id="T_c8bad_row0_col1" class="data row0 col1">Rejected (&lt; 680)</td>
+<td id="T_c8bad_row0_col2" class="data row0 col2">53.4%</td>
 </tr>
 <tr class="even">
-<td id="T_1c570_row1_col0" class="data row1 col0">Augmented (Naive)</td>
-<td id="T_1c570_row1_col1" class="data row1 col1">Approved (&gt;= 680)</td>
-<td id="T_1c570_row1_col2" class="data row1 col2">0.1%</td>
+<td id="T_c8bad_row1_col0" class="data row1 col0">Augmented (Naive)</td>
+<td id="T_c8bad_row1_col1" class="data row1 col1">Approved (&gt;= 680)</td>
+<td id="T_c8bad_row1_col2" class="data row1 col2">0.1%</td>
 </tr>
 <tr class="odd">
-<td id="T_1c570_row2_col0" class="data row2 col0">KGB</td>
-<td id="T_1c570_row2_col1" class="data row2 col1">Rejected (&lt; 680)</td>
-<td id="T_1c570_row2_col2" class="data row2 col2">43.7%</td>
+<td id="T_c8bad_row2_col0" class="data row2 col0">KGB</td>
+<td id="T_c8bad_row2_col1" class="data row2 col1">Rejected (&lt; 680)</td>
+<td id="T_c8bad_row2_col2" class="data row2 col2">43.9%</td>
 </tr>
 <tr class="even">
-<td id="T_1c570_row3_col0" class="data row3 col0">KGB</td>
-<td id="T_1c570_row3_col1" class="data row3 col1">Approved (&gt;= 680)</td>
-<td id="T_1c570_row3_col2" class="data row3 col2">0.1%</td>
+<td id="T_c8bad_row3_col0" class="data row3 col0">KGB</td>
+<td id="T_c8bad_row3_col1" class="data row3 col1">Approved (&gt;= 680)</td>
+<td id="T_c8bad_row3_col2" class="data row3 col2">0.1%</td>
 </tr>
 </tbody>
 </table>
@@ -772,7 +769,7 @@ Table&nbsp;3: Mean Absolute Error (MAE) Comparison
 <section id="bureau-proxy-metrics" class="slide level2 smaller">
 <h2>Bureau Proxy Metrics</h2>
 <div class="cell" data-tbl-number="true" data-execution_count="10">
-<div id="tbl-bureau-proxy-stats" class="cell quarto-float quarto-figure quarto-figure-center" data-tbl-number="true" data-execution_count="10">
+<div id="tbl-bureau-proxy-stats" class="cell quarto-float quarto-figure quarto-figure-center" data-execution_count="10" data-tbl-number="true">
 <figure class="quarto-float quarto-float-tbl">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-bureau-proxy-stats-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table&nbsp;4: Bureau Proxy Statistics
@@ -782,37 +779,37 @@ Table&nbsp;4: Bureau Proxy Statistics
 <style type="text/css">
 </style>
 
-<table id="T_8bd5b" class="do-not-create-environment cell caption-top" data-quarto-postprocess="true">
+<table id="T_6b4b6" class="do-not-create-environment cell caption-top" data-quarto-postprocess="true">
 <thead>
 <tr class="header">
-<th id="T_8bd5b_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Metric</th>
-<th id="T_8bd5b_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Value</th>
+<th id="T_6b4b6_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Metric</th>
+<th id="T_6b4b6_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Value</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td id="T_8bd5b_row0_col0" class="data row0 col0">TTD Applicants</td>
-<td id="T_8bd5b_row0_col1" class="data row0 col1">240,000</td>
+<td id="T_6b4b6_row0_col0" class="data row0 col0">TTD Applicants</td>
+<td id="T_6b4b6_row0_col1" class="data row0 col1">240,000</td>
 </tr>
 <tr class="even">
-<td id="T_8bd5b_row1_col0" class="data row1 col0">KGB Applicants</td>
-<td id="T_8bd5b_row1_col1" class="data row1 col1">91,757</td>
+<td id="T_6b4b6_row1_col0" class="data row1 col0">KGB Applicants</td>
+<td id="T_6b4b6_row1_col1" class="data row1 col1">91,757</td>
 </tr>
 <tr class="odd">
-<td id="T_8bd5b_row2_col0" class="data row2 col0">Rejected Applicants</td>
-<td id="T_8bd5b_row2_col1" class="data row2 col1">148,243</td>
+<td id="T_6b4b6_row2_col0" class="data row2 col0">Rejected Applicants</td>
+<td id="T_6b4b6_row2_col1" class="data row2 col1">148,243</td>
 </tr>
 <tr class="even">
-<td id="T_8bd5b_row3_col0" class="data row3 col0">Rejected Applicants with proxies</td>
-<td id="T_8bd5b_row3_col1" class="data row3 col1">8,534 of 148,243 (5.8%)</td>
+<td id="T_6b4b6_row3_col0" class="data row3 col0">Rejected Applicants with proxies</td>
+<td id="T_6b4b6_row3_col1" class="data row3 col1">8,534 of 148,243 (5.8%)</td>
 </tr>
 <tr class="odd">
-<td id="T_8bd5b_row4_col0" class="data row4 col0">Rejected Applicants without proxies (excluded)</td>
-<td id="T_8bd5b_row4_col1" class="data row4 col1">139,709</td>
+<td id="T_6b4b6_row4_col0" class="data row4 col0">Rejected Applicants without proxies (excluded)</td>
+<td id="T_6b4b6_row4_col1" class="data row4 col1">139,709</td>
 </tr>
 <tr class="even">
-<td id="T_8bd5b_row5_col0" class="data row5 col0">KGB + Bureau Proxy Applicants</td>
-<td id="T_8bd5b_row5_col1" class="data row5 col1">100,291</td>
+<td id="T_6b4b6_row5_col0" class="data row5 col0">KGB + Bureau Proxy Applicants</td>
+<td id="T_6b4b6_row5_col1" class="data row5 col1">100,291</td>
 </tr>
 </tbody>
 </table>
@@ -831,7 +828,7 @@ Figure&nbsp;4: Model Comparison: All Approaches
 <section id="impact-of-bureau-augmentation" class="slide level2 smaller">
 <h2>Impact of Bureau Augmentation</h2>
 <div class="cell" data-tbl-number="true" data-execution_count="13">
-<div id="tbl-bureau-proxy-mae" class="cell quarto-float quarto-figure quarto-figure-center" data-tbl-number="true" data-execution_count="13">
+<div id="tbl-bureau-proxy-mae" class="cell quarto-float quarto-figure quarto-figure-center" data-execution_count="13" data-tbl-number="true">
 <figure class="quarto-float quarto-float-tbl">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-bureau-proxy-mae-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table&nbsp;5: Bureau Proxy Error Metrics
@@ -841,44 +838,44 @@ Table&nbsp;5: Bureau Proxy Error Metrics
 <style type="text/css">
 </style>
 
-<table id="T_af97d" class="do-not-create-environment cell caption-top" data-quarto-postprocess="true">
+<table id="T_fcf61" class="do-not-create-environment cell caption-top" data-quarto-postprocess="true">
 <thead>
 <tr class="header">
-<th id="T_af97d_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Model</th>
-<th id="T_af97d_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Score Range</th>
-<th id="T_af97d_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">MAE</th>
+<th id="T_fcf61_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Model</th>
+<th id="T_fcf61_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Score Range</th>
+<th id="T_fcf61_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">MAE</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td id="T_af97d_row0_col0" class="data row0 col0">Augmented (Naive)</td>
-<td id="T_af97d_row0_col1" class="data row0 col1">Rejected (&lt; 680)</td>
-<td id="T_af97d_row0_col2" class="data row0 col2">53.4%</td>
+<td id="T_fcf61_row0_col0" class="data row0 col0">Augmented (Naive)</td>
+<td id="T_fcf61_row0_col1" class="data row0 col1">Rejected (&lt; 680)</td>
+<td id="T_fcf61_row0_col2" class="data row0 col2">53.4%</td>
 </tr>
 <tr class="even">
-<td id="T_af97d_row1_col0" class="data row1 col0">Augmented (Naive)</td>
-<td id="T_af97d_row1_col1" class="data row1 col1">Approved (&gt;= 680)</td>
-<td id="T_af97d_row1_col2" class="data row1 col2">0.1%</td>
+<td id="T_fcf61_row1_col0" class="data row1 col0">Augmented (Naive)</td>
+<td id="T_fcf61_row1_col1" class="data row1 col1">Approved (&gt;= 680)</td>
+<td id="T_fcf61_row1_col2" class="data row1 col2">0.1%</td>
 </tr>
 <tr class="odd">
-<td id="T_af97d_row2_col0" class="data row2 col0">KGB</td>
-<td id="T_af97d_row2_col1" class="data row2 col1">Rejected (&lt; 680)</td>
-<td id="T_af97d_row2_col2" class="data row2 col2">43.7%</td>
+<td id="T_fcf61_row2_col0" class="data row2 col0">KGB</td>
+<td id="T_fcf61_row2_col1" class="data row2 col1">Rejected (&lt; 680)</td>
+<td id="T_fcf61_row2_col2" class="data row2 col2">43.9%</td>
 </tr>
 <tr class="even">
-<td id="T_af97d_row3_col0" class="data row3 col0">KGB</td>
-<td id="T_af97d_row3_col1" class="data row3 col1">Approved (&gt;= 680)</td>
-<td id="T_af97d_row3_col2" class="data row3 col2">0.1%</td>
+<td id="T_fcf61_row3_col0" class="data row3 col0">KGB</td>
+<td id="T_fcf61_row3_col1" class="data row3 col1">Approved (&gt;= 680)</td>
+<td id="T_fcf61_row3_col2" class="data row3 col2">0.1%</td>
 </tr>
 <tr class="odd">
-<td id="T_af97d_row4_col0" class="data row4 col0">Augmented (Bureau)</td>
-<td id="T_af97d_row4_col1" class="data row4 col1">Rejected (&lt; 680)</td>
-<td id="T_af97d_row4_col2" class="data row4 col2">23.8%</td>
+<td id="T_fcf61_row4_col0" class="data row4 col0">Augmented (Bureau)</td>
+<td id="T_fcf61_row4_col1" class="data row4 col1">Rejected (&lt; 680)</td>
+<td id="T_fcf61_row4_col2" class="data row4 col2">28.4%</td>
 </tr>
 <tr class="even">
-<td id="T_af97d_row5_col0" class="data row5 col0">Augmented (Bureau)</td>
-<td id="T_af97d_row5_col1" class="data row5 col1">Approved (&gt;= 680)</td>
-<td id="T_af97d_row5_col2" class="data row5 col2">0.1%</td>
+<td id="T_fcf61_row5_col0" class="data row5 col0">Augmented (Bureau)</td>
+<td id="T_fcf61_row5_col1" class="data row5 col1">Approved (&gt;= 680)</td>
+<td id="T_fcf61_row5_col2" class="data row5 col2">0.1%</td>
 </tr>
 </tbody>
 </table>

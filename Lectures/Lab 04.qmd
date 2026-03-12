@@ -22,7 +22,7 @@ The lab explores Python libraries for handling large datasets, feature engineeri
 
 # Import Code
 
-The chunks below include all necessary Python libraries and helper functions/classes that will be used in the lab. The helpers are adapted from previous labs.
+The chunks below include all necessary Python libraries. Helper functions are imported from `helpers.py`.
 
 ```{python}
 #| label: setup-imports
@@ -71,243 +71,22 @@ import dice_ml
 from dice_ml.utils import helpers 
 import torch
 
+# Helper functions from helpers.py
+from helpers import (
+    global_set_seed,
+    remove_ag_folder,
+    AutoGluonSklearnWrapper
+)
+
 # Settings
 pd.set_option('display.max_columns', 50)
 pd.set_option('display.max_rows', 100)
 warnings.filterwarnings('ignore', category=FutureWarning) # Suppress specific FutureWarnings
 warnings.filterwarnings('ignore', category=UserWarning) # Suppress some UserWarnings from libraries
 set_config(transform_output="pandas") # Set sklearn output to pandas
-```
-
-```{python}
-#| label: setup-helpers
-
-# Helper Functions and Classes
-
-def global_set_seed(seed_value=2025):
-    """Sets random seeds for reproducibility."""
-    random.seed(seed_value)
-    np.random.seed(seed_value)
-    torch.manual_seed(seed_value)
-    if dice_ml: # If dice_ml is imported, try to set its seed
-        try:
-            dice_ml.utils.helpers.set_random_seed(seed_value)
-        except AttributeError: # In case the function path changes
-            pass
-
-
-def remove_ag_folder(mdl_folder: str) -> None:
-    """Removes the AutoGluon model folder if it exists."""
-    if os.path.exists(mdl_folder):
-        shutil.rmtree(mdl_folder)
-        print(f"Removed existing AutoGluon folder: {mdl_folder}")
-
-class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
-    """
-    Scikit-learn compatible wrapper for AutoGluon TabularPredictor
-    
-    Inherits from scikit-learn's BaseEstimator and ClassifierMixin to provide
-    full compatibility with scikit-learn tools like PartialDependenceDisplay().
-    
-    Parameters
-    ----------
-    label : str
-        Name of the target column
-
-    **predictor_args : dict
-        Additional arguments passed to TabularPredictor()
-        (e.g., problem_type, eval_metric, path, sample_weight)
-
-    **fit_args : dict
-        Additional arguments passed to TabularPredictor.fit() method
-        (e.g., holdout_frac, presets, time_limit, excluded_model_types, hyperparameters)
-
-
-    Attributes
-    ----------
-    predictor : TabularPredictor
-        The trained AutoGluon predictor
-
-    classes_ : ndarray
-        Class labels (for classification tasks)
-
-    n_features_in_ : int
-        Number of features seen during fit
-
-    feature_names_ : list
-        Feature names inferred during fitting
-
-    is_fitted_ : bool
-        Whether the estimator has been fitted
-    """
-    
-    def __init__(self, label, predictor_args=None, fit_args=None):
-        self.label = label
-        self.predictor_args = predictor_args if predictor_args else {}
-        self.fit_args = fit_args if fit_args else {}
-        self.predictor = None
-        self.classes_ = None
-        self.n_features_in_ = None
-        self.feature_names_ = None
-        self.is_fitted_ = False
-
-    def __sklearn_is_fitted__(self):
-        """Official scikit-learn API for checking fitted status"""
-        return self.is_fitted_
-
-    def fit(self, X, y, sample_weight=None):
-        """
-        Fit AutoGluon model using scikit-learn interface.
-        If sample_weight is provided directly to fit, it's used if 'sample_weight' 
-        is also specified in predictor_args.
-        """
-        self._check_feature_names(X, reset=True)
-        self._check_n_features(X, reset=True)
-
-        train_data_df = pd.DataFrame(X, columns=self.feature_names_)
-        train_data_df[self.label] = y
-
-        ag_weight_col_name = self.predictor_args.get('sample_weight', None)
-
-        if sample_weight is not None:
-            if ag_weight_col_name:
-                train_data_df[ag_weight_col_name] = sample_weight
-            else:
-                default_sw_col = 'autogluon_sample_weight_fit'
-                train_data_df[default_sw_col] = sample_weight
-                self.predictor_args['sample_weight'] = default_sw_col
-                print(f"Warning: sample_weight passed to fit() but 'sample_weight' not in predictor_args. "
-                      f"Using '{default_sw_col}' as weight column for AutoGluon.")
-        elif ag_weight_col_name and ag_weight_col_name not in train_data_df.columns and ag_weight_col_name != "balance_weight":
-            # If predictor_args has a specific column name for weights, and it's not in X, and not 'balance_weight'
-             raise ValueError(f"sample_weight column '{ag_weight_col_name}' specified in predictor_args but not found in X.")
-
-        train_data = TabularDataset(train_data_df)
-        
-        current_fit_args = self.fit_args.copy()
-        # AutoGluon's .fit() doesn't take sample_weight as a direct argument.
-        # It's handled if 'sample_weight' (column name or 'balance_weight') is in predictor_args (passed to TabularPredictor constructor)
-        # or if a column with that name exists in the training data.
-        if 'sample_weight' in current_fit_args:
-            del current_fit_args['sample_weight'] 
-
-        self.predictor = TabularPredictor(
-            label=self.label, 
-            **self.predictor_args
-        ).fit(train_data, **current_fit_args)
-        
-        if self.predictor.problem_type in ['binary', 'multiclass']:
-            self.classes_ = np.array(self.predictor.class_labels)
-            
-        self.is_fitted_ = True
-        return self
-
-    def predict(self, X):
-        check_is_fitted(self)
-        # Convert X to pandas DataFrame if it's Polars, as AG expects pandas for predict
-        if isinstance(X, pl.DataFrame):
-            X_pd = X.to_pandas()
-        else:
-            X_pd = X
-        self._check_feature_names(X_pd, reset=False)
-        self._check_n_features(X_pd, reset=False)
-
-        df = pd.DataFrame(X_pd, columns=self.feature_names_)
-        df = TabularDataset(df)
-        return self.predictor.predict(df).values
-
-    def predict_proba(self, X):
-        check_is_fitted(self)
-        if isinstance(X, pl.DataFrame):
-            X_pd = X.to_pandas()
-        else:
-            X_pd = X
-        self._check_feature_names(X_pd, reset=False)
-        self._check_n_features(X_pd, reset=False)
-        
-        df = pd.DataFrame(X_pd, columns=self.feature_names_)
-        df = TabularDataset(df)
-        return self.predictor.predict_proba(df).values
-
-    def get_params(self, deep=True):
-        return {
-            'label': self.label,
-            'predictor_args': self.predictor_args,
-            'fit_args': self.fit_args
-        }
-
-    def set_params(self, **params):
-        for param, value in params.items():
-            if param == 'label':
-                self.label = value
-            elif param == 'predictor_args':
-                self.predictor_args = value
-            elif param == 'fit_args':
-                self.fit_args = value
-            else:
-                if '.' in param:
-                    # Handle nested params like predictor_args.eval_metric
-                    main_key, sub_key = param.split('.', 1)
-                    if main_key == 'predictor_args' and isinstance(self.predictor_args, dict):
-                        self.predictor_args[sub_key] = value
-                    elif main_key == 'fit_args' and isinstance(self.fit_args, dict):
-                        self.fit_args[sub_key] = value
-                    else:
-                        setattr(self, param, value)
-                else:
-                    setattr(self, param, value)
-        return self
-        
-    def _check_n_features(self, X, reset=False):
-        if isinstance(X, pd.DataFrame):
-            n_features = X.shape[1]
-        elif isinstance(X, np.ndarray):
-            n_features = X.shape[1]
-        elif isinstance(X, pl.DataFrame):
-            n_features = X.width 
-        else:
-            raise TypeError(f"Input X type {type(X)} not supported for _check_n_features.")
-            
-        if reset:
-            self.n_features_in_ = n_features
-        elif n_features != self.n_features_in_:
-            raise ValueError(f"Expected {self.n_features_in_} features, got {n_features}")
-
-    def _check_feature_names(self, X, reset=False):
-        current_feature_names = None
-        if isinstance(X, pd.DataFrame):
-            current_feature_names = X.columns.tolist()
-        elif isinstance(X, pl.DataFrame):
-            current_feature_names = X.columns # Polars columns are already a list of strings
-        elif isinstance(X, np.ndarray) and reset: # Only generate for np.ndarray if resetting names
-            current_feature_names = [f'feat_{i}' for i in range(X.shape[1])]
-        elif not reset and isinstance(X, np.ndarray):
-             # If not resetting and X is numpy, assume feature order matches self.feature_names_
-            # No explicit name check possible here other than count (done in _check_n_features)
-            return 
-        else:
-            raise TypeError(f"Input X type {type(X)} not supported for _check_feature_names.")
-
-        if reset:
-            self.feature_names_ = current_feature_names
-        elif current_feature_names != self.feature_names_:
-            # More informative error message for mismatch
-            msg = f"Feature names mismatch. Expected: {self.feature_names_}. Got: {current_feature_names}."
-            # Find differences for clarity
-            expected_set = set(self.feature_names_)
-            got_set = set(current_feature_names)
-            if len(expected_set) != len(self.feature_names_) or len(got_set) != len(current_feature_names):
-                msg += " (Note: Duplicate feature names might be an issue)"
-            if expected_set - got_set:
-                msg += f" Missing expected features: {expected_set - got_set}."
-            if got_set - expected_set:
-                msg += f" Unexpected features provided: {got_set - expected_set}."
-            raise ValueError(msg)
-
 
 # Initialize global seed
 global_set_seed(2025)
-
 ```
 
 # Credit Card Fraud Detection
@@ -354,7 +133,7 @@ The absolute number of samples in the minority class (fraud) also matters:
 
 -   **Large Datasets:** A low fraud rate (e.g., 0.1%) in a large dataset (e.g., 100 million transactions) can still yield enough fraud examples (e.g., 100,000) for effective modeling training and testing.
 
--   **Small Datasets:** The same low fraud rate in a small dataset (e.g., 1,000 transactions) results in too few fraud examples (e.g., 1) for reliable model training and testing.
+-   **Small Datasets:** The same low fraud rate in a small dataset (e.g., 1,000 transactions) results in very few fraud examples (approximately 1 fraud case if the rate is 0.1%). This is often insufficient for reliable model training and evaluation.
 
 The lab assumes large imbalanced data sets.
 
@@ -390,16 +169,17 @@ Several strategies can be employed to mitigate the effects of class imbalance wh
 **Rationale:**
 
 -   In fraud detection, the positive class (fraud) is much rarer than the negative class (legitimate transactions).
--   **ROC-AUC** is a very common binary classification metric (the gold standard), but it can be misleading when classes are highly imbalanced:
+-   **ROC-AUC** is a common binary classification metric, but it can be misleading when classes are highly imbalanced:
     -   ROC plots the True Positive Rate (also known as TPR, recall, sensitivity, or gain) against the False Positive Rate (FPR) at different decision thresholds.
-    -   The FPR denominator is huge (all legitimate transactions), so even many false positives may not increase the FPR much, making the ROC-AUC look artificially good.
-    -   Because there are so many legitimate transactions, even a model that misses many frauds (low recall) can still achieve a decent ROC-AUC if the model correctly classifies most legitimate transactions (true negatives).
+    -   FPR is calculated as $\frac{\text{False Positives}}{\text{All Actual Negatives}}$. When the negative class (legitimate transactions) is very large, even a substantial number of false positives may result in a low FPR, making the ROC curve appear optimistic.
+    -   While a model predicting only "not fraud" would have ROC-AUC of 0.5 (random performance), the more important issue is that ROC-AUC can appear reasonably high even for models that perform poorly on the minority class, because high accuracy on the majority class can mask deficiencies in minority class detection.
 -   **Precision-Recall (PR) curves** are more informative for imbalanced data:
-    -   The PR curve plots Precision (the proportion of predicted frauds that are actually fraud) against Recall (the proportion of actual frauds that are detected).
-    -   A model with high precision is desirable to minimize false alarms (which flag legitimate transactions as fraud).
+    -   The PR curve plots Precision ($\frac{\text{True Positives}}{\text{True Positives} + \text{False Positives}}$) against Recall ($\frac{\text{True Positives}}{\text{True Positives} + \text{False Negatives}}$).
+    -   Precision directly measures how many of the predicted frauds are actually fraud, which is critical when investigating alerts.
+    -   PR curves do not account for true negatives, making them more sensitive to the model's performance on the minority class.
 -   **PR-AUC** (Area Under the PR Curve, also called Average Precision or AP) summarizes the PR curve in a single number.
-    -   A high PR-AUC means the model can achieve both high precision and high recall for fraud.
-    -   PR-AUC removes the effect of true negatives and focuses on the positive class (fraud).
+    -   A high PR-AUC means the model can achieve both high precision and high recall for fraud detection.
+    -   The baseline (random classifier) PR-AUC equals the prevalence of the positive class, making it easier to assess model quality.
 
 **Process:**
 
