@@ -15,3 +15,4 @@ Lectures/augmented_bureau_proxy_model/*
 Lectures/kgb_model/*
 .DS_Store
 .venv/*
+__pycache__/
