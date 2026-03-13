@@ -1,16 +1,16 @@
 # IML4Finance Lectures Review Summary
 
 ## Files Reviewed
-- Lab 01.qmd
-- Lab 02.qmd
-- Lab 03.qmd
-- Lab 04.qmd
-- Lecture 01.qmd
-- Lecture 02.qmd
+- Lab_01.qmd
+- Lab_02.qmd
+- Lab_03.qmd
+- Lab_04.qmd
+- Lecture_01.qmd
+- Lecture_02.qmd
 
 ## Factual Issues Found and Fixed
 
-### Lecture 02.qmd
+### Lecture_02.qmd
 
 **Issue 1: Student Loan Interest Rate Classification**
 - **Original text:** `**Student Loans**: Unsecured, term loan, fixed rate`
@@ -26,28 +26,28 @@
 
 The following areas were reviewed for clarity but were found to be accurate and well-explained:
 
-### Lecture 01.qmd
+### Lecture_01.qmd
 - Credit score ranges (FICO 300-850, VantageScore similar range) - **ACCURATE**
 - FICO/VantageScore as major scoring models - **ACCURATE**
 
-### Lecture 02.qmd
+### Lecture_02.qmd
 - Historical dates (FICO 1956 custom models, 1989 general-purpose score, 1995 Fannie Mae/Freddie Mac requirement, 2006 VantageScore) - **ACCURATE**
 - PDO mathematical derivation - **VERIFIED CORRECT** (the example calculation shows proper application)
 - Credit scoring company vs. credit bureau distinction - **CLEAR AND ACCURATE**
 
-### Lab 01.qmd
+### Lab_01.qmd
 - Random Forest probability calibration explanation - **ACCURATE** (Random Forest uses class proportions at leaf nodes, which can be poorly calibrated because Gini impurity doesn't directly optimize probability accuracy)
 - CatBoost log loss as proper scoring rule - **ACCURATE**
 
-### Lab 02.qmd
+### Lab_02.qmd
 - PD to Score conversion formula - **VERIFIED CORRECT** (matches standard credit scoring formula)
 - KS statistic explanation - **ACCURATE**
 
-### Lab 03.qmd
+### Lab_03.qmd
 - SHAP value interpretation - **ACCURATE** (the waterfall plot interpretation is correct)
 - Counterfactual explanations vs. SHAP distinction - **CLEAR**
 
-### Lab 04.qmd
+### Lab_04.qmd
 - ROC-AUC limitations for imbalanced data - **ACCURATE**
 - PR-AUC advantages for imbalanced data - **ACCURATE**
 - SMOTE explanation - **ACCURATE** (SMOTE needs at least k+1 minority samples where k is the number of neighbors)
@@ -57,23 +57,23 @@ The following areas were reviewed for clarity but were found to be accurate and 
 
 | File | Factual Issues Fixed | Clarity Issues Fixed |
 |------|---------------------|---------------------|
-| Lecture 01.qmd | 0 | 0 |
-| Lecture 02.qmd | 1 | 1 |
-| Lab 01.qmd | 0 | 0 |
-| Lab 02.qmd | 0 | 0 |
-| Lab 03.qmd | 0 | 0 |
-| Lab 04.qmd | 0 | 0 |
+| Lecture_01.qmd | 0 | 0 |
+| Lecture_02.qmd | 1 | 1 |
+| Lab_01.qmd | 0 | 0 |
+| Lab_02.qmd | 0 | 0 |
+| Lab_03.qmd | 0 | 0 |
+| Lab_04.qmd | 0 | 0 |
 | **Total** | **1** | **1** |
 
 ## Files Modified
-- Lecture 02.qmd (2 edits)
+- Lecture_02.qmd (2 edits)
 
 ## No Changes Made To
-- Lecture 01.qmd
-- Lab 01.qmd
-- Lab 02.qmd
-- Lab 03.qmd
-- Lab 04.qmd
+- Lecture_01.qmd
+- Lab_01.qmd
+- Lab_02.qmd
+- Lab_03.qmd
+- Lab_04.qmd
 
 ## Recommendations for Future Review
 
@@ -81,6 +81,6 @@ The following areas were reviewed for clarity but were found to be accurate and 
 
 2. **Data references**: The references to external data files (e.g., `Data/cibil/prospects.parquet`, `Data/lendingclub/`) should be verified to exist in the expected locations.
 
-3. **Helper functions**: The `helpers.py` file defines functions like `calculate_score` with default `base_score=600`, but Lab 02 uses `user_basescore = 680`. This inconsistency should be noted for students.
+3. **Helper functions**: The `course_utils/helpers.py` file defines functions like `calculate_score` with default `base_score=600`, but Lab 02 uses `user_basescore = 680`. This inconsistency should be noted for students.
 
 4. **FICO/VantageScore tier boundaries**: The lecture mentions VantageScore has "slightly different tier boundaries" but doesn't specify what they are. Consider adding a footnote or reference for completeness.

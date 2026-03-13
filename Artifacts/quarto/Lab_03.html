@@ -1,0 +1,2355 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.6.43">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Lab 03: Counterfactuals &amp; SHAP</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js" integrity="sha512-bLT0Qm9VnAYZDflyKcBaQ2gg0hSYNQrJ8RilYldYQ1FxQYoCLtUjuuRuZo+fjqhx/qtq/1itJ0C2ejDxltZVFg==" crossorigin="anonymous"></script><script src="Lab_03_files/libs/clipboard/clipboard.min.js"></script>
+<script src="Lab_03_files/libs/quarto-html/quarto.js"></script>
+<script src="Lab_03_files/libs/quarto-html/popper.min.js"></script>
+<script src="Lab_03_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="Lab_03_files/libs/quarto-html/anchor.min.js"></script>
+<link href="Lab_03_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="Lab_03_files/libs/quarto-html/quarto-syntax-highlighting-d4d76bf8491c20bad77d141916dc28e1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="Lab_03_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="Lab_03_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="Lab_03_files/libs/bootstrap/bootstrap-bb28b9dee5eaef3d6e94095fb57eece9.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" integrity="sha512-c3Nl8+7g4LMSTdrm621y7kf9v3SDPnhxLNhcjFJbKECVnmZHTdo+IRO05sNLTH/D3vA6u1X32ehoLC7WFVdheg==" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body>
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-full">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#introduction" id="toc-introduction" class="nav-link active" data-scroll-target="#introduction"><span class="header-section-number">1</span> Introduction</a></li>
+  <li><a href="#load-data-and-pre-trained-model" id="toc-load-data-and-pre-trained-model" class="nav-link" data-scroll-target="#load-data-and-pre-trained-model"><span class="header-section-number">2</span> Load Data and Pre-trained Model</a></li>
+  <li><a href="#counterfactual-explanations" id="toc-counterfactual-explanations" class="nav-link" data-scroll-target="#counterfactual-explanations"><span class="header-section-number">3</span> Counterfactual Explanations</a>
+  <ul class="collapse">
+  <li><a href="#overview" id="toc-overview" class="nav-link" data-scroll-target="#overview"><span class="header-section-number">3.1</span> Overview</a></li>
+  <li><a href="#counterfactual-explainer" id="toc-counterfactual-explainer" class="nav-link" data-scroll-target="#counterfactual-explainer"><span class="header-section-number">3.2</span> Counterfactual Explainer</a></li>
+  <li><a href="#counterfactual-explanations-1" id="toc-counterfactual-explanations-1" class="nav-link" data-scroll-target="#counterfactual-explanations-1"><span class="header-section-number">3.3</span> Counterfactual Explanations</a></li>
+  </ul></li>
+  <li><a href="#generate-adverse-action-codes" id="toc-generate-adverse-action-codes" class="nav-link" data-scroll-target="#generate-adverse-action-codes"><span class="header-section-number">4</span> Generate Adverse Action Codes</a></li>
+  <li><a href="#improved-adverse-action-codes" id="toc-improved-adverse-action-codes" class="nav-link" data-scroll-target="#improved-adverse-action-codes"><span class="header-section-number">5</span> Improved Adverse Action Codes</a></li>
+  <li><a href="#shap-values" id="toc-shap-values" class="nav-link" data-scroll-target="#shap-values"><span class="header-section-number">6</span> SHAP Values</a>
+  <ul class="collapse">
+  <li><a href="#concept" id="toc-concept" class="nav-link" data-scroll-target="#concept"><span class="header-section-number">6.1</span> Concept</a></li>
+  <li><a href="#setup-shap-explainer" id="toc-setup-shap-explainer" class="nav-link" data-scroll-target="#setup-shap-explainer"><span class="header-section-number">6.2</span> Setup SHAP Explainer</a></li>
+  <li><a href="#local-interpretability-waterfall-plots" id="toc-local-interpretability-waterfall-plots" class="nav-link" data-scroll-target="#local-interpretability-waterfall-plots"><span class="header-section-number">6.3</span> Local Interpretability (Waterfall Plots)</a></li>
+  </ul></li>
+  <li><a href="#local-adverse-action-codes" id="toc-local-adverse-action-codes" class="nav-link" data-scroll-target="#local-adverse-action-codes"><span class="header-section-number">7</span> Local Adverse Action Codes</a></li>
+  <li><a href="#concluding-remarks-for-adverse-action-codes" id="toc-concluding-remarks-for-adverse-action-codes" class="nav-link" data-scroll-target="#concluding-remarks-for-adverse-action-codes"><span class="header-section-number">8</span> Concluding Remarks for Adverse Action Codes</a></li>
+  <li><a href="#other-uses-of-shap-values" id="toc-other-uses-of-shap-values" class="nav-link" data-scroll-target="#other-uses-of-shap-values"><span class="header-section-number">9</span> Other Uses of SHAP Values</a>
+  <ul class="collapse">
+  <li><a href="#global-interpretability-summary-plots" id="toc-global-interpretability-summary-plots" class="nav-link" data-scroll-target="#global-interpretability-summary-plots"><span class="header-section-number">9.1</span> Global Interpretability (Summary Plots)</a></li>
+  <li><a href="#shap-dependence-plots" id="toc-shap-dependence-plots" class="nav-link" data-scroll-target="#shap-dependence-plots"><span class="header-section-number">9.2</span> SHAP Dependence Plots</a></li>
+  </ul></li>
+  </ul>
+</nav>
+</div>
+<main class="content column-page-left" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title">Lab 03: Counterfactuals &amp; SHAP</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li><li><hr class="dropdown-divider"></li><li><a id="quarto-view-source" class="dropdown-item" href="javascript:void(0)" role="button">View Source</a></li></ul></div></div>
+</div>
+
+
+
+<div class="quarto-title-meta column-page-left">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="introduction" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> Introduction</h1>
+<p>The lab will examine two interpretability techniques:</p>
+<ol type="1">
+<li>Counterfactual Explanations</li>
+<li>SHAP (SHapley Additive exPlanations)</li>
+</ol>
+<p>We will use counterfactual explanations to provide actionable feedback to applicants whose applications were rejected by the model. Under the Equal Credit Opportunity Act (ECOA), lenders in the US are required to provide specific reasons for adverse action (denial) decisions. Counterfactual explanations can help fulfill this requirement by identifying the key factors that would have changed the decision.</p>
+<p>We will use SHAP for both local (individual applicant) and global (overall feature importance) model explanations. SHAP values are versatile, offering alternatives to methods like permutation feature importance, partial dependence plots, ICE plots, and ALE plots.</p>
+<div id="setup-imports" class="cell" data-message="false" data-execution_count="1">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1"></a><span class="co"># System utilities</span></span>
+<span id="cb1-2"><a href="#cb1-2"></a><span class="im">import</span> os</span>
+<span id="cb1-3"><a href="#cb1-3"></a><span class="im">import</span> shutil</span>
+<span id="cb1-4"><a href="#cb1-4"></a><span class="im">import</span> random</span>
+<span id="cb1-5"><a href="#cb1-5"></a><span class="im">import</span> warnings</span>
+<span id="cb1-6"><a href="#cb1-6"></a><span class="im">import</span> time</span>
+<span id="cb1-7"><a href="#cb1-7"></a><span class="im">import</span> gc</span>
+<span id="cb1-8"><a href="#cb1-8"></a><span class="im">import</span> psutil</span>
+<span id="cb1-9"><a href="#cb1-9"></a></span>
+<span id="cb1-10"><a href="#cb1-10"></a><span class="co"># Data manipulation and visualization</span></span>
+<span id="cb1-11"><a href="#cb1-11"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-12"><a href="#cb1-12"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-13"><a href="#cb1-13"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb1-14"><a href="#cb1-14"></a><span class="im">import</span> seaborn <span class="im">as</span> sns</span>
+<span id="cb1-15"><a href="#cb1-15"></a><span class="im">from</span> IPython.display <span class="im">import</span> display <span class="co"># Explicit import for display</span></span>
+<span id="cb1-16"><a href="#cb1-16"></a><span class="im">from</span> scipy <span class="im">import</span> stats, special</span>
+<span id="cb1-17"><a href="#cb1-17"></a><span class="im">from</span> sklearn.feature_selection <span class="im">import</span> mutual_info_classif</span>
+<span id="cb1-18"><a href="#cb1-18"></a><span class="im">import</span> re</span>
+<span id="cb1-19"><a href="#cb1-19"></a><span class="im">import</span> duckdb</span>
+<span id="cb1-20"><a href="#cb1-20"></a></span>
+<span id="cb1-21"><a href="#cb1-21"></a><span class="co"># Machine learning - scikit-learn</span></span>
+<span id="cb1-22"><a href="#cb1-22"></a><span class="im">from</span> sklearn.model_selection <span class="im">import</span> train_test_split</span>
+<span id="cb1-23"><a href="#cb1-23"></a><span class="im">from</span> sklearn.linear_model <span class="im">import</span> LogisticRegression, LogisticRegressionCV</span>
+<span id="cb1-24"><a href="#cb1-24"></a><span class="im">from</span> sklearn.metrics <span class="im">import</span> roc_auc_score, f1_score, confusion_matrix, classification_report</span>
+<span id="cb1-25"><a href="#cb1-25"></a><span class="im">from</span> sklearn.preprocessing <span class="im">import</span> LabelEncoder, StandardScaler, OneHotEncoder</span>
+<span id="cb1-26"><a href="#cb1-26"></a><span class="im">from</span> sklearn.impute <span class="im">import</span> SimpleImputer</span>
+<span id="cb1-27"><a href="#cb1-27"></a><span class="im">from</span> sklearn.pipeline <span class="im">import</span> Pipeline</span>
+<span id="cb1-28"><a href="#cb1-28"></a><span class="im">from</span> sklearn.compose <span class="im">import</span> ColumnTransformer</span>
+<span id="cb1-29"><a href="#cb1-29"></a><span class="im">from</span> sklearn.inspection <span class="im">import</span> PartialDependenceDisplay</span>
+<span id="cb1-30"><a href="#cb1-30"></a><span class="im">from</span> sklearn.base <span class="im">import</span> BaseEstimator, ClassifierMixin</span>
+<span id="cb1-31"><a href="#cb1-31"></a><span class="im">from</span> sklearn.utils.validation <span class="im">import</span> check_is_fitted, check_X_y, check_array</span>
+<span id="cb1-32"><a href="#cb1-32"></a><span class="im">from</span> sklearn <span class="im">import</span> set_config</span>
+<span id="cb1-33"><a href="#cb1-33"></a><span class="im">import</span> torch</span>
+<span id="cb1-34"><a href="#cb1-34"></a></span>
+<span id="cb1-35"><a href="#cb1-35"></a><span class="co"># Specialized ML libraries</span></span>
+<span id="cb1-36"><a href="#cb1-36"></a><span class="im">from</span> autogluon.tabular <span class="im">import</span> TabularPredictor, TabularDataset</span>
+<span id="cb1-37"><a href="#cb1-37"></a><span class="im">from</span> autogluon.common.features.feature_metadata <span class="im">import</span> FeatureMetadata <span class="co"># For monotonic constraints</span></span>
+<span id="cb1-38"><a href="#cb1-38"></a><span class="im">import</span> shap</span>
+<span id="cb1-39"><a href="#cb1-39"></a><span class="im">from</span> ydata_profiling <span class="im">import</span> ProfileReport</span>
+<span id="cb1-40"><a href="#cb1-40"></a></span>
+<span id="cb1-41"><a href="#cb1-41"></a><span class="co"># Counterfactual Explanations (optional, install if needed: pip install dice-ml)</span></span>
+<span id="cb1-42"><a href="#cb1-42"></a><span class="cf">try</span>:</span>
+<span id="cb1-43"><a href="#cb1-43"></a>    <span class="im">import</span> dice_ml</span>
+<span id="cb1-44"><a href="#cb1-44"></a>    <span class="im">from</span> dice_ml.utils <span class="im">import</span> helpers <span class="co"># Helper functions for DICE</span></span>
+<span id="cb1-45"><a href="#cb1-45"></a><span class="cf">except</span> <span class="pp">ImportError</span>:</span>
+<span id="cb1-46"><a href="#cb1-46"></a>    <span class="bu">print</span>(<span class="st">"""</span></span>
+<span id="cb1-47"><a href="#cb1-47"></a><span class="st">    </span></span>
+<span id="cb1-48"><a href="#cb1-48"></a><span class="st">    dice-ml not found. You need to update your conda env by running:</span></span>
+<span id="cb1-49"><a href="#cb1-49"></a><span class="st">    </span></span>
+<span id="cb1-50"><a href="#cb1-50"></a><span class="st">    conda activate env_AutoGluon_202502</span></span>
+<span id="cb1-51"><a href="#cb1-51"></a><span class="st">    conda install -c conda-forge dice-ml</span></span>
+<span id="cb1-52"><a href="#cb1-52"></a><span class="st">    </span></span>
+<span id="cb1-53"><a href="#cb1-53"></a><span class="st">    """</span>)</span>
+<span id="cb1-54"><a href="#cb1-54"></a>    dice_ml <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb1-55"><a href="#cb1-55"></a></span>
+<span id="cb1-56"><a href="#cb1-56"></a><span class="co"># Helper functions from helpers.py</span></span>
+<span id="cb1-57"><a href="#cb1-57"></a><span class="im">from</span> helpers <span class="im">import</span> (</span>
+<span id="cb1-58"><a href="#cb1-58"></a>    global_set_seed,</span>
+<span id="cb1-59"><a href="#cb1-59"></a>    AutoGluonSklearnWrapper,</span>
+<span id="cb1-60"><a href="#cb1-60"></a>    load_autogluon,</span>
+<span id="cb1-61"><a href="#cb1-61"></a>    generate_adverse_action_codes</span>
+<span id="cb1-62"><a href="#cb1-62"></a>)</span>
+<span id="cb1-63"><a href="#cb1-63"></a></span>
+<span id="cb1-64"><a href="#cb1-64"></a><span class="co"># Settings</span></span>
+<span id="cb1-65"><a href="#cb1-65"></a>pd.set_option(<span class="st">'display.max_columns'</span>, <span class="dv">50</span>)</span>
+<span id="cb1-66"><a href="#cb1-66"></a>pd.set_option(<span class="st">'display.max_rows'</span>, <span class="dv">100</span>)</span>
+<span id="cb1-67"><a href="#cb1-67"></a>warnings.filterwarnings(<span class="st">'ignore'</span>, category<span class="op">=</span><span class="pp">FutureWarning</span>) <span class="co"># Suppress specific FutureWarnings</span></span>
+<span id="cb1-68"><a href="#cb1-68"></a>set_config(transform_output<span class="op">=</span><span class="st">"pandas"</span>) <span class="co"># Set sklearn output to pandas</span></span>
+<span id="cb1-69"><a href="#cb1-69"></a></span>
+<span id="cb1-70"><a href="#cb1-70"></a>global_set_seed(<span class="dv">2025</span>)</span>
+<span id="cb1-71"><a href="#cb1-71"></a></span>
+<span id="cb1-72"><a href="#cb1-72"></a><span class="bu">print</span>(<span class="st">"Libraries imported successfully."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Libraries imported successfully.</code></pre>
+</div>
+</div>
+</section>
+<section id="load-data-and-pre-trained-model" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> Load Data and Pre-trained Model</h1>
+<div id="load-data" class="cell" data-execution_count="2">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1"></a>df_ttd_train <span class="op">=</span> pd.read_parquet(<span class="st">"../Data/lendingclub/lendingclub_ttd_train.parquet"</span>)</span>
+<span id="cb3-2"><a href="#cb3-2"></a>df_ttd_test <span class="op">=</span> pd.read_parquet(<span class="st">"../Data/lendingclub/lendingclub_ttd_test_cloning.parquet"</span>)</span>
+<span id="cb3-3"><a href="#cb3-3"></a>df_ttd_test_noCloning <span class="op">=</span> pd.read_parquet(<span class="st">"../Data/lendingclub/lendingclub_ttd_test_noCloning.parquet"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<div id="load-model" class="cell" data-execution_count="3">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1"></a>model_path <span class="op">=</span> <span class="st">"Lab02_ag_models_TTD_Constrained"</span></span>
+<span id="cb4-2"><a href="#cb4-2"></a></span>
+<span id="cb4-3"><a href="#cb4-3"></a>AutoGluon_TTD_model <span class="op">=</span> load_autogluon(</span>
+<span id="cb4-4"><a href="#cb4-4"></a>    folder_path<span class="op">=</span>model_path,</span>
+<span id="cb4-5"><a href="#cb4-5"></a>    persist_model<span class="op">=</span><span class="va">True</span></span>
+<span id="cb4-6"><a href="#cb4-6"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Loading AutoGluon predictor from: Lab02_ag_models_TTD_Constrained
+Predictor loaded successfully.
+Persisting predictor models in memory...
+Predictor models persisted.
+AutoGluonSklearnWrapper created successfully.</code></pre>
+</div>
+</div>
+</section>
+<section id="counterfactual-explanations" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> Counterfactual Explanations</h1>
+<section id="overview" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="overview"><span class="header-section-number">3.1</span> Overview</h2>
+<p><strong>Concept:</strong> Counterfactual explanations identify the minimal changes needed to alter a predicted label. For example, if an applicant is rejected, a counterfactual explanation would suggest how their features could be adjusted to achieve approval.</p>
+<p>First, we need to score the training and test sets to identify the applicants that were accepted and rejected by the model. Note that this is different than the default flag, which is the target variable. The model decision is based on the <strong>predicted</strong> probability of default (PD) and a threshold.</p>
+<p>Also keep in mind that <code>model_rejection = 1</code> means the applicant was rejected by the model, while <code>model_rejection = 0</code> means the applicant was accepted.</p>
+<p>Crucially, <code>model_rejection</code> represents the model’s lending decision, which may not match the actual <code>default_flag</code>.</p>
+<div id="score-data" class="cell" data-execution_count="4">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1"></a><span class="co"># append predicted labels to the training and test sets</span></span>
+<span id="cb6-2"><a href="#cb6-2"></a></span>
+<span id="cb6-3"><a href="#cb6-3"></a>df_ttd_train[<span class="st">'model_rejection'</span>] <span class="op">=</span> AutoGluon_TTD_model.predict(</span>
+<span id="cb6-4"><a href="#cb6-4"></a>    df_ttd_train[AutoGluon_TTD_model.feature_names_]</span>
+<span id="cb6-5"><a href="#cb6-5"></a>)</span>
+<span id="cb6-6"><a href="#cb6-6"></a></span>
+<span id="cb6-7"><a href="#cb6-7"></a>df_ttd_test[<span class="st">'model_rejection'</span>] <span class="op">=</span> AutoGluon_TTD_model.predict(</span>
+<span id="cb6-8"><a href="#cb6-8"></a>    df_ttd_test[AutoGluon_TTD_model.feature_names_]</span>
+<span id="cb6-9"><a href="#cb6-9"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<div class="cell" data-execution_count="5">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1"></a>keep_cols <span class="op">=</span> AutoGluon_TTD_model.feature_names_ <span class="op">+</span> [<span class="st">'model_rejection'</span>]</span>
+<span id="cb7-2"><a href="#cb7-2"></a></span>
+<span id="cb7-3"><a href="#cb7-3"></a>display(df_ttd_train[keep_cols].sample(<span class="dv">20</span>, random_state<span class="op">=</span><span class="dv">2024</span>).head(<span class="dv">10</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div id="tbl-training-decisions" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="5">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-training-decisions-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;1: Training set decisions
+</figcaption>
+<div aria-describedby="tbl-training-decisions-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe do-not-create-environment cell caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">loan_amnt</th>
+<th data-quarto-table-cell-role="th">dti</th>
+<th data-quarto-table-cell-role="th">credit_score</th>
+<th data-quarto-table-cell-role="th">emp_length</th>
+<th data-quarto-table-cell-role="th">model_rejection</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">1701897</td>
+<td>9000.0</td>
+<td>7.240000</td>
+<td>541.0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">1147716</td>
+<td>30000.0</td>
+<td>30.879999</td>
+<td>667.0</td>
+<td>10</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">1316786</td>
+<td>13000.0</td>
+<td>34.110001</td>
+<td>697.0</td>
+<td>10</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">1935671</td>
+<td>25000.0</td>
+<td>100.000000</td>
+<td>541.0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">165783</td>
+<td>7800.0</td>
+<td>16.690001</td>
+<td>732.0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">977238</td>
+<td>35000.0</td>
+<td>8.620000</td>
+<td>662.0</td>
+<td>5</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">1213747</td>
+<td>25000.0</td>
+<td>19.270000</td>
+<td>672.0</td>
+<td>3</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">566132</td>
+<td>20000.0</td>
+<td>18.559999</td>
+<td>682.0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">1307476</td>
+<td>12000.0</td>
+<td>22.920000</td>
+<td>727.0</td>
+<td>5</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">370591</td>
+<td>4800.0</td>
+<td>3.950000</td>
+<td>762.0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<div class="cell" data-execution_count="6">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1"></a>display(df_ttd_test[keep_cols].sample(<span class="dv">20</span>, random_state<span class="op">=</span><span class="dv">2024</span>).head(<span class="dv">10</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div id="tbl-test-decisions" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="6">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-test-decisions-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;2: Test set decisions
+</figcaption>
+<div aria-describedby="tbl-test-decisions-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe do-not-create-environment cell caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">loan_amnt</th>
+<th data-quarto-table-cell-role="th">dti</th>
+<th data-quarto-table-cell-role="th">credit_score</th>
+<th data-quarto-table-cell-role="th">emp_length</th>
+<th data-quarto-table-cell-role="th">model_rejection</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">527597</td>
+<td>10000.0</td>
+<td>4.350000</td>
+<td>541.0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">471114</td>
+<td>1000.0</td>
+<td>63.500000</td>
+<td>591.0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">313564</td>
+<td>8000.0</td>
+<td>5.110000</td>
+<td>697.0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">286396</td>
+<td>12000.0</td>
+<td>15.070000</td>
+<td>772.0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">377238</td>
+<td>24000.0</td>
+<td>15.290000</td>
+<td>687.0</td>
+<td>5</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">370279</td>
+<td>9600.0</td>
+<td>4.080000</td>
+<td>667.0</td>
+<td>3</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">492213</td>
+<td>3000.0</td>
+<td>39.150002</td>
+<td>541.0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">407114</td>
+<td>8800.0</td>
+<td>20.610001</td>
+<td>682.0</td>
+<td>6</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">68646</td>
+<td>35000.0</td>
+<td>11.590000</td>
+<td>687.0</td>
+<td>10</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">548455</td>
+<td>4000.0</td>
+<td>19.430000</td>
+<td>541.0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Second, we randomly select 1 rejected applicant from the test set to explain. This applicant will be used to demonstrate the counterfactual explanation process.</p>
+<div class="cell" data-execution_count="7">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1"></a>sample_reject <span class="op">=</span> df_ttd_test[keep_cols][df_ttd_test.model_rejection <span class="op">==</span> <span class="dv">1</span>].sample(<span class="dv">1</span>, random_state<span class="op">=</span><span class="dv">2020</span>)</span>
+<span id="cb9-2"><a href="#cb9-2"></a></span>
+<span id="cb9-3"><a href="#cb9-3"></a>display(sample_reject)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div id="tbl-sample-applicant" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="7">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-sample-applicant-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;3: Sample rejected applicant
+</figcaption>
+<div aria-describedby="tbl-sample-applicant-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe do-not-create-environment cell caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">loan_amnt</th>
+<th data-quarto-table-cell-role="th">dti</th>
+<th data-quarto-table-cell-role="th">credit_score</th>
+<th data-quarto-table-cell-role="th">emp_length</th>
+<th data-quarto-table-cell-role="th">model_rejection</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">583069</td>
+<td>5500.0</td>
+<td>20.219999</td>
+<td>541.0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+</figure>
+</div>
+</div>
+</section>
+<section id="counterfactual-explainer" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="counterfactual-explainer"><span class="header-section-number">3.2</span> Counterfactual Explainer</h2>
+<p>Setup an <code>dice-explainer</code> using the <code>dice_ml</code> library. The explainer will be used to generate counterfactuals for the rejected applicant.</p>
+<p>The explainer needs two objects:</p>
+<ol type="1">
+<li>Data with the predicted labels (<code>model_rejection</code>).</li>
+<li>The trained model used to generate prediction labels.</li>
+</ol>
+<div id="setup-counterfactuals" class="cell" data-execution_count="8">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1"></a>dice_data <span class="op">=</span> dice_ml.Data(</span>
+<span id="cb10-2"><a href="#cb10-2"></a>    dataframe<span class="op">=</span>df_ttd_train[keep_cols],</span>
+<span id="cb10-3"><a href="#cb10-3"></a>    continuous_features<span class="op">=</span>AutoGluon_TTD_model.feature_names_,</span>
+<span id="cb10-4"><a href="#cb10-4"></a>    outcome_name<span class="op">=</span><span class="st">"model_rejection"</span></span>
+<span id="cb10-5"><a href="#cb10-5"></a>)</span>
+<span id="cb10-6"><a href="#cb10-6"></a></span>
+<span id="cb10-7"><a href="#cb10-7"></a>dice_model <span class="op">=</span> dice_ml.Model(</span>
+<span id="cb10-8"><a href="#cb10-8"></a>    model<span class="op">=</span>AutoGluon_TTD_model,</span>
+<span id="cb10-9"><a href="#cb10-9"></a>    backend<span class="op">=</span><span class="st">'sklearn'</span></span>
+<span id="cb10-10"><a href="#cb10-10"></a>)</span>
+<span id="cb10-11"><a href="#cb10-11"></a></span>
+<span id="cb10-12"><a href="#cb10-12"></a>dice_explainer <span class="op">=</span> dice_ml.Dice(</span>
+<span id="cb10-13"><a href="#cb10-13"></a>    data_interface<span class="op">=</span>dice_data,</span>
+<span id="cb10-14"><a href="#cb10-14"></a>    model_interface<span class="op">=</span>dice_model,</span>
+<span id="cb10-15"><a href="#cb10-15"></a>    method<span class="op">=</span><span class="st">"kdtree"</span></span>
+<span id="cb10-16"><a href="#cb10-16"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<p>A k-d tree (k-dimensional tree) is a data structure used for organizing points in a k-dimensional space. It recursively partitions the space along different dimensions, allowing for efficient nearest neighbor searches. This structure helps quickly find data points that are close to a given query point in multiple dimensions.</p>
+<p>DiCE uses the k-d tree method to efficiently search the feature space for counterfactual examples. It builds a k-d tree using the training data points. When generating counterfactuals for a specific instance (like the rejected applicant), DiCE searches the k-d tree to find the nearest data points that result in the desired outcome (e.g., loan approval) while minimizing changes to the original features.</p>
+</section>
+<section id="counterfactual-explanations-1" class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="counterfactual-explanations-1"><span class="header-section-number">3.3</span> Counterfactual Explanations</h2>
+<div id="generate-counterfactuals" class="cell" data-execution_count="9">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1"></a>threshold <span class="op">=</span> AutoGluon_TTD_model.predictor.decision_threshold <span class="co"># Use decision_threshold</span></span>
+<span id="cb11-2"><a href="#cb11-2"></a></span>
+<span id="cb11-3"><a href="#cb11-3"></a>user_permitted_range <span class="op">=</span> {</span>
+<span id="cb11-4"><a href="#cb11-4"></a>    <span class="st">'loan_amnt'</span>: [<span class="dv">500</span>, sample_reject[<span class="st">'loan_amnt'</span>].iloc[<span class="dv">0</span>]],</span>
+<span id="cb11-5"><a href="#cb11-5"></a>    <span class="st">'dti'</span>: [<span class="dv">0</span>, sample_reject[<span class="st">'dti'</span>].iloc[<span class="dv">0</span>]],</span>
+<span id="cb11-6"><a href="#cb11-6"></a>    <span class="st">'credit_score'</span>: [sample_reject[<span class="st">'credit_score'</span>].iloc[<span class="dv">0</span>], <span class="dv">850</span>],</span>
+<span id="cb11-7"><a href="#cb11-7"></a>    <span class="st">'emp_length'</span>: [sample_reject[<span class="st">'emp_length'</span>].iloc[<span class="dv">0</span>], <span class="dv">10</span>]</span>
+<span id="cb11-8"><a href="#cb11-8"></a>}</span>
+<span id="cb11-9"><a href="#cb11-9"></a></span>
+<span id="cb11-10"><a href="#cb11-10"></a><span class="co"># Initialize df_counterfactuals as None to handle the case where counterfactuals cannot be found</span></span>
+<span id="cb11-11"><a href="#cb11-11"></a>df_counterfactuals <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb11-12"><a href="#cb11-12"></a></span>
+<span id="cb11-13"><a href="#cb11-13"></a><span class="cf">try</span>:</span>
+<span id="cb11-14"><a href="#cb11-14"></a>    dice_exp <span class="op">=</span> dice_explainer.generate_counterfactuals(</span>
+<span id="cb11-15"><a href="#cb11-15"></a>        query_instances<span class="op">=</span>sample_reject[AutoGluon_TTD_model.feature_names_],</span>
+<span id="cb11-16"><a href="#cb11-16"></a>        total_CFs<span class="op">=</span><span class="dv">5</span>,</span>
+<span id="cb11-17"><a href="#cb11-17"></a>        permitted_range<span class="op">=</span>user_permitted_range</span>
+<span id="cb11-18"><a href="#cb11-18"></a>        )</span>
+<span id="cb11-19"><a href="#cb11-19"></a></span>
+<span id="cb11-20"><a href="#cb11-20"></a>    <span class="co"># Extract the counterfactual features (scaled)</span></span>
+<span id="cb11-21"><a href="#cb11-21"></a>    df_counterfactuals <span class="op">=</span> dice_exp.cf_examples_list[<span class="dv">0</span>].final_cfs_df</span>
+<span id="cb11-22"><a href="#cb11-22"></a>    <span class="bu">print</span>(<span class="st">"Counterfactuals generated successfully."</span>)</span>
+<span id="cb11-23"><a href="#cb11-23"></a><span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb11-24"><a href="#cb11-24"></a>    <span class="bu">print</span>(<span class="ss">f"Could not generate counterfactuals: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb11-25"><a href="#cb11-25"></a>    <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Note: The DICE library sometimes cannot find counterfactuals when the constraints"</span>)</span>
+<span id="cb11-26"><a href="#cb11-26"></a>    <span class="bu">print</span>(<span class="st">"are too restrictive or when no valid counterfactuals exist within the permitted ranges."</span>)</span>
+<span id="cb11-27"><a href="#cb11-27"></a>    <span class="bu">print</span>(<span class="st">"This is expected behavior for certain edge cases in the data."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Counterfactuals generated successfully.</code></pre>
+</div>
+</div>
+<p>The <code>user_permitted_range</code> dictionary prevents counterfactuals that are unintuitive or impossible. It prevents counterfactuals with a <code>loan_amnt</code> greater than the application amount, a <code>dti</code> greater than the applicant value, a <code>credit_score</code> less than the applicant value, and an <code>emp_length</code> less than the applicant value.</p>
+<div class="cell" data-execution_count="10">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1"></a>display(sample_reject)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div id="tbl-rejected-applicant" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="10">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-rejected-applicant-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;4: Rejected applicant
+</figcaption>
+<div aria-describedby="tbl-rejected-applicant-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe do-not-create-environment cell caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">loan_amnt</th>
+<th data-quarto-table-cell-role="th">dti</th>
+<th data-quarto-table-cell-role="th">credit_score</th>
+<th data-quarto-table-cell-role="th">emp_length</th>
+<th data-quarto-table-cell-role="th">model_rejection</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">583069</td>
+<td>5500.0</td>
+<td>20.219999</td>
+<td>541.0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<div class="cell" data-execution_count="11">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1"></a><span class="cf">if</span> df_counterfactuals <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb14-2"><a href="#cb14-2"></a>    display(df_counterfactuals)</span>
+<span id="cb14-3"><a href="#cb14-3"></a><span class="cf">else</span>:</span>
+<span id="cb14-4"><a href="#cb14-4"></a>    <span class="bu">print</span>(<span class="st">"No counterfactuals available to display."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div id="tbl-counterfactuals" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="11">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-counterfactuals-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;5: Counterfactuals for rejected applicant
+</figcaption>
+<div aria-describedby="tbl-counterfactuals-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe do-not-create-environment cell caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">loan_amnt</th>
+<th data-quarto-table-cell-role="th">dti</th>
+<th data-quarto-table-cell-role="th">credit_score</th>
+<th data-quarto-table-cell-role="th">emp_length</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">1120825</td>
+<td>5500.0</td>
+<td>20.1</td>
+<td>662.0</td>
+<td>0.0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">1141706</td>
+<td>5500.0</td>
+<td>19.3</td>
+<td>662.0</td>
+<td>0.0</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">1013223</td>
+<td>5500.0</td>
+<td>19.0</td>
+<td>662.0</td>
+<td>0.0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">556186</td>
+<td>5500.0</td>
+<td>18.8</td>
+<td>662.0</td>
+<td>0.0</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">153045</td>
+<td>5500.0</td>
+<td>18.2</td>
+<td>662.0</td>
+<td>0.0</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Verify that the counterfactuals provided would have generated an approval by the TTD model.</p>
+<div class="cell" data-execution_count="12">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1"></a><span class="cf">if</span> df_counterfactuals <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb15-2"><a href="#cb15-2"></a>    df_counterfactuals[<span class="st">'verify_model_rejection'</span>] <span class="op">=</span> AutoGluon_TTD_model.predict(</span>
+<span id="cb15-3"><a href="#cb15-3"></a>        df_counterfactuals[AutoGluon_TTD_model.feature_names_]</span>
+<span id="cb15-4"><a href="#cb15-4"></a>    )</span>
+<span id="cb15-5"><a href="#cb15-5"></a>    display(df_counterfactuals)</span>
+<span id="cb15-6"><a href="#cb15-6"></a><span class="cf">else</span>:</span>
+<span id="cb15-7"><a href="#cb15-7"></a>    <span class="bu">print</span>(<span class="st">"No counterfactuals available to verify."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div id="tbl-verify-counterfactuals" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="12">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-verify-counterfactuals-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;6: Verify counterfactuals
+</figcaption>
+<div aria-describedby="tbl-verify-counterfactuals-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe do-not-create-environment cell caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">loan_amnt</th>
+<th data-quarto-table-cell-role="th">dti</th>
+<th data-quarto-table-cell-role="th">credit_score</th>
+<th data-quarto-table-cell-role="th">emp_length</th>
+<th data-quarto-table-cell-role="th">verify_model_rejection</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">1120825</td>
+<td>5500.0</td>
+<td>20.1</td>
+<td>662.0</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">1141706</td>
+<td>5500.0</td>
+<td>19.3</td>
+<td>662.0</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">1013223</td>
+<td>5500.0</td>
+<td>19.0</td>
+<td>662.0</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">556186</td>
+<td>5500.0</td>
+<td>18.8</td>
+<td>662.0</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">153045</td>
+<td>5500.0</td>
+<td>18.2</td>
+<td>662.0</td>
+<td>0.0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p><strong>Interpretation:</strong> The output shows alternative feature values (the counterfactuals) that would have led to an ‘Approve’ decision. This highlights the key factors driving the rejection and provides concrete suggestions for the applicant.</p>
+</section>
+</section>
+<section id="generate-adverse-action-codes" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> Generate Adverse Action Codes</h1>
+<p>The script below generates a list of adverse action codes based on differences between <code>sample_reject</code> and <code>df_counterfactuals</code>. It does this by comparing the values of each feature, and if a value differs between the two datasets, it appends a predefined message to the adverse action codes list.</p>
+<p>By comparing each feature of the original sample against the counterfactual, the code effectively identifies which factors (such as a too-high loan amount or a low credit score) contributed to the adverse decision and communicates those reasons clearly to the applicant.</p>
+<div id="adverse-action-codes-example" class="cell" data-execution_count="13">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1"></a>feature_to_action_code <span class="op">=</span> {</span>
+<span id="cb16-2"><a href="#cb16-2"></a>    <span class="st">'loan_amnt'</span>: <span class="st">"Loan amount too high"</span>,</span>
+<span id="cb16-3"><a href="#cb16-3"></a>    <span class="st">'dti'</span>: <span class="st">"Debt-to-income ratio too high"</span>,</span>
+<span id="cb16-4"><a href="#cb16-4"></a>    <span class="st">'credit_score'</span>: <span class="st">"Credit score too low"</span>,</span>
+<span id="cb16-5"><a href="#cb16-5"></a>    <span class="st">'emp_length'</span>: <span class="st">"Employment length too short"</span></span>
+<span id="cb16-6"><a href="#cb16-6"></a>}</span>
+<span id="cb16-7"><a href="#cb16-7"></a></span>
+<span id="cb16-8"><a href="#cb16-8"></a><span class="cf">if</span> df_counterfactuals <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb16-9"><a href="#cb16-9"></a>    action_codes <span class="op">=</span> generate_adverse_action_codes(</span>
+<span id="cb16-10"><a href="#cb16-10"></a>        sample_reject, </span>
+<span id="cb16-11"><a href="#cb16-11"></a>        df_counterfactuals, </span>
+<span id="cb16-12"><a href="#cb16-12"></a>        feature_to_action_code, </span>
+<span id="cb16-13"><a href="#cb16-13"></a>        AutoGluon_TTD_model.feature_names_</span>
+<span id="cb16-14"><a href="#cb16-14"></a>    )</span>
+<span id="cb16-15"><a href="#cb16-15"></a></span>
+<span id="cb16-16"><a href="#cb16-16"></a>    <span class="bu">print</span>(<span class="st">"Adverse Action Codes:"</span>)</span>
+<span id="cb16-17"><a href="#cb16-17"></a>    <span class="cf">for</span> code <span class="kw">in</span> action_codes:</span>
+<span id="cb16-18"><a href="#cb16-18"></a>        <span class="bu">print</span>(<span class="ss">f"- </span><span class="sc">{</span>code<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb16-19"><a href="#cb16-19"></a><span class="cf">else</span>:</span>
+<span id="cb16-20"><a href="#cb16-20"></a>    <span class="bu">print</span>(<span class="st">"No counterfactuals available - cannot generate adverse action codes."</span>)</span>
+<span id="cb16-21"><a href="#cb16-21"></a>    <span class="bu">print</span>(<span class="st">"This can happen when DICE cannot find valid counterfactuals within the permitted ranges."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Adverse Action Codes:
+- Debt-to-income ratio too high
+- Credit score too low</code></pre>
+</div>
+</div>
+</section>
+<section id="improved-adverse-action-codes" class="level1" data-number="5">
+<h1 data-number="5"><span class="header-section-number">5</span> Improved Adverse Action Codes</h1>
+<p>A major drawback of this approach is that the order of the generated codes depends on the order of the features in the list <code>AutoGluon_TTD_model.feature_names_</code>. Ideally (and legally), the order should be based on the importance of the features in the model decision.</p>
+<p>We can re-order the elements in the list based on permutation feature importance (PFI) scores. The code below generates the PFI scores and re-orders the adverse action codes based on the PFI scores.</p>
+<div id="permutation-feature-importance" class="cell" data-execution_count="14">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1"></a>pfi <span class="op">=</span> AutoGluon_TTD_model.predictor.feature_importance(</span>
+<span id="cb18-2"><a href="#cb18-2"></a>    df_ttd_test[AutoGluon_TTD_model.feature_names_ <span class="op">+</span> [<span class="st">'default_flag'</span>]],</span>
+<span id="cb18-3"><a href="#cb18-3"></a>    silent<span class="op">=</span><span class="va">True</span></span>
+<span id="cb18-4"><a href="#cb18-4"></a>)</span>
+<span id="cb18-5"><a href="#cb18-5"></a></span>
+<span id="cb18-6"><a href="#cb18-6"></a>important_features <span class="op">=</span> pfi.index.tolist()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<div id="improved-adverse-action-codes" class="cell" data-execution_count="15">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1"></a><span class="cf">if</span> df_counterfactuals <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb19-2"><a href="#cb19-2"></a>    improved_action_codes <span class="op">=</span> generate_adverse_action_codes(</span>
+<span id="cb19-3"><a href="#cb19-3"></a>        sample_reject, </span>
+<span id="cb19-4"><a href="#cb19-4"></a>        df_counterfactuals, </span>
+<span id="cb19-5"><a href="#cb19-5"></a>        feature_to_action_code, </span>
+<span id="cb19-6"><a href="#cb19-6"></a>        important_features</span>
+<span id="cb19-7"><a href="#cb19-7"></a>    )</span>
+<span id="cb19-8"><a href="#cb19-8"></a></span>
+<span id="cb19-9"><a href="#cb19-9"></a>    <span class="bu">print</span>(<span class="st">"Improved Adverse Action Codes:"</span>)</span>
+<span id="cb19-10"><a href="#cb19-10"></a>    <span class="cf">for</span> code <span class="kw">in</span> improved_action_codes:</span>
+<span id="cb19-11"><a href="#cb19-11"></a>        <span class="bu">print</span>(<span class="ss">f"- </span><span class="sc">{</span>code<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb19-12"><a href="#cb19-12"></a><span class="cf">else</span>:</span>
+<span id="cb19-13"><a href="#cb19-13"></a>    <span class="bu">print</span>(<span class="st">"No counterfactuals available - cannot generate improved adverse action codes."</span>)</span>
+<span id="cb19-14"><a href="#cb19-14"></a>    <span class="bu">print</span>(<span class="st">"This can happen when DICE cannot find valid counterfactuals within the permitted ranges."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Improved Adverse Action Codes:
+- Credit score too low
+- Debt-to-income ratio too high</code></pre>
+</div>
+</div>
+<p>Permutation feature importance provides a global ranking of feature impacts in the model. By ordering the adverse action codes according to this ranking, we ensure that the most important features are highlighted first. This is crucial for effective communication with applicants, as it emphasizes the most significant factors influencing their application outcome.</p>
+<p>However, global ranking of feature impacts is not always equal to the local ranking of feature impacts. For example, the most important feature for the model may not be the most important feature for a specific applicant. This is a limitation of the PFI approach. SHAP values can be used to generate local rankings of feature impacts.</p>
+</section>
+<section id="shap-values" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> SHAP Values</h1>
+<section id="concept" class="level2" data-number="6.1">
+<h2 data-number="6.1" class="anchored" data-anchor-id="concept"><span class="header-section-number">6.1</span> Concept</h2>
+<p>The difference between the predicted probability of default (<span class="math inline">\(\widehat{PD_i}\)</span>) for an applicant (<span class="math inline">\(i\)</span>) and the average predicted PD (<span class="math inline">\(\overline{PD}\)</span>) for a given data set can be decomposed into the contributions of each feature. The contributions are called SHAP values.</p>
+<p>Suppose a credit scorecard model had 4 features. Then, for applicant <span class="math inline">\(i\)</span>, there would be 4 SHAP values, one for each feature. The SHAP values can be interpreted as the contribution of each feature to the difference between the predicted PD and the average PD.</p>
+<p><span class="math inline">\(\widehat{PD_i} - \overline{PD} = \phi_{i,DTI} + \phi_{i,CreditScore} + \phi_{i,EmpLength} + \phi_{i,LoanAmnt}\)</span></p>
+<p>For a given data set (e.g., training set), <span class="math inline">\(\overline{PD}\)</span> is constant. Therefore, the SHAP values can be interpreted as the contribution of each feature to the predicted PD.</p>
+<p><span class="math inline">\(\widehat{PD_i} = \overline{PD} + \phi_{i,DTI} + \phi_{i,CreditScore} + \phi_{i,EmpLength} + \phi_{i,LoanAmnt}\)</span></p>
+<p>SHAP values can be negative or positive. A negative SHAP value means that the feature decreases the predicted PD (reduces risk), while a positive SHAP value means that the feature increases the predicted PD (increases risk).</p>
+</section>
+<section id="setup-shap-explainer" class="level2" data-number="6.2">
+<h2 data-number="6.2" class="anchored" data-anchor-id="setup-shap-explainer"><span class="header-section-number">6.2</span> Setup SHAP Explainer</h2>
+<p>Initialize the SHAP explainer using the constrained model and a background dataset (usually a sample of the training data) to represent the baseline prediction.</p>
+<p>Notice that the background dataset does not contain the true label. The SHAP explainer uses the background dataset to calculate the expected value of the model’s predictions. This is important because the SHAP values are calculated as the difference between the predicted value and the expected value.</p>
+<p>We pass a custom <code>predict_proba</code> function (with <code>[:, 1]</code>) to the explainer that returns the model’s predicted probability of the positive class (default=1), as we want to explain this specific outcome.</p>
+<p>The background data provides a reference distribution to calculate the baseline prediction (<span class="math inline">\(E[f(X)]\)</span>) and baseline values for each feature. A sample is often used for computational efficiency.</p>
+<div id="setup-shap" class="cell" data-execution_count="16">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1"></a>background_data_sample <span class="op">=</span> df_ttd_train[AutoGluon_TTD_model.feature_names_].sample(<span class="dv">60_000</span>, random_state<span class="op">=</span><span class="dv">2025</span>)</span>
+<span id="cb21-2"><a href="#cb21-2"></a></span>
+<span id="cb21-3"><a href="#cb21-3"></a>shap_explainer <span class="op">=</span> shap.Explainer(<span class="kw">lambda</span> x: AutoGluon_TTD_model.predict_proba(x)[:, <span class="dv">1</span>], background_data_sample)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</section>
+<section id="local-interpretability-waterfall-plots" class="level2" data-number="6.3">
+<h2 data-number="6.3" class="anchored" data-anchor-id="local-interpretability-waterfall-plots"><span class="header-section-number">6.3</span> Local Interpretability (Waterfall Plots)</h2>
+<p>Calculate SHAP values for the 1 rejected applicant and plot the SHAP values using a waterfall plot. The waterfall plot shows the contribution of each feature to the predicted PD for that specific applicant.</p>
+<div id="cell-fig-calculate-local-shap" class="cell" data-execution_count="17">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb22"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1"></a><span class="co"># Generate SHAP values for the rejected applicant</span></span>
+<span id="cb22-2"><a href="#cb22-2"></a>shap_values <span class="op">=</span> shap_explainer(sample_reject[AutoGluon_TTD_model.feature_names_])</span>
+<span id="cb22-3"><a href="#cb22-3"></a></span>
+<span id="cb22-4"><a href="#cb22-4"></a><span class="co"># Display the waterfall plot for the first (and only) instance</span></span>
+<span id="cb22-5"><a href="#cb22-5"></a>shap.plots.waterfall(shap_values[<span class="dv">0</span>])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-calculate-local-shap" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-calculate-local-shap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="Lab%2003_files/figure-html/fig-calculate-local-shap-output-1.png" class="img-fluid figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-calculate-local-shap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1: SHAP Waterfall Plot for Rejected Applicant
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>Interpretation:</strong> The baseline PD is 0.234. The sum of the SHAP values (feature contributions) for this applicant is approximately np.float64(0.247). Adding this to the baseline prediction gives the final prediction 0.234 + np.float64(0.247) = np.float64(0.481).</p>
+<div class="cell" data-execution_count="18">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1"></a>df_local_shap <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb23-2"><a href="#cb23-2"></a>    <span class="st">'feature'</span>: AutoGluon_TTD_model.feature_names_,</span>
+<span id="cb23-3"><a href="#cb23-3"></a>    <span class="st">'shap_value'</span>: shap_values[<span class="dv">0</span>].values</span>
+<span id="cb23-4"><a href="#cb23-4"></a>})</span>
+<span id="cb23-5"><a href="#cb23-5"></a>df_local_shap[<span class="st">'abs_shap_value'</span>] <span class="op">=</span> df_local_shap[<span class="st">'shap_value'</span>].<span class="bu">abs</span>()</span>
+<span id="cb23-6"><a href="#cb23-6"></a>df_local_shap.sort_values(<span class="st">'abs_shap_value'</span>, ascending<span class="op">=</span><span class="va">False</span>, inplace<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb23-7"><a href="#cb23-7"></a></span>
+<span id="cb23-8"><a href="#cb23-8"></a>display(df_local_shap)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div id="tbl-local-shap-values" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="18">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-local-shap-values-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;7: Sorted SHAP values for rejected applicant
+</figcaption>
+<div aria-describedby="tbl-local-shap-values-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe do-not-create-environment cell caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">feature</th>
+<th data-quarto-table-cell-role="th">shap_value</th>
+<th data-quarto-table-cell-role="th">abs_shap_value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">2</td>
+<td>credit_score</td>
+<td>0.259814</td>
+<td>0.259814</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">1</td>
+<td>dti</td>
+<td>-0.012162</td>
+<td>0.012162</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">0</td>
+<td>loan_amnt</td>
+<td>-0.008869</td>
+<td>0.008869</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">3</td>
+<td>emp_length</td>
+<td>0.007766</td>
+<td>0.007766</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>When we generate a ranked list of features that affected the predicted PD, we should use the <strong>absolute value</strong> of the SHAP values. The absolute value of the SHAP value indicates the magnitude of the impact, regardless of whether it is positive or negative.</p>
+<p>The feature that contributes the most to the predicted PD is <code>credit_score</code>, followed by <code>dti</code> and <code>loan_amnt</code>. The feature <code>emp_length</code> has the least impact on the predicted PD.</p>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Warning
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><strong>Important Point: Understanding a Single SHAP Value</strong></p>
+<p>Think of the SHAP values shown in the waterfall plot for one applicant:</p>
+<ul>
+<li><p><strong>What they explain:</strong> Each SHAP value shows how a specific feature <em>value</em> for <em>that particular applicant</em> pushed their prediction away from the average prediction (the baseline <code>E[f(X)]</code>). For instance, a positive SHAP value for <code>dti</code> means <em>this applicant’s specific debt-to-income ratio</em> increased their predicted Probability of Default (PD) compared to the average.</p></li>
+<li><p><strong>What they DON’T explain:</strong></p>
+<ul>
+<li><p>A single SHAP value for one applicant doesn’t tell you the <em>overall trend</em> or <em>marginal effect</em> of that feature across all applicants. To understand whether higher <code>credit_score</code> generally leads to lower predicted PD across the population, use SHAP dependence plots.</p></li>
+<li><p>Nor does the SHAP value answer the question for the rejected applicant: “If my <code>credit_score</code> was 20 points higher, would my predicted PD be lower?” Counterfactual explanations are designed to answer this “what-if” question.</p></li>
+</ul></li>
+</ul>
+</div>
+</div>
+</section>
+</section>
+<section id="local-adverse-action-codes" class="level1" data-number="7">
+<h1 data-number="7"><span class="header-section-number">7</span> Local Adverse Action Codes</h1>
+<p>The code below generates adverse action codes for the 1 rejected applicant based on the SHAP values. It uses the same logic as before, but now it uses the SHAP values to determine which features are most important for our specific applicant.</p>
+<div id="local-adverse-action-codes" class="cell" data-execution_count="19">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1"></a>shap_local_important_features <span class="op">=</span> df_local_shap[<span class="st">'feature'</span>].tolist()</span>
+<span id="cb24-2"><a href="#cb24-2"></a></span>
+<span id="cb24-3"><a href="#cb24-3"></a><span class="cf">if</span> df_counterfactuals <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb24-4"><a href="#cb24-4"></a>    shap_action_codes <span class="op">=</span> generate_adverse_action_codes(</span>
+<span id="cb24-5"><a href="#cb24-5"></a>        sample_reject, </span>
+<span id="cb24-6"><a href="#cb24-6"></a>        df_counterfactuals, </span>
+<span id="cb24-7"><a href="#cb24-7"></a>        feature_to_action_code, </span>
+<span id="cb24-8"><a href="#cb24-8"></a>        shap_local_important_features</span>
+<span id="cb24-9"><a href="#cb24-9"></a>    )</span>
+<span id="cb24-10"><a href="#cb24-10"></a></span>
+<span id="cb24-11"><a href="#cb24-11"></a>    <span class="bu">print</span>(<span class="st">"SHAP Adverse Action Codes:"</span>)</span>
+<span id="cb24-12"><a href="#cb24-12"></a>    <span class="cf">for</span> code <span class="kw">in</span> shap_action_codes:</span>
+<span id="cb24-13"><a href="#cb24-13"></a>        <span class="bu">print</span>(<span class="ss">f"- </span><span class="sc">{</span>code<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb24-14"><a href="#cb24-14"></a><span class="cf">else</span>:</span>
+<span id="cb24-15"><a href="#cb24-15"></a>    <span class="bu">print</span>(<span class="st">"No counterfactuals available - cannot generate SHAP adverse action codes."</span>)</span>
+<span id="cb24-16"><a href="#cb24-16"></a>    <span class="bu">print</span>(<span class="st">"This can happen when DICE cannot find valid counterfactuals within the permitted ranges."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>SHAP Adverse Action Codes:
+- Credit score too low
+- Debt-to-income ratio too high</code></pre>
+</div>
+</div>
+</section>
+<section id="concluding-remarks-for-adverse-action-codes" class="level1" data-number="8">
+<h1 data-number="8"><span class="header-section-number">8</span> Concluding Remarks for Adverse Action Codes</h1>
+<p>Subsequent sections of the lab will show other uses of SHAP values and a potpourri of data science topics. Before we address those topics, let’s quickly summarize adverse action codes and the process used to generate them.</p>
+<ol type="1">
+<li><p>Each rejected applicant must be given a list of reasons for rejection. This is a legal requirement in the US.</p></li>
+<li><p>The list of reasons should be ordered from most impactful to least impactful. This is also a legal requirement in the US.</p></li>
+<li><p>To generate the list of adverse action codes, we needed to find an example of an <strong>approved applicant</strong> that was very similar to the rejected applicant. This was accomplished using <strong>counterfactual explanations</strong>.</p></li>
+<li><p>The order of the adverse action codes was based on the <strong>permutation feature importance</strong> (PFI) scores, representing a global ranking of feature impacts in the model.</p></li>
+<li><p>Alternatively, we could have used <strong>SHAP values</strong> to generate a local ranking of feature impacts, providing a more accurate ranking for the specific applicant.</p></li>
+</ol>
+</section>
+<section id="other-uses-of-shap-values" class="level1" data-number="9">
+<h1 data-number="9"><span class="header-section-number">9</span> Other Uses of SHAP Values</h1>
+<section id="global-interpretability-summary-plots" class="level2" data-number="9.1">
+<h2 data-number="9.1" class="anchored" data-anchor-id="global-interpretability-summary-plots"><span class="header-section-number">9.1</span> Global Interpretability (Summary Plots)</h2>
+<p>Aggregate SHAP values across a larger sample (e.g., the test set) to understand overall feature importance and effects.</p>
+<p>Bar Plot: Ranks features by their average impact (mean absolute SHAP value) across the sample. Higher bars mean more influence overall.</p>
+<div id="cell-fig-global-bar-chart" class="cell" data-execution_count="20">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb26"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1"></a>test_set_sample <span class="op">=</span> df_ttd_test[AutoGluon_TTD_model.feature_names_].sample(<span class="dv">1000</span>, random_state<span class="op">=</span><span class="dv">2025</span>)</span>
+<span id="cb26-2"><a href="#cb26-2"></a></span>
+<span id="cb26-3"><a href="#cb26-3"></a>shap_values_global <span class="op">=</span> shap_explainer(test_set_sample)</span>
+<span id="cb26-4"><a href="#cb26-4"></a></span>
+<span id="cb26-5"><a href="#cb26-5"></a>shap.plots.bar(shap_values_global, max_display<span class="op">=</span><span class="dv">10</span>, show<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-global-bar-chart" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-global-bar-chart-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="Lab%2003_files/figure-html/fig-global-bar-chart-output-1.png" class="img-fluid figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-global-bar-chart-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2: SHAP Feature Importance Bar Plot
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>Show the bar plot as a data frame.</p>
+<div class="cell" data-execution_count="21">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb27"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1"></a><span class="co"># Calculate mean absolute SHAP values</span></span>
+<span id="cb27-2"><a href="#cb27-2"></a>mean_abs_shap <span class="op">=</span> np.<span class="bu">abs</span>(shap_values_global.values).mean(axis<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb27-3"><a href="#cb27-3"></a></span>
+<span id="cb27-4"><a href="#cb27-4"></a><span class="co"># Create DataFrame</span></span>
+<span id="cb27-5"><a href="#cb27-5"></a>df_shap_summary <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb27-6"><a href="#cb27-6"></a>    <span class="st">'feature'</span>: test_set_sample.columns,</span>
+<span id="cb27-7"><a href="#cb27-7"></a>    <span class="st">'mean_abs_shap_value'</span>: mean_abs_shap</span>
+<span id="cb27-8"><a href="#cb27-8"></a>})</span>
+<span id="cb27-9"><a href="#cb27-9"></a></span>
+<span id="cb27-10"><a href="#cb27-10"></a><span class="co"># Sort by mean absolute SHAP value (descending)</span></span>
+<span id="cb27-11"><a href="#cb27-11"></a>df_shap_summary <span class="op">=</span> df_shap_summary.sort_values(<span class="st">'mean_abs_shap_value'</span>, ascending<span class="op">=</span><span class="va">False</span>).reset_index(drop<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb27-12"><a href="#cb27-12"></a></span>
+<span id="cb27-13"><a href="#cb27-13"></a><span class="co"># Display the DataFrame</span></span>
+<span id="cb27-14"><a href="#cb27-14"></a>display(df_shap_summary)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div id="tbl-global-bar-chart" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="21">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-global-bar-chart-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;8: Average Absolute SHAP values
+</figcaption>
+<div aria-describedby="tbl-global-bar-chart-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe do-not-create-environment cell caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">feature</th>
+<th data-quarto-table-cell-role="th">mean_abs_shap_value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">0</td>
+<td>credit_score</td>
+<td>0.131946</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">1</td>
+<td>dti</td>
+<td>0.017907</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">2</td>
+<td>loan_amnt</td>
+<td>0.008824</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">3</td>
+<td>emp_length</td>
+<td>0.004365</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Beeswarm Plot: Shows each feature’s SHAP value distribution. Each point is one instance. Color indicates the feature’s value (high/low). This reveals not just importance but also the direction of the effect (e.g., high credit_score (red points) have negative SHAP values, decreasing default probability).</p>
+<div id="cell-fig-global-beeswarm" class="cell" data-execution_count="22">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb28"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1"></a>shap.plots.beeswarm(shap_values_global, max_display<span class="op">=</span><span class="dv">10</span>, show<span class="op">=</span><span class="va">True</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-global-beeswarm" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-global-beeswarm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="Lab%2003_files/figure-html/fig-global-beeswarm-output-1.png" class="img-fluid figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-global-beeswarm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3: SHAP Summary Plot
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="shap-dependence-plots" class="level2" data-number="9.2">
+<h2 data-number="9.2" class="anchored" data-anchor-id="shap-dependence-plots"><span class="header-section-number">9.2</span> SHAP Dependence Plots</h2>
+<p>Explore how a feature’s impact (SHAP value) changes with its value, potentially colored by an interacting feature.</p>
+<p>These plots show the relationship between a feature’s value (x-axis) and its SHAP value (y-axis). The vertical spread, often colored by an interacting feature, highlights how the feature’s impact might depend on other factors.</p>
+<p>The SHAP dependence plot is an alternative to PDP, ICE, and ALE plots. It provides a more detailed view of how a feature’s value affects the model’s prediction, especially when interactions with other features are present.</p>
+<div class="cell" data-execution_count="23">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1"></a>features_for_dependence <span class="op">=</span> AutoGluon_TTD_model.feature_names_</span>
+<span id="cb29-2"><a href="#cb29-2"></a></span>
+<span id="cb29-3"><a href="#cb29-3"></a><span class="cf">for</span> feature <span class="kw">in</span> features_for_dependence:</span>
+<span id="cb29-4"><a href="#cb29-4"></a>    <span class="cf">if</span> feature <span class="kw">in</span> test_set_sample.columns: <span class="co"># Use the defined sample DataFrame</span></span>
+<span id="cb29-5"><a href="#cb29-5"></a>        <span class="co"># Generate the plot but don't show it immediately</span></span>
+<span id="cb29-6"><a href="#cb29-6"></a>        shap.plots.scatter(shap_values_global[:, feature], color<span class="op">=</span>shap_values_global, alpha<span class="op">=</span><span class="fl">0.4</span>, show<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb29-7"><a href="#cb29-7"></a>        <span class="co"># Display the current figure explicitly</span></span>
+<span id="cb29-8"><a href="#cb29-8"></a>        plt.show()</span>
+<span id="cb29-9"><a href="#cb29-9"></a>        <span class="co"># Close the figure to prevent the message</span></span>
+<span id="cb29-10"><a href="#cb29-10"></a>        plt.close()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div id="fig-shap-dependence" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="23">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-shap-dependence-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display">
+<div id="fig-shap-dependence-1" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-subfloat-fig figure">
+<div aria-describedby="fig-shap-dependence-1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-1.png" class="img-fluid figure-img" data-ref-parent="fig-shap-dependence">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-subfloat-caption quarto-subfloat-fig" id="fig-shap-dependence-1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+(a) SHAP Dependence Plot
+</figcaption>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div id="fig-shap-dependence-2" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-subfloat-fig figure">
+<div aria-describedby="fig-shap-dependence-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-2.png" id="fig-shap-dependence-2" class="img-fluid figure-img" data-ref-parent="fig-shap-dependence">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-subfloat-caption quarto-subfloat-fig" id="fig-shap-dependence-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+(b)
+</figcaption>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div id="fig-shap-dependence-3" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-subfloat-fig figure">
+<div aria-describedby="fig-shap-dependence-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-3.png" id="fig-shap-dependence-3" class="img-fluid figure-img" data-ref-parent="fig-shap-dependence">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-subfloat-caption quarto-subfloat-fig" id="fig-shap-dependence-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+(c)
+</figcaption>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div id="fig-shap-dependence-4" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-subfloat-fig figure">
+<div aria-describedby="fig-shap-dependence-4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="Lab%2003_files/figure-html/fig-shap-dependence-output-4.png" id="fig-shap-dependence-4" class="img-fluid figure-img" data-ref-parent="fig-shap-dependence">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-subfloat-caption quarto-subfloat-fig" id="fig-shap-dependence-4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+(d)
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig quarto-uncaptioned" id="fig-shap-dependence-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4
+</figcaption>
+</figure>
+</div>
+</div>
+<!-- -->
+
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+  const viewSource = window.document.getElementById('quarto-view-source') ||
+                     window.document.getElementById('quarto-code-tools-source');
+  if (viewSource) {
+    const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+    viewSource.addEventListener("click", function(e) {
+      if (sourceUrl) {
+        // rstudio viewer pane
+        if (/\bcapabilities=\b/.test(window.location)) {
+          window.open(sourceUrl);
+        } else {
+          window.location.href = sourceUrl;
+        }
+      } else {
+        const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+        modal.show();
+      }
+      return false;
+    });
+  }
+  function toggleCodeHandler(show) {
+    return function(e) {
+      const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+      for (let i=0; i<detailsSrc.length; i++) {
+        const details = detailsSrc[i].parentElement;
+        if (show) {
+          details.open = true;
+        } else {
+          details.removeAttribute("open");
+        }
+      }
+      const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+      const fromCls = show ? "hidden" : "unhidden";
+      const toCls = show ? "unhidden" : "hidden";
+      for (let i=0; i<cellCodeDivs.length; i++) {
+        const codeDiv = cellCodeDivs[i];
+        if (codeDiv.classList.contains(fromCls)) {
+          codeDiv.classList.remove(fromCls);
+          codeDiv.classList.add(toCls);
+        } 
+      }
+      return false;
+    }
+  }
+  const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+  if (hideAllCode) {
+    hideAllCode.addEventListener("click", toggleCodeHandler(false));
+  }
+  const showAllCode = window.document.getElementById("quarto-show-all-code");
+  if (showAllCode) {
+    showAllCode.addEventListener("click", toggleCodeHandler(true));
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
+<div class="sourceCode" id="cb30" data-shortcodes="false"><pre class="sourceCode numberSource markdown number-lines code-with-copy"><code class="sourceCode markdown"><span id="cb30-1"><a href="#cb30-1"></a><span class="co">---</span></span>
+<span id="cb30-2"><a href="#cb30-2"></a><span class="an">title:</span><span class="co"> "Lab 03: Counterfactuals &amp; SHAP"</span></span>
+<span id="cb30-3"><a href="#cb30-3"></a><span class="an">format:</span><span class="co"> </span></span>
+<span id="cb30-4"><a href="#cb30-4"></a><span class="co">    html:</span></span>
+<span id="cb30-5"><a href="#cb30-5"></a><span class="co">        toc: true</span></span>
+<span id="cb30-6"><a href="#cb30-6"></a><span class="co">        code-fold: true</span></span>
+<span id="cb30-7"><a href="#cb30-7"></a><span class="co">        code-tools: true</span></span>
+<span id="cb30-8"><a href="#cb30-8"></a><span class="co">        code-line-numbers: true</span></span>
+<span id="cb30-9"><a href="#cb30-9"></a><span class="co">        page-layout: full</span></span>
+<span id="cb30-10"><a href="#cb30-10"></a><span class="an">number-sections:</span><span class="co"> true</span></span>
+<span id="cb30-11"><a href="#cb30-11"></a><span class="an">number-figures:</span><span class="co"> true</span></span>
+<span id="cb30-12"><a href="#cb30-12"></a><span class="an">number-tables:</span><span class="co"> true</span></span>
+<span id="cb30-13"><a href="#cb30-13"></a><span class="an">execute:</span></span>
+<span id="cb30-14"><a href="#cb30-14"></a><span class="co">    warning: false</span></span>
+<span id="cb30-15"><a href="#cb30-15"></a><span class="co">    message: false</span></span>
+<span id="cb30-16"><a href="#cb30-16"></a><span class="co">---</span></span>
+<span id="cb30-17"><a href="#cb30-17"></a></span>
+<span id="cb30-18"><a href="#cb30-18"></a><span class="fu"># Introduction</span></span>
+<span id="cb30-19"><a href="#cb30-19"></a></span>
+<span id="cb30-20"><a href="#cb30-20"></a>The lab will examine two interpretability techniques:</span>
+<span id="cb30-21"><a href="#cb30-21"></a></span>
+<span id="cb30-22"><a href="#cb30-22"></a><span class="ss">1.  </span>Counterfactual Explanations</span>
+<span id="cb30-23"><a href="#cb30-23"></a><span class="ss">2.  </span>SHAP (SHapley Additive exPlanations)</span>
+<span id="cb30-24"><a href="#cb30-24"></a></span>
+<span id="cb30-25"><a href="#cb30-25"></a>We will use counterfactual explanations to provide actionable feedback to applicants whose applications were rejected by the model. Under the Equal Credit Opportunity Act (ECOA), lenders in the US are required to provide specific reasons for adverse action (denial) decisions. Counterfactual explanations can help fulfill this requirement by identifying the key factors that would have changed the decision.</span>
+<span id="cb30-26"><a href="#cb30-26"></a></span>
+<span id="cb30-27"><a href="#cb30-27"></a>We will use SHAP for both local (individual applicant) and global (overall feature importance) model explanations. SHAP values are versatile, offering alternatives to methods like permutation feature importance, partial dependence plots, ICE plots, and ALE plots.</span>
+<span id="cb30-28"><a href="#cb30-28"></a></span>
+<span id="cb30-31"><a href="#cb30-31"></a><span class="in">```{python}</span></span>
+<span id="cb30-32"><a href="#cb30-32"></a><span class="co">#| label: setup-imports</span></span>
+<span id="cb30-33"><a href="#cb30-33"></a><span class="co">#| message: false</span></span>
+<span id="cb30-34"><a href="#cb30-34"></a></span>
+<span id="cb30-35"><a href="#cb30-35"></a><span class="co"># System utilities</span></span>
+<span id="cb30-36"><a href="#cb30-36"></a><span class="im">import</span> os</span>
+<span id="cb30-37"><a href="#cb30-37"></a><span class="im">import</span> shutil</span>
+<span id="cb30-38"><a href="#cb30-38"></a><span class="im">import</span> random</span>
+<span id="cb30-39"><a href="#cb30-39"></a><span class="im">import</span> warnings</span>
+<span id="cb30-40"><a href="#cb30-40"></a><span class="im">import</span> time</span>
+<span id="cb30-41"><a href="#cb30-41"></a><span class="im">import</span> gc</span>
+<span id="cb30-42"><a href="#cb30-42"></a><span class="im">import</span> psutil</span>
+<span id="cb30-43"><a href="#cb30-43"></a></span>
+<span id="cb30-44"><a href="#cb30-44"></a><span class="co"># Data manipulation and visualization</span></span>
+<span id="cb30-45"><a href="#cb30-45"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb30-46"><a href="#cb30-46"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb30-47"><a href="#cb30-47"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb30-48"><a href="#cb30-48"></a><span class="im">import</span> seaborn <span class="im">as</span> sns</span>
+<span id="cb30-49"><a href="#cb30-49"></a><span class="im">from</span> IPython.display <span class="im">import</span> display <span class="co"># Explicit import for display</span></span>
+<span id="cb30-50"><a href="#cb30-50"></a><span class="im">from</span> scipy <span class="im">import</span> stats, special</span>
+<span id="cb30-51"><a href="#cb30-51"></a><span class="im">from</span> sklearn.feature_selection <span class="im">import</span> mutual_info_classif</span>
+<span id="cb30-52"><a href="#cb30-52"></a><span class="im">import</span> re</span>
+<span id="cb30-53"><a href="#cb30-53"></a><span class="im">import</span> duckdb</span>
+<span id="cb30-54"><a href="#cb30-54"></a></span>
+<span id="cb30-55"><a href="#cb30-55"></a><span class="co"># Machine learning - scikit-learn</span></span>
+<span id="cb30-56"><a href="#cb30-56"></a><span class="im">from</span> sklearn.model_selection <span class="im">import</span> train_test_split</span>
+<span id="cb30-57"><a href="#cb30-57"></a><span class="im">from</span> sklearn.linear_model <span class="im">import</span> LogisticRegression, LogisticRegressionCV</span>
+<span id="cb30-58"><a href="#cb30-58"></a><span class="im">from</span> sklearn.metrics <span class="im">import</span> roc_auc_score, f1_score, confusion_matrix, classification_report</span>
+<span id="cb30-59"><a href="#cb30-59"></a><span class="im">from</span> sklearn.preprocessing <span class="im">import</span> LabelEncoder, StandardScaler, OneHotEncoder</span>
+<span id="cb30-60"><a href="#cb30-60"></a><span class="im">from</span> sklearn.impute <span class="im">import</span> SimpleImputer</span>
+<span id="cb30-61"><a href="#cb30-61"></a><span class="im">from</span> sklearn.pipeline <span class="im">import</span> Pipeline</span>
+<span id="cb30-62"><a href="#cb30-62"></a><span class="im">from</span> sklearn.compose <span class="im">import</span> ColumnTransformer</span>
+<span id="cb30-63"><a href="#cb30-63"></a><span class="im">from</span> sklearn.inspection <span class="im">import</span> PartialDependenceDisplay</span>
+<span id="cb30-64"><a href="#cb30-64"></a><span class="im">from</span> sklearn.base <span class="im">import</span> BaseEstimator, ClassifierMixin</span>
+<span id="cb30-65"><a href="#cb30-65"></a><span class="im">from</span> sklearn.utils.validation <span class="im">import</span> check_is_fitted, check_X_y, check_array</span>
+<span id="cb30-66"><a href="#cb30-66"></a><span class="im">from</span> sklearn <span class="im">import</span> set_config</span>
+<span id="cb30-67"><a href="#cb30-67"></a><span class="im">import</span> torch</span>
+<span id="cb30-68"><a href="#cb30-68"></a></span>
+<span id="cb30-69"><a href="#cb30-69"></a><span class="co"># Specialized ML libraries</span></span>
+<span id="cb30-70"><a href="#cb30-70"></a><span class="im">from</span> autogluon.tabular <span class="im">import</span> TabularPredictor, TabularDataset</span>
+<span id="cb30-71"><a href="#cb30-71"></a><span class="im">from</span> autogluon.common.features.feature_metadata <span class="im">import</span> FeatureMetadata <span class="co"># For monotonic constraints</span></span>
+<span id="cb30-72"><a href="#cb30-72"></a><span class="im">import</span> shap</span>
+<span id="cb30-73"><a href="#cb30-73"></a><span class="im">from</span> ydata_profiling <span class="im">import</span> ProfileReport</span>
+<span id="cb30-74"><a href="#cb30-74"></a></span>
+<span id="cb30-75"><a href="#cb30-75"></a><span class="co"># Counterfactual Explanations (optional, install if needed: pip install dice-ml)</span></span>
+<span id="cb30-76"><a href="#cb30-76"></a><span class="cf">try</span>:</span>
+<span id="cb30-77"><a href="#cb30-77"></a>    <span class="im">import</span> dice_ml</span>
+<span id="cb30-78"><a href="#cb30-78"></a>    <span class="im">from</span> dice_ml.utils <span class="im">import</span> helpers <span class="co"># Helper functions for DICE</span></span>
+<span id="cb30-79"><a href="#cb30-79"></a><span class="cf">except</span> <span class="pp">ImportError</span>:</span>
+<span id="cb30-80"><a href="#cb30-80"></a>    <span class="bu">print</span>(<span class="st">"""</span></span>
+<span id="cb30-81"><a href="#cb30-81"></a><span class="st">    </span></span>
+<span id="cb30-82"><a href="#cb30-82"></a><span class="st">    dice-ml not found. You need to update your conda env by running:</span></span>
+<span id="cb30-83"><a href="#cb30-83"></a><span class="st">    </span></span>
+<span id="cb30-84"><a href="#cb30-84"></a><span class="st">    conda activate env_AutoGluon_202502</span></span>
+<span id="cb30-85"><a href="#cb30-85"></a><span class="st">    conda install -c conda-forge dice-ml</span></span>
+<span id="cb30-86"><a href="#cb30-86"></a><span class="st">    </span></span>
+<span id="cb30-87"><a href="#cb30-87"></a><span class="st">    """</span>)</span>
+<span id="cb30-88"><a href="#cb30-88"></a>    dice_ml <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb30-89"><a href="#cb30-89"></a></span>
+<span id="cb30-90"><a href="#cb30-90"></a><span class="co"># Helper functions from helpers.py</span></span>
+<span id="cb30-91"><a href="#cb30-91"></a><span class="im">from</span> helpers <span class="im">import</span> (</span>
+<span id="cb30-92"><a href="#cb30-92"></a>    global_set_seed,</span>
+<span id="cb30-93"><a href="#cb30-93"></a>    AutoGluonSklearnWrapper,</span>
+<span id="cb30-94"><a href="#cb30-94"></a>    load_autogluon,</span>
+<span id="cb30-95"><a href="#cb30-95"></a>    generate_adverse_action_codes</span>
+<span id="cb30-96"><a href="#cb30-96"></a>)</span>
+<span id="cb30-97"><a href="#cb30-97"></a></span>
+<span id="cb30-98"><a href="#cb30-98"></a><span class="co"># Settings</span></span>
+<span id="cb30-99"><a href="#cb30-99"></a>pd.set_option(<span class="st">'display.max_columns'</span>, <span class="dv">50</span>)</span>
+<span id="cb30-100"><a href="#cb30-100"></a>pd.set_option(<span class="st">'display.max_rows'</span>, <span class="dv">100</span>)</span>
+<span id="cb30-101"><a href="#cb30-101"></a>warnings.filterwarnings(<span class="st">'ignore'</span>, category<span class="op">=</span><span class="pp">FutureWarning</span>) <span class="co"># Suppress specific FutureWarnings</span></span>
+<span id="cb30-102"><a href="#cb30-102"></a>set_config(transform_output<span class="op">=</span><span class="st">"pandas"</span>) <span class="co"># Set sklearn output to pandas</span></span>
+<span id="cb30-103"><a href="#cb30-103"></a></span>
+<span id="cb30-104"><a href="#cb30-104"></a>global_set_seed(<span class="dv">2025</span>)</span>
+<span id="cb30-105"><a href="#cb30-105"></a></span>
+<span id="cb30-106"><a href="#cb30-106"></a><span class="bu">print</span>(<span class="st">"Libraries imported successfully."</span>)</span>
+<span id="cb30-107"><a href="#cb30-107"></a></span>
+<span id="cb30-108"><a href="#cb30-108"></a></span>
+<span id="cb30-109"><a href="#cb30-109"></a></span>
+<span id="cb30-110"><a href="#cb30-110"></a><span class="in">```</span></span>
+<span id="cb30-111"><a href="#cb30-111"></a></span>
+<span id="cb30-112"><a href="#cb30-112"></a><span class="fu"># Load Data and Pre-trained Model</span></span>
+<span id="cb30-113"><a href="#cb30-113"></a></span>
+<span id="cb30-116"><a href="#cb30-116"></a><span class="in">```{python}</span></span>
+<span id="cb30-117"><a href="#cb30-117"></a><span class="co">#| label: load-data</span></span>
+<span id="cb30-118"><a href="#cb30-118"></a></span>
+<span id="cb30-119"><a href="#cb30-119"></a>df_ttd_train <span class="op">=</span> pd.read_parquet(<span class="st">"../Data/lendingclub/lendingclub_ttd_train.parquet"</span>)</span>
+<span id="cb30-120"><a href="#cb30-120"></a>df_ttd_test <span class="op">=</span> pd.read_parquet(<span class="st">"../Data/lendingclub/lendingclub_ttd_test_cloning.parquet"</span>)</span>
+<span id="cb30-121"><a href="#cb30-121"></a>df_ttd_test_noCloning <span class="op">=</span> pd.read_parquet(<span class="st">"../Data/lendingclub/lendingclub_ttd_test_noCloning.parquet"</span>)</span>
+<span id="cb30-122"><a href="#cb30-122"></a></span>
+<span id="cb30-123"><a href="#cb30-123"></a><span class="in">```</span></span>
+<span id="cb30-124"><a href="#cb30-124"></a></span>
+<span id="cb30-127"><a href="#cb30-127"></a><span class="in">```{python}</span></span>
+<span id="cb30-128"><a href="#cb30-128"></a><span class="co">#| label: load-model</span></span>
+<span id="cb30-129"><a href="#cb30-129"></a></span>
+<span id="cb30-130"><a href="#cb30-130"></a>model_path <span class="op">=</span> <span class="st">"Lab02_ag_models_TTD_Constrained"</span></span>
+<span id="cb30-131"><a href="#cb30-131"></a></span>
+<span id="cb30-132"><a href="#cb30-132"></a>AutoGluon_TTD_model <span class="op">=</span> load_autogluon(</span>
+<span id="cb30-133"><a href="#cb30-133"></a>    folder_path<span class="op">=</span>model_path,</span>
+<span id="cb30-134"><a href="#cb30-134"></a>    persist_model<span class="op">=</span><span class="va">True</span></span>
+<span id="cb30-135"><a href="#cb30-135"></a>)</span>
+<span id="cb30-136"><a href="#cb30-136"></a><span class="in">```</span></span>
+<span id="cb30-137"><a href="#cb30-137"></a></span>
+<span id="cb30-138"><a href="#cb30-138"></a><span class="fu"># Counterfactual Explanations</span></span>
+<span id="cb30-139"><a href="#cb30-139"></a></span>
+<span id="cb30-140"><a href="#cb30-140"></a><span class="fu">## Overview</span></span>
+<span id="cb30-141"><a href="#cb30-141"></a></span>
+<span id="cb30-142"><a href="#cb30-142"></a>**Concept:** Counterfactual explanations identify the minimal changes needed to alter a predicted label. For example, if an applicant is rejected, a counterfactual explanation would suggest how their features could be adjusted to achieve approval.</span>
+<span id="cb30-143"><a href="#cb30-143"></a></span>
+<span id="cb30-144"><a href="#cb30-144"></a>First, we need to score the training and test sets to identify the applicants that were accepted and rejected by the model. Note that this is different than the default flag, which is the target variable. The model decision is based on the **predicted** probability of default (PD) and a threshold.</span>
+<span id="cb30-145"><a href="#cb30-145"></a></span>
+<span id="cb30-146"><a href="#cb30-146"></a>Also keep in mind that <span class="in">`model_rejection = 1`</span> means the applicant was rejected by the model, while <span class="in">`model_rejection = 0`</span> means the applicant was accepted.</span>
+<span id="cb30-147"><a href="#cb30-147"></a></span>
+<span id="cb30-148"><a href="#cb30-148"></a>Crucially, <span class="in">`model_rejection`</span> represents the model's lending decision, which may not match the actual <span class="in">`default_flag`</span>.</span>
+<span id="cb30-149"><a href="#cb30-149"></a></span>
+<span id="cb30-152"><a href="#cb30-152"></a><span class="in">```{python}</span></span>
+<span id="cb30-153"><a href="#cb30-153"></a><span class="co">#| label: score-data</span></span>
+<span id="cb30-154"><a href="#cb30-154"></a></span>
+<span id="cb30-155"><a href="#cb30-155"></a><span class="co"># append predicted labels to the training and test sets</span></span>
+<span id="cb30-156"><a href="#cb30-156"></a></span>
+<span id="cb30-157"><a href="#cb30-157"></a>df_ttd_train[<span class="st">'model_rejection'</span>] <span class="op">=</span> AutoGluon_TTD_model.predict(</span>
+<span id="cb30-158"><a href="#cb30-158"></a>    df_ttd_train[AutoGluon_TTD_model.feature_names_]</span>
+<span id="cb30-159"><a href="#cb30-159"></a>)</span>
+<span id="cb30-160"><a href="#cb30-160"></a></span>
+<span id="cb30-161"><a href="#cb30-161"></a>df_ttd_test[<span class="st">'model_rejection'</span>] <span class="op">=</span> AutoGluon_TTD_model.predict(</span>
+<span id="cb30-162"><a href="#cb30-162"></a>    df_ttd_test[AutoGluon_TTD_model.feature_names_]</span>
+<span id="cb30-163"><a href="#cb30-163"></a>)</span>
+<span id="cb30-164"><a href="#cb30-164"></a><span class="in">```</span></span>
+<span id="cb30-165"><a href="#cb30-165"></a></span>
+<span id="cb30-168"><a href="#cb30-168"></a><span class="in">```{python}</span></span>
+<span id="cb30-169"><a href="#cb30-169"></a><span class="co">#| label: tbl-training-decisions</span></span>
+<span id="cb30-170"><a href="#cb30-170"></a><span class="co">#| tbl-cap: "Training set decisions"</span></span>
+<span id="cb30-171"><a href="#cb30-171"></a></span>
+<span id="cb30-172"><a href="#cb30-172"></a>keep_cols <span class="op">=</span> AutoGluon_TTD_model.feature_names_ <span class="op">+</span> [<span class="st">'model_rejection'</span>]</span>
+<span id="cb30-173"><a href="#cb30-173"></a></span>
+<span id="cb30-174"><a href="#cb30-174"></a>display(df_ttd_train[keep_cols].sample(<span class="dv">20</span>, random_state<span class="op">=</span><span class="dv">2024</span>).head(<span class="dv">10</span>))</span>
+<span id="cb30-175"><a href="#cb30-175"></a><span class="in">```</span></span>
+<span id="cb30-176"><a href="#cb30-176"></a></span>
+<span id="cb30-179"><a href="#cb30-179"></a><span class="in">```{python}</span></span>
+<span id="cb30-180"><a href="#cb30-180"></a><span class="co">#| label: tbl-test-decisions</span></span>
+<span id="cb30-181"><a href="#cb30-181"></a><span class="co">#| tbl-cap: "Test set decisions"</span></span>
+<span id="cb30-182"><a href="#cb30-182"></a></span>
+<span id="cb30-183"><a href="#cb30-183"></a>display(df_ttd_test[keep_cols].sample(<span class="dv">20</span>, random_state<span class="op">=</span><span class="dv">2024</span>).head(<span class="dv">10</span>))</span>
+<span id="cb30-184"><a href="#cb30-184"></a></span>
+<span id="cb30-185"><a href="#cb30-185"></a><span class="in">```</span></span>
+<span id="cb30-186"><a href="#cb30-186"></a></span>
+<span id="cb30-187"><a href="#cb30-187"></a>Second, we randomly select 1 rejected applicant from the test set to explain. This applicant will be used to demonstrate the counterfactual explanation process.</span>
+<span id="cb30-188"><a href="#cb30-188"></a></span>
+<span id="cb30-191"><a href="#cb30-191"></a><span class="in">```{python}</span></span>
+<span id="cb30-192"><a href="#cb30-192"></a><span class="co">#| label: tbl-sample-applicant</span></span>
+<span id="cb30-193"><a href="#cb30-193"></a><span class="co">#| tbl-cap: "Sample rejected applicant"</span></span>
+<span id="cb30-194"><a href="#cb30-194"></a></span>
+<span id="cb30-195"><a href="#cb30-195"></a>sample_reject <span class="op">=</span> df_ttd_test[keep_cols][df_ttd_test.model_rejection <span class="op">==</span> <span class="dv">1</span>].sample(<span class="dv">1</span>, random_state<span class="op">=</span><span class="dv">2020</span>)</span>
+<span id="cb30-196"><a href="#cb30-196"></a></span>
+<span id="cb30-197"><a href="#cb30-197"></a>display(sample_reject)</span>
+<span id="cb30-198"><a href="#cb30-198"></a><span class="in">```</span></span>
+<span id="cb30-199"><a href="#cb30-199"></a></span>
+<span id="cb30-200"><a href="#cb30-200"></a><span class="fu">## Counterfactual Explainer</span></span>
+<span id="cb30-201"><a href="#cb30-201"></a></span>
+<span id="cb30-202"><a href="#cb30-202"></a>Setup an <span class="in">`dice-explainer`</span> using the <span class="in">`dice_ml`</span> library. The explainer will be used to generate counterfactuals for the rejected applicant.</span>
+<span id="cb30-203"><a href="#cb30-203"></a></span>
+<span id="cb30-204"><a href="#cb30-204"></a>The explainer needs two objects:</span>
+<span id="cb30-205"><a href="#cb30-205"></a></span>
+<span id="cb30-206"><a href="#cb30-206"></a><span class="ss">1.  </span>Data with the predicted labels (<span class="in">`model_rejection`</span>).</span>
+<span id="cb30-207"><a href="#cb30-207"></a><span class="ss">2.  </span>The trained model used to generate prediction labels.</span>
+<span id="cb30-208"><a href="#cb30-208"></a></span>
+<span id="cb30-211"><a href="#cb30-211"></a><span class="in">```{python}</span></span>
+<span id="cb30-212"><a href="#cb30-212"></a><span class="co">#| label: setup-counterfactuals</span></span>
+<span id="cb30-213"><a href="#cb30-213"></a></span>
+<span id="cb30-214"><a href="#cb30-214"></a>dice_data <span class="op">=</span> dice_ml.Data(</span>
+<span id="cb30-215"><a href="#cb30-215"></a>    dataframe<span class="op">=</span>df_ttd_train[keep_cols],</span>
+<span id="cb30-216"><a href="#cb30-216"></a>    continuous_features<span class="op">=</span>AutoGluon_TTD_model.feature_names_,</span>
+<span id="cb30-217"><a href="#cb30-217"></a>    outcome_name<span class="op">=</span><span class="st">"model_rejection"</span></span>
+<span id="cb30-218"><a href="#cb30-218"></a>)</span>
+<span id="cb30-219"><a href="#cb30-219"></a></span>
+<span id="cb30-220"><a href="#cb30-220"></a>dice_model <span class="op">=</span> dice_ml.Model(</span>
+<span id="cb30-221"><a href="#cb30-221"></a>    model<span class="op">=</span>AutoGluon_TTD_model,</span>
+<span id="cb30-222"><a href="#cb30-222"></a>    backend<span class="op">=</span><span class="st">'sklearn'</span></span>
+<span id="cb30-223"><a href="#cb30-223"></a>)</span>
+<span id="cb30-224"><a href="#cb30-224"></a></span>
+<span id="cb30-225"><a href="#cb30-225"></a>dice_explainer <span class="op">=</span> dice_ml.Dice(</span>
+<span id="cb30-226"><a href="#cb30-226"></a>    data_interface<span class="op">=</span>dice_data,</span>
+<span id="cb30-227"><a href="#cb30-227"></a>    model_interface<span class="op">=</span>dice_model,</span>
+<span id="cb30-228"><a href="#cb30-228"></a>    method<span class="op">=</span><span class="st">"kdtree"</span></span>
+<span id="cb30-229"><a href="#cb30-229"></a>)</span>
+<span id="cb30-230"><a href="#cb30-230"></a></span>
+<span id="cb30-231"><a href="#cb30-231"></a><span class="in">```</span></span>
+<span id="cb30-232"><a href="#cb30-232"></a></span>
+<span id="cb30-233"><a href="#cb30-233"></a>A k-d tree (k-dimensional tree) is a data structure used for organizing points in a k-dimensional space. It recursively partitions the space along different dimensions, allowing for efficient nearest neighbor searches. This structure helps quickly find data points that are close to a given query point in multiple dimensions.</span>
+<span id="cb30-234"><a href="#cb30-234"></a></span>
+<span id="cb30-235"><a href="#cb30-235"></a>DiCE uses the k-d tree method to efficiently search the feature space for counterfactual examples. It builds a k-d tree using the training data points. When generating counterfactuals for a specific instance (like the rejected applicant), DiCE searches the k-d tree to find the nearest data points that result in the desired outcome (e.g., loan approval) while minimizing changes to the original features.</span>
+<span id="cb30-236"><a href="#cb30-236"></a></span>
+<span id="cb30-237"><a href="#cb30-237"></a><span class="fu">## Counterfactual Explanations</span></span>
+<span id="cb30-238"><a href="#cb30-238"></a></span>
+<span id="cb30-241"><a href="#cb30-241"></a><span class="in">```{python}</span></span>
+<span id="cb30-242"><a href="#cb30-242"></a><span class="co">#| label: generate-counterfactuals</span></span>
+<span id="cb30-243"><a href="#cb30-243"></a></span>
+<span id="cb30-244"><a href="#cb30-244"></a>threshold <span class="op">=</span> AutoGluon_TTD_model.predictor.decision_threshold <span class="co"># Use decision_threshold</span></span>
+<span id="cb30-245"><a href="#cb30-245"></a></span>
+<span id="cb30-246"><a href="#cb30-246"></a>user_permitted_range <span class="op">=</span> {</span>
+<span id="cb30-247"><a href="#cb30-247"></a>    <span class="st">'loan_amnt'</span>: [<span class="dv">500</span>, sample_reject[<span class="st">'loan_amnt'</span>].iloc[<span class="dv">0</span>]],</span>
+<span id="cb30-248"><a href="#cb30-248"></a>    <span class="st">'dti'</span>: [<span class="dv">0</span>, sample_reject[<span class="st">'dti'</span>].iloc[<span class="dv">0</span>]],</span>
+<span id="cb30-249"><a href="#cb30-249"></a>    <span class="st">'credit_score'</span>: [sample_reject[<span class="st">'credit_score'</span>].iloc[<span class="dv">0</span>], <span class="dv">850</span>],</span>
+<span id="cb30-250"><a href="#cb30-250"></a>    <span class="st">'emp_length'</span>: [sample_reject[<span class="st">'emp_length'</span>].iloc[<span class="dv">0</span>], <span class="dv">10</span>]</span>
+<span id="cb30-251"><a href="#cb30-251"></a>}</span>
+<span id="cb30-252"><a href="#cb30-252"></a></span>
+<span id="cb30-253"><a href="#cb30-253"></a><span class="co"># Initialize df_counterfactuals as None to handle the case where counterfactuals cannot be found</span></span>
+<span id="cb30-254"><a href="#cb30-254"></a>df_counterfactuals <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb30-255"><a href="#cb30-255"></a></span>
+<span id="cb30-256"><a href="#cb30-256"></a><span class="cf">try</span>:</span>
+<span id="cb30-257"><a href="#cb30-257"></a>    dice_exp <span class="op">=</span> dice_explainer.generate_counterfactuals(</span>
+<span id="cb30-258"><a href="#cb30-258"></a>        query_instances<span class="op">=</span>sample_reject[AutoGluon_TTD_model.feature_names_],</span>
+<span id="cb30-259"><a href="#cb30-259"></a>        total_CFs<span class="op">=</span><span class="dv">5</span>,</span>
+<span id="cb30-260"><a href="#cb30-260"></a>        permitted_range<span class="op">=</span>user_permitted_range</span>
+<span id="cb30-261"><a href="#cb30-261"></a>        )</span>
+<span id="cb30-262"><a href="#cb30-262"></a></span>
+<span id="cb30-263"><a href="#cb30-263"></a>    <span class="co"># Extract the counterfactual features (scaled)</span></span>
+<span id="cb30-264"><a href="#cb30-264"></a>    df_counterfactuals <span class="op">=</span> dice_exp.cf_examples_list[<span class="dv">0</span>].final_cfs_df</span>
+<span id="cb30-265"><a href="#cb30-265"></a>    <span class="bu">print</span>(<span class="st">"Counterfactuals generated successfully."</span>)</span>
+<span id="cb30-266"><a href="#cb30-266"></a><span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb30-267"><a href="#cb30-267"></a>    <span class="bu">print</span>(<span class="ss">f"Could not generate counterfactuals: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb30-268"><a href="#cb30-268"></a>    <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Note: The DICE library sometimes cannot find counterfactuals when the constraints"</span>)</span>
+<span id="cb30-269"><a href="#cb30-269"></a>    <span class="bu">print</span>(<span class="st">"are too restrictive or when no valid counterfactuals exist within the permitted ranges."</span>)</span>
+<span id="cb30-270"><a href="#cb30-270"></a>    <span class="bu">print</span>(<span class="st">"This is expected behavior for certain edge cases in the data."</span>)</span>
+<span id="cb30-271"><a href="#cb30-271"></a><span class="in">```</span></span>
+<span id="cb30-272"><a href="#cb30-272"></a></span>
+<span id="cb30-273"><a href="#cb30-273"></a>The <span class="in">`user_permitted_range`</span> dictionary prevents counterfactuals that are unintuitive or impossible. It prevents counterfactuals with a <span class="in">`loan_amnt`</span> greater than the application amount, a <span class="in">`dti`</span> greater than the applicant value, a <span class="in">`credit_score`</span> less than the applicant value, and an <span class="in">`emp_length`</span> less than the applicant value.</span>
+<span id="cb30-274"><a href="#cb30-274"></a></span>
+<span id="cb30-277"><a href="#cb30-277"></a><span class="in">```{python}</span></span>
+<span id="cb30-278"><a href="#cb30-278"></a><span class="co">#| label: tbl-rejected-applicant</span></span>
+<span id="cb30-279"><a href="#cb30-279"></a><span class="co">#| tbl-cap: "Rejected applicant"</span></span>
+<span id="cb30-280"><a href="#cb30-280"></a></span>
+<span id="cb30-281"><a href="#cb30-281"></a>display(sample_reject)</span>
+<span id="cb30-282"><a href="#cb30-282"></a></span>
+<span id="cb30-283"><a href="#cb30-283"></a><span class="in">```</span></span>
+<span id="cb30-284"><a href="#cb30-284"></a></span>
+<span id="cb30-287"><a href="#cb30-287"></a><span class="in">```{python}</span></span>
+<span id="cb30-288"><a href="#cb30-288"></a><span class="co">#| label: tbl-counterfactuals</span></span>
+<span id="cb30-289"><a href="#cb30-289"></a><span class="co">#| tbl-cap: "Counterfactuals for rejected applicant"</span></span>
+<span id="cb30-290"><a href="#cb30-290"></a></span>
+<span id="cb30-291"><a href="#cb30-291"></a><span class="cf">if</span> df_counterfactuals <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb30-292"><a href="#cb30-292"></a>    display(df_counterfactuals)</span>
+<span id="cb30-293"><a href="#cb30-293"></a><span class="cf">else</span>:</span>
+<span id="cb30-294"><a href="#cb30-294"></a>    <span class="bu">print</span>(<span class="st">"No counterfactuals available to display."</span>)</span>
+<span id="cb30-295"><a href="#cb30-295"></a><span class="in">```</span></span>
+<span id="cb30-296"><a href="#cb30-296"></a></span>
+<span id="cb30-297"><a href="#cb30-297"></a>Verify that the counterfactuals provided would have generated an approval by the TTD model.</span>
+<span id="cb30-298"><a href="#cb30-298"></a></span>
+<span id="cb30-301"><a href="#cb30-301"></a><span class="in">```{python}</span></span>
+<span id="cb30-302"><a href="#cb30-302"></a><span class="co">#| label: tbl-verify-counterfactuals</span></span>
+<span id="cb30-303"><a href="#cb30-303"></a><span class="co">#| tbl-cap: "Verify counterfactuals"</span></span>
+<span id="cb30-304"><a href="#cb30-304"></a></span>
+<span id="cb30-305"><a href="#cb30-305"></a><span class="cf">if</span> df_counterfactuals <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb30-306"><a href="#cb30-306"></a>    df_counterfactuals[<span class="st">'verify_model_rejection'</span>] <span class="op">=</span> AutoGluon_TTD_model.predict(</span>
+<span id="cb30-307"><a href="#cb30-307"></a>        df_counterfactuals[AutoGluon_TTD_model.feature_names_]</span>
+<span id="cb30-308"><a href="#cb30-308"></a>    )</span>
+<span id="cb30-309"><a href="#cb30-309"></a>    display(df_counterfactuals)</span>
+<span id="cb30-310"><a href="#cb30-310"></a><span class="cf">else</span>:</span>
+<span id="cb30-311"><a href="#cb30-311"></a>    <span class="bu">print</span>(<span class="st">"No counterfactuals available to verify."</span>)</span>
+<span id="cb30-312"><a href="#cb30-312"></a><span class="in">```</span></span>
+<span id="cb30-313"><a href="#cb30-313"></a></span>
+<span id="cb30-314"><a href="#cb30-314"></a>**Interpretation:** The output shows alternative feature values (the counterfactuals) that would have led to an 'Approve' decision. This highlights the key factors driving the rejection and provides concrete suggestions for the applicant.</span>
+<span id="cb30-315"><a href="#cb30-315"></a></span>
+<span id="cb30-316"><a href="#cb30-316"></a><span class="fu"># Generate Adverse Action Codes</span></span>
+<span id="cb30-317"><a href="#cb30-317"></a></span>
+<span id="cb30-318"><a href="#cb30-318"></a>The script below generates a list of adverse action codes based on differences between <span class="in">`sample_reject`</span> and <span class="in">`df_counterfactuals`</span>. It does this by comparing the values of each feature, and if a value differs between the two datasets, it appends a predefined message to the adverse action codes list.</span>
+<span id="cb30-319"><a href="#cb30-319"></a></span>
+<span id="cb30-320"><a href="#cb30-320"></a>By comparing each feature of the original sample against the counterfactual, the code effectively identifies which factors (such as a too-high loan amount or a low credit score) contributed to the adverse decision and communicates those reasons clearly to the applicant.</span>
+<span id="cb30-321"><a href="#cb30-321"></a></span>
+<span id="cb30-324"><a href="#cb30-324"></a><span class="in">```{python}</span></span>
+<span id="cb30-325"><a href="#cb30-325"></a><span class="co">#| label: adverse-action-codes-example</span></span>
+<span id="cb30-326"><a href="#cb30-326"></a>feature_to_action_code <span class="op">=</span> {</span>
+<span id="cb30-327"><a href="#cb30-327"></a>    <span class="st">'loan_amnt'</span>: <span class="st">"Loan amount too high"</span>,</span>
+<span id="cb30-328"><a href="#cb30-328"></a>    <span class="st">'dti'</span>: <span class="st">"Debt-to-income ratio too high"</span>,</span>
+<span id="cb30-329"><a href="#cb30-329"></a>    <span class="st">'credit_score'</span>: <span class="st">"Credit score too low"</span>,</span>
+<span id="cb30-330"><a href="#cb30-330"></a>    <span class="st">'emp_length'</span>: <span class="st">"Employment length too short"</span></span>
+<span id="cb30-331"><a href="#cb30-331"></a>}</span>
+<span id="cb30-332"><a href="#cb30-332"></a></span>
+<span id="cb30-333"><a href="#cb30-333"></a><span class="cf">if</span> df_counterfactuals <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb30-334"><a href="#cb30-334"></a>    action_codes <span class="op">=</span> generate_adverse_action_codes(</span>
+<span id="cb30-335"><a href="#cb30-335"></a>        sample_reject, </span>
+<span id="cb30-336"><a href="#cb30-336"></a>        df_counterfactuals, </span>
+<span id="cb30-337"><a href="#cb30-337"></a>        feature_to_action_code, </span>
+<span id="cb30-338"><a href="#cb30-338"></a>        AutoGluon_TTD_model.feature_names_</span>
+<span id="cb30-339"><a href="#cb30-339"></a>    )</span>
+<span id="cb30-340"><a href="#cb30-340"></a></span>
+<span id="cb30-341"><a href="#cb30-341"></a>    <span class="bu">print</span>(<span class="st">"Adverse Action Codes:"</span>)</span>
+<span id="cb30-342"><a href="#cb30-342"></a>    <span class="cf">for</span> code <span class="kw">in</span> action_codes:</span>
+<span id="cb30-343"><a href="#cb30-343"></a>        <span class="bu">print</span>(<span class="ss">f"- </span><span class="sc">{</span>code<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb30-344"><a href="#cb30-344"></a><span class="cf">else</span>:</span>
+<span id="cb30-345"><a href="#cb30-345"></a>    <span class="bu">print</span>(<span class="st">"No counterfactuals available - cannot generate adverse action codes."</span>)</span>
+<span id="cb30-346"><a href="#cb30-346"></a>    <span class="bu">print</span>(<span class="st">"This can happen when DICE cannot find valid counterfactuals within the permitted ranges."</span>)</span>
+<span id="cb30-347"><a href="#cb30-347"></a><span class="in">```</span></span>
+<span id="cb30-348"><a href="#cb30-348"></a></span>
+<span id="cb30-349"><a href="#cb30-349"></a><span class="fu"># Improved Adverse Action Codes</span></span>
+<span id="cb30-350"><a href="#cb30-350"></a></span>
+<span id="cb30-351"><a href="#cb30-351"></a>A major drawback of this approach is that the order of the generated codes depends on the order of the features in the list <span class="in">`AutoGluon_TTD_model.feature_names_`</span>. Ideally (and legally), the order should be based on the importance of the features in the model decision.</span>
+<span id="cb30-352"><a href="#cb30-352"></a></span>
+<span id="cb30-353"><a href="#cb30-353"></a>We can re-order the elements in the list based on permutation feature importance (PFI) scores. The code below generates the PFI scores and re-orders the adverse action codes based on the PFI scores.</span>
+<span id="cb30-354"><a href="#cb30-354"></a></span>
+<span id="cb30-357"><a href="#cb30-357"></a><span class="in">```{python}</span></span>
+<span id="cb30-358"><a href="#cb30-358"></a><span class="co">#| label: permutation-feature-importance</span></span>
+<span id="cb30-359"><a href="#cb30-359"></a></span>
+<span id="cb30-360"><a href="#cb30-360"></a>pfi <span class="op">=</span> AutoGluon_TTD_model.predictor.feature_importance(</span>
+<span id="cb30-361"><a href="#cb30-361"></a>    df_ttd_test[AutoGluon_TTD_model.feature_names_ <span class="op">+</span> [<span class="st">'default_flag'</span>]],</span>
+<span id="cb30-362"><a href="#cb30-362"></a>    silent<span class="op">=</span><span class="va">True</span></span>
+<span id="cb30-363"><a href="#cb30-363"></a>)</span>
+<span id="cb30-364"><a href="#cb30-364"></a></span>
+<span id="cb30-365"><a href="#cb30-365"></a>important_features <span class="op">=</span> pfi.index.tolist()</span>
+<span id="cb30-366"><a href="#cb30-366"></a><span class="in">```</span></span>
+<span id="cb30-367"><a href="#cb30-367"></a></span>
+<span id="cb30-370"><a href="#cb30-370"></a><span class="in">```{python}</span></span>
+<span id="cb30-371"><a href="#cb30-371"></a><span class="co">#| label: improved-adverse-action-codes</span></span>
+<span id="cb30-372"><a href="#cb30-372"></a></span>
+<span id="cb30-373"><a href="#cb30-373"></a><span class="cf">if</span> df_counterfactuals <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb30-374"><a href="#cb30-374"></a>    improved_action_codes <span class="op">=</span> generate_adverse_action_codes(</span>
+<span id="cb30-375"><a href="#cb30-375"></a>        sample_reject, </span>
+<span id="cb30-376"><a href="#cb30-376"></a>        df_counterfactuals, </span>
+<span id="cb30-377"><a href="#cb30-377"></a>        feature_to_action_code, </span>
+<span id="cb30-378"><a href="#cb30-378"></a>        important_features</span>
+<span id="cb30-379"><a href="#cb30-379"></a>    )</span>
+<span id="cb30-380"><a href="#cb30-380"></a></span>
+<span id="cb30-381"><a href="#cb30-381"></a>    <span class="bu">print</span>(<span class="st">"Improved Adverse Action Codes:"</span>)</span>
+<span id="cb30-382"><a href="#cb30-382"></a>    <span class="cf">for</span> code <span class="kw">in</span> improved_action_codes:</span>
+<span id="cb30-383"><a href="#cb30-383"></a>        <span class="bu">print</span>(<span class="ss">f"- </span><span class="sc">{</span>code<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb30-384"><a href="#cb30-384"></a><span class="cf">else</span>:</span>
+<span id="cb30-385"><a href="#cb30-385"></a>    <span class="bu">print</span>(<span class="st">"No counterfactuals available - cannot generate improved adverse action codes."</span>)</span>
+<span id="cb30-386"><a href="#cb30-386"></a>    <span class="bu">print</span>(<span class="st">"This can happen when DICE cannot find valid counterfactuals within the permitted ranges."</span>)</span>
+<span id="cb30-387"><a href="#cb30-387"></a><span class="in">```</span></span>
+<span id="cb30-388"><a href="#cb30-388"></a></span>
+<span id="cb30-389"><a href="#cb30-389"></a>Permutation feature importance provides a global ranking of feature impacts in the model. By ordering the adverse action codes according to this ranking, we ensure that the most important features are highlighted first. This is crucial for effective communication with applicants, as it emphasizes the most significant factors influencing their application outcome.</span>
+<span id="cb30-390"><a href="#cb30-390"></a></span>
+<span id="cb30-391"><a href="#cb30-391"></a>However, global ranking of feature impacts is not always equal to the local ranking of feature impacts. For example, the most important feature for the model may not be the most important feature for a specific applicant. This is a limitation of the PFI approach. SHAP values can be used to generate local rankings of feature impacts.</span>
+<span id="cb30-392"><a href="#cb30-392"></a></span>
+<span id="cb30-393"><a href="#cb30-393"></a><span class="fu"># SHAP Values</span></span>
+<span id="cb30-394"><a href="#cb30-394"></a></span>
+<span id="cb30-395"><a href="#cb30-395"></a><span class="fu">## Concept</span></span>
+<span id="cb30-396"><a href="#cb30-396"></a></span>
+<span id="cb30-397"><a href="#cb30-397"></a>The difference between the predicted probability of default ($\widehat{PD_i}$) for an applicant ($i$) and the average predicted PD ($\overline{PD}$) for a given data set can be decomposed into the contributions of each feature. The contributions are called SHAP values.</span>
+<span id="cb30-398"><a href="#cb30-398"></a></span>
+<span id="cb30-399"><a href="#cb30-399"></a>Suppose a credit scorecard model had 4 features. Then, for applicant $i$, there would be 4 SHAP values, one for each feature. The SHAP values can be interpreted as the contribution of each feature to the difference between the predicted PD and the average PD.</span>
+<span id="cb30-400"><a href="#cb30-400"></a></span>
+<span id="cb30-401"><a href="#cb30-401"></a>$\widehat{PD_i} - \overline{PD} = \phi_{i,DTI} + \phi_{i,CreditScore} + \phi_{i,EmpLength} + \phi_{i,LoanAmnt}$</span>
+<span id="cb30-402"><a href="#cb30-402"></a></span>
+<span id="cb30-403"><a href="#cb30-403"></a>For a given data set (e.g., training set), $\overline{PD}$ is constant. Therefore, the SHAP values can be interpreted as the contribution of each feature to the predicted PD.</span>
+<span id="cb30-404"><a href="#cb30-404"></a></span>
+<span id="cb30-405"><a href="#cb30-405"></a>$\widehat{PD_i} = \overline{PD} + \phi_{i,DTI} + \phi_{i,CreditScore} + \phi_{i,EmpLength} + \phi_{i,LoanAmnt}$</span>
+<span id="cb30-406"><a href="#cb30-406"></a></span>
+<span id="cb30-407"><a href="#cb30-407"></a>SHAP values can be negative or positive. A negative SHAP value means that the feature decreases the predicted PD (reduces risk), while a positive SHAP value means that the feature increases the predicted PD (increases risk).</span>
+<span id="cb30-408"><a href="#cb30-408"></a></span>
+<span id="cb30-409"><a href="#cb30-409"></a><span class="fu">## Setup SHAP Explainer</span></span>
+<span id="cb30-410"><a href="#cb30-410"></a></span>
+<span id="cb30-411"><a href="#cb30-411"></a>Initialize the SHAP explainer using the constrained model and a background dataset (usually a sample of the training data) to represent the baseline prediction.</span>
+<span id="cb30-412"><a href="#cb30-412"></a></span>
+<span id="cb30-413"><a href="#cb30-413"></a>Notice that the background dataset does not contain the true label. The SHAP explainer uses the background dataset to calculate the expected value of the model's predictions. This is important because the SHAP values are calculated as the difference between the predicted value and the expected value.</span>
+<span id="cb30-414"><a href="#cb30-414"></a></span>
+<span id="cb30-415"><a href="#cb30-415"></a>We pass a custom <span class="in">`predict_proba`</span> function (with <span class="in">`[:, 1]`</span>) to the explainer that returns the model's predicted probability of the positive class (default=1), as we want to explain this specific outcome.</span>
+<span id="cb30-416"><a href="#cb30-416"></a></span>
+<span id="cb30-417"><a href="#cb30-417"></a>The background data provides a reference distribution to calculate the baseline prediction ($E<span class="co">[</span><span class="ot">f(X)</span><span class="co">]</span>$) and baseline values for each feature. A sample is often used for computational efficiency.</span>
+<span id="cb30-418"><a href="#cb30-418"></a></span>
+<span id="cb30-421"><a href="#cb30-421"></a><span class="in">```{python}</span></span>
+<span id="cb30-422"><a href="#cb30-422"></a><span class="co">#| label: setup-shap</span></span>
+<span id="cb30-423"><a href="#cb30-423"></a></span>
+<span id="cb30-424"><a href="#cb30-424"></a>background_data_sample <span class="op">=</span> df_ttd_train[AutoGluon_TTD_model.feature_names_].sample(<span class="dv">60_000</span>, random_state<span class="op">=</span><span class="dv">2025</span>)</span>
+<span id="cb30-425"><a href="#cb30-425"></a></span>
+<span id="cb30-426"><a href="#cb30-426"></a>shap_explainer <span class="op">=</span> shap.Explainer(<span class="kw">lambda</span> x: AutoGluon_TTD_model.predict_proba(x)[:, <span class="dv">1</span>], background_data_sample)</span>
+<span id="cb30-427"><a href="#cb30-427"></a></span>
+<span id="cb30-428"><a href="#cb30-428"></a><span class="in">```</span></span>
+<span id="cb30-429"><a href="#cb30-429"></a></span>
+<span id="cb30-430"><a href="#cb30-430"></a><span class="fu">## Local Interpretability (Waterfall Plots)</span></span>
+<span id="cb30-431"><a href="#cb30-431"></a></span>
+<span id="cb30-432"><a href="#cb30-432"></a>Calculate SHAP values for the 1 rejected applicant and plot the SHAP values using a waterfall plot. The waterfall plot shows the contribution of each feature to the predicted PD for that specific applicant.</span>
+<span id="cb30-433"><a href="#cb30-433"></a></span>
+<span id="cb30-436"><a href="#cb30-436"></a><span class="in">```{python}</span></span>
+<span id="cb30-437"><a href="#cb30-437"></a><span class="co">#| label: fig-calculate-local-shap</span></span>
+<span id="cb30-438"><a href="#cb30-438"></a><span class="co">#| fig-cap: "SHAP Waterfall Plot for Rejected Applicant"</span></span>
+<span id="cb30-439"><a href="#cb30-439"></a></span>
+<span id="cb30-440"><a href="#cb30-440"></a><span class="co"># Generate SHAP values for the rejected applicant</span></span>
+<span id="cb30-441"><a href="#cb30-441"></a>shap_values <span class="op">=</span> shap_explainer(sample_reject[AutoGluon_TTD_model.feature_names_])</span>
+<span id="cb30-442"><a href="#cb30-442"></a></span>
+<span id="cb30-443"><a href="#cb30-443"></a><span class="co"># Display the waterfall plot for the first (and only) instance</span></span>
+<span id="cb30-444"><a href="#cb30-444"></a>shap.plots.waterfall(shap_values[<span class="dv">0</span>])</span>
+<span id="cb30-445"><a href="#cb30-445"></a><span class="in">```</span></span>
+<span id="cb30-446"><a href="#cb30-446"></a></span>
+<span id="cb30-447"><a href="#cb30-447"></a>**Interpretation:** The baseline PD is <span class="in">`{python} round(float(shap_values.base_values[0]),3)`</span>. The sum of the SHAP values (feature contributions) for this applicant is approximately <span class="in">`{python} round(np.sum(shap_values.values),3)`</span>. Adding this to the baseline prediction gives the final prediction <span class="in">`{python} round(float(shap_values.base_values[0]),3)`</span> + <span class="in">`{python} round(np.sum(shap_values.values),3)`</span> = <span class="in">`{python} round(float(shap_values.base_values[0]) + np.sum(shap_values.values),3)`</span>. </span>
+<span id="cb30-448"><a href="#cb30-448"></a></span>
+<span id="cb30-451"><a href="#cb30-451"></a><span class="in">```{python}</span></span>
+<span id="cb30-452"><a href="#cb30-452"></a><span class="co">#| label: tbl-local-shap-values</span></span>
+<span id="cb30-453"><a href="#cb30-453"></a><span class="co">#| tbl-cap: "Sorted SHAP values for rejected applicant"</span></span>
+<span id="cb30-454"><a href="#cb30-454"></a></span>
+<span id="cb30-455"><a href="#cb30-455"></a></span>
+<span id="cb30-456"><a href="#cb30-456"></a>df_local_shap <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb30-457"><a href="#cb30-457"></a>    <span class="st">'feature'</span>: AutoGluon_TTD_model.feature_names_,</span>
+<span id="cb30-458"><a href="#cb30-458"></a>    <span class="st">'shap_value'</span>: shap_values[<span class="dv">0</span>].values</span>
+<span id="cb30-459"><a href="#cb30-459"></a>})</span>
+<span id="cb30-460"><a href="#cb30-460"></a>df_local_shap[<span class="st">'abs_shap_value'</span>] <span class="op">=</span> df_local_shap[<span class="st">'shap_value'</span>].<span class="bu">abs</span>()</span>
+<span id="cb30-461"><a href="#cb30-461"></a>df_local_shap.sort_values(<span class="st">'abs_shap_value'</span>, ascending<span class="op">=</span><span class="va">False</span>, inplace<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb30-462"><a href="#cb30-462"></a></span>
+<span id="cb30-463"><a href="#cb30-463"></a>display(df_local_shap)</span>
+<span id="cb30-464"><a href="#cb30-464"></a></span>
+<span id="cb30-465"><a href="#cb30-465"></a><span class="in">```</span></span>
+<span id="cb30-466"><a href="#cb30-466"></a></span>
+<span id="cb30-467"><a href="#cb30-467"></a>When we generate a ranked list of features that affected the predicted PD, we should use the **absolute value** of the SHAP values. The absolute value of the SHAP value indicates the magnitude of the impact, regardless of whether it is positive or negative.</span>
+<span id="cb30-468"><a href="#cb30-468"></a></span>
+<span id="cb30-469"><a href="#cb30-469"></a>The feature that contributes the most to the predicted PD is <span class="in">`credit_score`</span>, followed by <span class="in">`dti`</span> and <span class="in">`loan_amnt`</span>. The feature <span class="in">`emp_length`</span> has the least impact on the predicted PD.</span>
+<span id="cb30-470"><a href="#cb30-470"></a></span>
+<span id="cb30-471"><a href="#cb30-471"></a>::: callout-warning</span>
+<span id="cb30-472"><a href="#cb30-472"></a>**Important Point: Understanding a Single SHAP Value**</span>
+<span id="cb30-473"><a href="#cb30-473"></a></span>
+<span id="cb30-474"><a href="#cb30-474"></a>Think of the SHAP values shown in the waterfall plot for one applicant:</span>
+<span id="cb30-475"><a href="#cb30-475"></a></span>
+<span id="cb30-476"><a href="#cb30-476"></a><span class="ss">-   </span>**What they explain:** Each SHAP value shows how a specific feature *value* for *that particular applicant* pushed their prediction away from the average prediction (the baseline `E[f(X)]`). For instance, a positive SHAP value for `dti` means *this applicant's specific debt-to-income ratio* increased their predicted Probability of Default (PD) compared to the average.</span>
+<span id="cb30-477"><a href="#cb30-477"></a></span>
+<span id="cb30-478"><a href="#cb30-478"></a><span class="ss">-   </span>**What they DON'T explain:**</span>
+<span id="cb30-479"><a href="#cb30-479"></a></span>
+<span id="cb30-480"><a href="#cb30-480"></a><span class="ss">    -   </span>A single SHAP value for one applicant doesn't tell you the *overall trend* or *marginal effect* of that feature across all applicants. To understand whether higher <span class="in">`credit_score`</span> generally leads to lower predicted PD across the population, use SHAP dependence plots.</span>
+<span id="cb30-481"><a href="#cb30-481"></a></span>
+<span id="cb30-482"><a href="#cb30-482"></a><span class="ss">    -   </span>Nor does the SHAP value answer the question for the rejected applicant: "If my <span class="in">`credit_score`</span> was 20 points higher, would my predicted PD be lower?" Counterfactual explanations are designed to answer this "what-if" question.</span>
+<span id="cb30-483"><a href="#cb30-483"></a></span>
+<span id="cb30-484"><a href="#cb30-484"></a>:::</span>
+<span id="cb30-485"><a href="#cb30-485"></a></span>
+<span id="cb30-486"><a href="#cb30-486"></a><span class="fu"># Local Adverse Action Codes</span></span>
+<span id="cb30-487"><a href="#cb30-487"></a></span>
+<span id="cb30-488"><a href="#cb30-488"></a>The code below generates adverse action codes for the 1 rejected applicant based on the SHAP values. It uses the same logic as before, but now it uses the SHAP values to determine which features are most important for our specific applicant.</span>
+<span id="cb30-489"><a href="#cb30-489"></a></span>
+<span id="cb30-492"><a href="#cb30-492"></a><span class="in">```{python}</span></span>
+<span id="cb30-493"><a href="#cb30-493"></a><span class="co">#| label: local-adverse-action-codes</span></span>
+<span id="cb30-494"><a href="#cb30-494"></a></span>
+<span id="cb30-495"><a href="#cb30-495"></a>shap_local_important_features <span class="op">=</span> df_local_shap[<span class="st">'feature'</span>].tolist()</span>
+<span id="cb30-496"><a href="#cb30-496"></a></span>
+<span id="cb30-497"><a href="#cb30-497"></a><span class="cf">if</span> df_counterfactuals <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb30-498"><a href="#cb30-498"></a>    shap_action_codes <span class="op">=</span> generate_adverse_action_codes(</span>
+<span id="cb30-499"><a href="#cb30-499"></a>        sample_reject, </span>
+<span id="cb30-500"><a href="#cb30-500"></a>        df_counterfactuals, </span>
+<span id="cb30-501"><a href="#cb30-501"></a>        feature_to_action_code, </span>
+<span id="cb30-502"><a href="#cb30-502"></a>        shap_local_important_features</span>
+<span id="cb30-503"><a href="#cb30-503"></a>    )</span>
+<span id="cb30-504"><a href="#cb30-504"></a></span>
+<span id="cb30-505"><a href="#cb30-505"></a>    <span class="bu">print</span>(<span class="st">"SHAP Adverse Action Codes:"</span>)</span>
+<span id="cb30-506"><a href="#cb30-506"></a>    <span class="cf">for</span> code <span class="kw">in</span> shap_action_codes:</span>
+<span id="cb30-507"><a href="#cb30-507"></a>        <span class="bu">print</span>(<span class="ss">f"- </span><span class="sc">{</span>code<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb30-508"><a href="#cb30-508"></a><span class="cf">else</span>:</span>
+<span id="cb30-509"><a href="#cb30-509"></a>    <span class="bu">print</span>(<span class="st">"No counterfactuals available - cannot generate SHAP adverse action codes."</span>)</span>
+<span id="cb30-510"><a href="#cb30-510"></a>    <span class="bu">print</span>(<span class="st">"This can happen when DICE cannot find valid counterfactuals within the permitted ranges."</span>)</span>
+<span id="cb30-511"><a href="#cb30-511"></a><span class="in">```</span></span>
+<span id="cb30-512"><a href="#cb30-512"></a></span>
+<span id="cb30-513"><a href="#cb30-513"></a><span class="fu"># Concluding Remarks for Adverse Action Codes</span></span>
+<span id="cb30-514"><a href="#cb30-514"></a></span>
+<span id="cb30-515"><a href="#cb30-515"></a>Subsequent sections of the lab will show other uses of SHAP values and a potpourri of data science topics. Before we address those topics, let's quickly summarize adverse action codes and the process used to generate them.</span>
+<span id="cb30-516"><a href="#cb30-516"></a></span>
+<span id="cb30-517"><a href="#cb30-517"></a><span class="ss">1.  </span>Each rejected applicant must be given a list of reasons for rejection. This is a legal requirement in the US.</span>
+<span id="cb30-518"><a href="#cb30-518"></a></span>
+<span id="cb30-519"><a href="#cb30-519"></a><span class="ss">2.  </span>The list of reasons should be ordered from most impactful to least impactful. This is also a legal requirement in the US.</span>
+<span id="cb30-520"><a href="#cb30-520"></a></span>
+<span id="cb30-521"><a href="#cb30-521"></a><span class="ss">3.  </span>To generate the list of adverse action codes, we needed to find an example of an **approved applicant** that was very similar to the rejected applicant. This was accomplished using **counterfactual explanations**.</span>
+<span id="cb30-522"><a href="#cb30-522"></a></span>
+<span id="cb30-523"><a href="#cb30-523"></a><span class="ss">4.  </span>The order of the adverse action codes was based on the **permutation feature importance** (PFI) scores, representing a global ranking of feature impacts in the model.</span>
+<span id="cb30-524"><a href="#cb30-524"></a></span>
+<span id="cb30-525"><a href="#cb30-525"></a><span class="ss">5.  </span>Alternatively, we could have used **SHAP values** to generate a local ranking of feature impacts, providing a more accurate ranking for the specific applicant.</span>
+<span id="cb30-526"><a href="#cb30-526"></a></span>
+<span id="cb30-527"><a href="#cb30-527"></a><span class="fu"># Other Uses of SHAP Values</span></span>
+<span id="cb30-528"><a href="#cb30-528"></a></span>
+<span id="cb30-529"><a href="#cb30-529"></a><span class="fu">## Global Interpretability (Summary Plots)</span></span>
+<span id="cb30-530"><a href="#cb30-530"></a></span>
+<span id="cb30-531"><a href="#cb30-531"></a>Aggregate SHAP values across a larger sample (e.g., the test set) to understand overall feature importance and effects.</span>
+<span id="cb30-532"><a href="#cb30-532"></a></span>
+<span id="cb30-533"><a href="#cb30-533"></a>Bar Plot: Ranks features by their average impact (mean absolute SHAP value) across the sample. Higher bars mean more influence overall.</span>
+<span id="cb30-534"><a href="#cb30-534"></a></span>
+<span id="cb30-537"><a href="#cb30-537"></a><span class="in">```{python}</span></span>
+<span id="cb30-538"><a href="#cb30-538"></a><span class="co">#| label: fig-global-bar-chart</span></span>
+<span id="cb30-539"><a href="#cb30-539"></a><span class="co">#| fig-cap: "SHAP Feature Importance Bar Plot"</span></span>
+<span id="cb30-540"><a href="#cb30-540"></a></span>
+<span id="cb30-541"><a href="#cb30-541"></a>test_set_sample <span class="op">=</span> df_ttd_test[AutoGluon_TTD_model.feature_names_].sample(<span class="dv">1000</span>, random_state<span class="op">=</span><span class="dv">2025</span>)</span>
+<span id="cb30-542"><a href="#cb30-542"></a></span>
+<span id="cb30-543"><a href="#cb30-543"></a>shap_values_global <span class="op">=</span> shap_explainer(test_set_sample)</span>
+<span id="cb30-544"><a href="#cb30-544"></a></span>
+<span id="cb30-545"><a href="#cb30-545"></a>shap.plots.bar(shap_values_global, max_display<span class="op">=</span><span class="dv">10</span>, show<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb30-546"><a href="#cb30-546"></a><span class="in">```</span></span>
+<span id="cb30-547"><a href="#cb30-547"></a></span>
+<span id="cb30-548"><a href="#cb30-548"></a>Show the bar plot as a data frame.</span>
+<span id="cb30-549"><a href="#cb30-549"></a></span>
+<span id="cb30-552"><a href="#cb30-552"></a><span class="in">```{python}</span></span>
+<span id="cb30-553"><a href="#cb30-553"></a><span class="co">#| label: tbl-global-bar-chart</span></span>
+<span id="cb30-554"><a href="#cb30-554"></a><span class="co">#| tbl-cap: "Average Absolute SHAP values"</span></span>
+<span id="cb30-555"><a href="#cb30-555"></a></span>
+<span id="cb30-556"><a href="#cb30-556"></a></span>
+<span id="cb30-557"><a href="#cb30-557"></a><span class="co"># Calculate mean absolute SHAP values</span></span>
+<span id="cb30-558"><a href="#cb30-558"></a>mean_abs_shap <span class="op">=</span> np.<span class="bu">abs</span>(shap_values_global.values).mean(axis<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb30-559"><a href="#cb30-559"></a></span>
+<span id="cb30-560"><a href="#cb30-560"></a><span class="co"># Create DataFrame</span></span>
+<span id="cb30-561"><a href="#cb30-561"></a>df_shap_summary <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb30-562"><a href="#cb30-562"></a>    <span class="st">'feature'</span>: test_set_sample.columns,</span>
+<span id="cb30-563"><a href="#cb30-563"></a>    <span class="st">'mean_abs_shap_value'</span>: mean_abs_shap</span>
+<span id="cb30-564"><a href="#cb30-564"></a>})</span>
+<span id="cb30-565"><a href="#cb30-565"></a></span>
+<span id="cb30-566"><a href="#cb30-566"></a><span class="co"># Sort by mean absolute SHAP value (descending)</span></span>
+<span id="cb30-567"><a href="#cb30-567"></a>df_shap_summary <span class="op">=</span> df_shap_summary.sort_values(<span class="st">'mean_abs_shap_value'</span>, ascending<span class="op">=</span><span class="va">False</span>).reset_index(drop<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb30-568"><a href="#cb30-568"></a></span>
+<span id="cb30-569"><a href="#cb30-569"></a><span class="co"># Display the DataFrame</span></span>
+<span id="cb30-570"><a href="#cb30-570"></a>display(df_shap_summary)</span>
+<span id="cb30-571"><a href="#cb30-571"></a><span class="in">```</span></span>
+<span id="cb30-572"><a href="#cb30-572"></a></span>
+<span id="cb30-573"><a href="#cb30-573"></a>Beeswarm Plot: Shows each feature's SHAP value distribution. Each point is one instance. Color indicates the feature's value (high/low). This reveals not just importance but also the direction of the effect (e.g., high credit_score (red points) have negative SHAP values, decreasing default probability).</span>
+<span id="cb30-574"><a href="#cb30-574"></a></span>
+<span id="cb30-577"><a href="#cb30-577"></a><span class="in">```{python}</span></span>
+<span id="cb30-578"><a href="#cb30-578"></a><span class="co">#| label: fig-global-beeswarm</span></span>
+<span id="cb30-579"><a href="#cb30-579"></a><span class="co">#| fig-cap: "SHAP Summary Plot"</span></span>
+<span id="cb30-580"><a href="#cb30-580"></a></span>
+<span id="cb30-581"><a href="#cb30-581"></a>shap.plots.beeswarm(shap_values_global, max_display<span class="op">=</span><span class="dv">10</span>, show<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb30-582"><a href="#cb30-582"></a><span class="in">```</span></span>
+<span id="cb30-583"><a href="#cb30-583"></a></span>
+<span id="cb30-584"><a href="#cb30-584"></a><span class="fu">## SHAP Dependence Plots</span></span>
+<span id="cb30-585"><a href="#cb30-585"></a></span>
+<span id="cb30-586"><a href="#cb30-586"></a>Explore how a feature's impact (SHAP value) changes with its value, potentially colored by an interacting feature.</span>
+<span id="cb30-587"><a href="#cb30-587"></a></span>
+<span id="cb30-588"><a href="#cb30-588"></a>These plots show the relationship between a feature's value (x-axis) and its SHAP value (y-axis). The vertical spread, often colored by an interacting feature, highlights how the feature's impact might depend on other factors.</span>
+<span id="cb30-589"><a href="#cb30-589"></a></span>
+<span id="cb30-590"><a href="#cb30-590"></a>The SHAP dependence plot is an alternative to PDP, ICE, and ALE plots. It provides a more detailed view of how a feature's value affects the model's prediction, especially when interactions with other features are present.</span>
+<span id="cb30-591"><a href="#cb30-591"></a></span>
+<span id="cb30-594"><a href="#cb30-594"></a><span class="in">```{python}</span></span>
+<span id="cb30-595"><a href="#cb30-595"></a><span class="co">#| label: fig-shap-dependence</span></span>
+<span id="cb30-596"><a href="#cb30-596"></a><span class="co">#| fig-cap: "SHAP Dependence Plot"</span></span>
+<span id="cb30-597"><a href="#cb30-597"></a></span>
+<span id="cb30-598"><a href="#cb30-598"></a>features_for_dependence <span class="op">=</span> AutoGluon_TTD_model.feature_names_</span>
+<span id="cb30-599"><a href="#cb30-599"></a></span>
+<span id="cb30-600"><a href="#cb30-600"></a><span class="cf">for</span> feature <span class="kw">in</span> features_for_dependence:</span>
+<span id="cb30-601"><a href="#cb30-601"></a>    <span class="cf">if</span> feature <span class="kw">in</span> test_set_sample.columns: <span class="co"># Use the defined sample DataFrame</span></span>
+<span id="cb30-602"><a href="#cb30-602"></a>        <span class="co"># Generate the plot but don't show it immediately</span></span>
+<span id="cb30-603"><a href="#cb30-603"></a>        shap.plots.scatter(shap_values_global[:, feature], color<span class="op">=</span>shap_values_global, alpha<span class="op">=</span><span class="fl">0.4</span>, show<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb30-604"><a href="#cb30-604"></a>        <span class="co"># Display the current figure explicitly</span></span>
+<span id="cb30-605"><a href="#cb30-605"></a>        plt.show()</span>
+<span id="cb30-606"><a href="#cb30-606"></a>        <span class="co"># Close the figure to prevent the message</span></span>
+<span id="cb30-607"><a href="#cb30-607"></a>        plt.close()</span>
+<span id="cb30-608"><a href="#cb30-608"></a><span class="in">```</span></span>
+</code><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></pre></div>
+</div></div></div></div></div>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

@@ -11,7 +11,7 @@
 			"file:/**/*.parquet": "jupyter-data-wrangler"
 		},
 		"chat.tools.terminal.autoApprove": {
-			"/^python c:\\\\Users\\\\chiuw\\\\IML4Finance\\\\\\.github\\\\skills\\\\create-edit-agent-skill\\\\scripts\\\\validate\\.py c:\\\\Users\\\\chiuw\\\\IML4Finance\\\\\\.github\\\\skills\\\\custom-sklearn-estimator$/": {
+			"/^python .*[\\\\/]\\.github[\\\\/]skills[\\\\/]create-edit-agent-skill[\\\\/]scripts[\\\\/]validate\\.py .*[\\\\/]\\.github[\\\\/]skills[\\\\/]custom-sklearn-estimator$/": {
 				"approve": true,
 				"matchCommandLine": true
 			},

@@ -10,9 +10,9 @@ Data/home-credit-default-risk
 *.vtt
 *.mp4
 *.zip
-Lectures/augmented_all_bad_model/*
-Lectures/augmented_bureau_proxy_model/*
-Lectures/kgb_model/*
+Artifacts/logs/*
 .DS_Store
+.venv/
 .venv/*
 __pycache__/
+.tools/

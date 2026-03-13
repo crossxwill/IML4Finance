@@ -1,0 +1,1375 @@
+---
+title: "Lab 02: Credit Scorecard Development"
+format: 
+    html:
+        toc: true
+        code-fold: true
+        code-tools: true
+        code-line-numbers: true
+        page-layout: full
+number-sections: true
+number-figures: true
+number-tables: true
+execute:
+    warning: false
+    message: false
+---
+
+# Introduction
+
+The lab provides a hands-on guide to building and evaluating a credit scorecard using loan-level (accepts) and applicant-level (rejects) data from LendingClub (an unsecured lender). The primary goal is to develop a 3-digit score that ranks Through-the-Door (TTD) applicants based on their predicted credit risk. We will use Fuzzy Augmentation (a reject inference method) to incorporate data from rejected applicants, to reduce selection bias in the training data.
+
+We will cover data preparation, assessing feature relationships, reject inference using fuzzy augmentation, training models with AutoGluon, diagnosing model behavior with ICE/PDP, applying monotonic constraints, evaluating performance using the KS statistic, and selecting decision thresholds.
+
+**Learning Objectives:**
+
+*   Load and prepare accepted and rejected lending data.
+*   Define a target variable for credit default.
+*   Perform feature engineering and selection for scorecard modeling.
+*   Assess feature monotonicity using binned probability plots.
+*   Understand and implement reject inference (Fuzzy Augmentation).
+*   Train weighted models using AutoGluon on the augmented TTD dataset.
+*   Diagnose model behavior using ICE and PDP.
+*   Apply monotonic constraints to align models with business logic.
+*   Evaluate scorecard performance using the KS statistic.
+*   Select an optimal decision threshold based on business objectives.
+
+# Setup
+
+## Import Python Libraries
+
+```{python}
+#| label: setup-imports
+#| message: false
+
+# System utilities
+import os
+import shutil
+import random
+import sys
+import warnings
+import time
+import gc
+import psutil
+from pathlib import Path
+
+sys.path.insert(0, str(Path.cwd().parent))
+
+CPU_LIMIT = 2
+os.environ['OMP_NUM_THREADS'] = str(CPU_LIMIT)
+os.environ['OPENBLAS_NUM_THREADS'] = str(CPU_LIMIT)
+os.environ['MKL_NUM_THREADS'] = str(CPU_LIMIT)
+os.environ['VECLIB_MAXIMUM_THREADS'] = str(CPU_LIMIT)
+os.environ['NUMEXPR_NUM_THREADS'] = str(CPU_LIMIT)
+num_jobs = CPU_LIMIT
+
+# Data manipulation and visualization
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from IPython.display import display # Explicit import for display
+from scipy import stats, special
+from sklearn.feature_selection import mutual_info_classif
+import re
+import duckdb
+
+# Machine learning - scikit-learn
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.metrics import roc_auc_score, f1_score, confusion_matrix, classification_report
+from sklearn.preprocessing import LabelEncoder, StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.inspection import PartialDependenceDisplay
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
+from sklearn import set_config
+
+# Specialized ML libraries
+from autogluon.tabular import TabularPredictor, TabularDataset
+from autogluon.common.features.feature_metadata import FeatureMetadata # For monotonic constraints
+import shap
+from ydata_profiling import ProfileReport
+
+# Counterfactual Explanations (optional, install if needed: pip install dice-ml)
+try:
+    import dice_ml
+    from dice_ml.utils import helpers # Helper functions for DICE
+except ImportError:
+    print("""
+    
+    dice-ml not found. You need to update your conda env by running:
+    
+    conda activate env_AutoGluon_202502
+    conda install -c conda-forge dice-ml
+    
+    """)
+    dice_ml = None
+
+# Helper functions from course_utils.helpers
+from course_utils.helpers import (
+    global_set_seed,
+    remove_ag_folder,
+    AutoGluonSklearnWrapper,
+    binned_prob_plot,
+    calculate_score,
+    score_to_probability,
+    ks_table,
+    show_pdp,
+    generate_eda_report,
+    parse_emp_length,
+    split_data,
+    train_autogluon_model,
+    summarize_ttd_by_source,
+    create_TTD_data
+)
+
+# Settings
+pd.set_option('display.max_columns', 50)
+pd.set_option('display.max_rows', 100)
+warnings.filterwarnings('ignore', category=FutureWarning) # Suppress specific FutureWarnings
+set_config(transform_output="pandas") # Set sklearn output to pandas
+
+print("Libraries imported successfully.")
+```
+
+# Data Loading & EDA
+
+**Goal:** Load the LendingClub accepted and rejected datasets, define the target variable (`default_flag`), split the data, and perform basic EDA.
+
+## Read Parquet Files
+
+Load the datasets containing information on accepted loans and rejected applications.
+
+```{python}
+#| label: data-load
+
+# Define file paths relative to the current script location
+accepted_path = '../Data/lendingclub/accepted_2007_to_2018Q4.parquet'
+rejected_path = '../Data/lendingclub/rejected_2007_to_2018Q4.parquet'
+
+# Load data using pandas
+try:
+    df_accepted = pd.read_parquet(accepted_path)
+    df_rejected = pd.read_parquet(rejected_path)
+
+    # Sample rejected data to reduce memory usage
+    max_rejected_rows = 500_000
+    df_rejected = df_rejected.sample(n=max_rejected_rows, random_state=2025)
+
+    print("Data loaded successfully.")
+    print(f"Accepted data shape: {df_accepted.shape}")
+    print(f"Rejected data shape: {df_rejected.shape}")
+except FileNotFoundError:
+    print("Error: Parquet files not found. Make sure the paths are correct and the data generation scripts have been run.")
+    # Stop execution or handle error appropriately
+    df_accepted, df_rejected = None, None # Set to None to avoid errors later
+```
+
+## Define Target Variable
+
+Create the binary `default_flag` (1 for default, 0 for non-default) based on the `loan_status` in the accepted dataset. Rejected applicants do not have an observed `default_flag`.
+
+```{python}
+#| label: define-target
+
+# Define default status based on 'loan_status'
+default_statuses = [
+    "Charged Off", 
+    "Late (31-120 days)", 
+    "Does not meet the credit policy. Status:Charged Off", 
+    "Default"
+] 
+df_accepted['default_flag'] = df_accepted['loan_status'].apply(lambda x: 1 if x in default_statuses else 0)
+
+print("Target variable 'default_flag' created.")
+print("Default Flag Distribution (Accepted):")
+print(df_accepted['default_flag'].value_counts(normalize=True))
+
+# Display loan status counts for context
+print("\nLoan Status Distribution (Accepted):")
+print(df_accepted['loan_status'].value_counts())
+
+
+```
+
+## Train, Calibration, and Test Split
+
+Split both accepted and rejected datasets into training (60%), calibration (20%), and test (20%) sets. We use stratification for the accepted data based on the `default_flag` to maintain similar default rates across splits.
+
+```{python}
+#| label: train-test-split
+
+# Define split proportions
+train_size = 0.6
+calib_size_rel_to_remaining = 0.5 # 0.5 * (1 - 0.6) = 0.2 -> test_size for split_data
+random_seed = 2025
+global_set_seed(random_seed) # Set global seed
+
+# --- Split Accepted Data (Stratified) ---
+print("Splitting Accepted Data...")
+df_accepted_train, df_accepted_calib, df_accepted_test = split_data(
+    df=df_accepted,
+    target_col='default_flag',
+    train_size=train_size,
+    calib_size_rel=calib_size_rel_to_remaining, # This is test_size in split_data context
+    random_state=random_seed
+)
+
+# --- Split Rejected Data (Not Stratified) ---
+print("\nSplitting Rejected Data...")
+df_rejected_train, df_rejected_calib, df_rejected_test = split_data(
+    df=df_rejected,
+    target_col=None, # No stratification
+    train_size=train_size,
+    calib_size_rel=calib_size_rel_to_remaining, # This is test_size in split_data context
+    random_state=random_seed
+)
+
+# Clean up the original large dataframes
+del df_accepted
+del df_rejected
+print("\nRemoved original df_accepted and df_rejected to free up memory.")
+gc.collect() # Call garbage collector
+
+
+```
+
+## Exploratory Data Analysis (EDA)
+
+Perform initial EDA on the *training* portions of the accepted and rejected datasets to understand distributions, missing values, and potential issues. We use `ydata-profiling` for automated report generation.
+
+```{python}
+#| label: eda-accepted-rejected
+
+
+print("Generating EDA reports (this might take a while)...")
+
+# Define sampling fraction for large datasets
+p_frac = 0.05 # Sample 5% for faster report generation
+
+# --- EDA for Accepted Training Data ---
+generate_eda_report(
+    df=df_accepted_train,
+    title="Accepted Train Data Profile",
+    output_path="Lab02_eda_report_accepted_train.html",
+    sample_frac=p_frac,
+    random_state=random_seed
+)
+
+# --- EDA for Rejected Training Data ---
+generate_eda_report(
+    df=df_rejected_train,
+    title="Rejected Train Data Profile",
+    output_path="Lab02_eda_report_rejected_train.html",
+    sample_frac=p_frac,
+    random_state=random_seed
+)
+    
+
+```
+
+# Monotonicity Checks
+
+**Goal:** Process the raw data to create a set of common features present in both accepted and rejected datasets. Then, analyze the relationship between these features and the default outcome (using accepted data) to check for expected monotonic trends.
+
+## Identify and Process Common Features
+
+Select relevant features, rename columns for consistency, handle missing values, and perform necessary transformations (e.g., parsing employment length, calculating FICO score).
+
+```{python}
+#| label: common-features
+
+
+# Define common feature names globally
+common_feature_names = ['loan_amnt', 'emp_length', 'addr_state', 'dti', 'credit_score']
+target_col = 'default_flag'
+
+# Remove non-numeric chars from dti in df_rejected_train
+df_rejected_train['Debt-To-Income Ratio'] = df_rejected_train['Debt-To-Income Ratio'].astype(str).str.replace(r'[^0-9\.\-]', '', regex=True)
+df_rejected_train['Debt-To-Income Ratio'] = pd.to_numeric(df_rejected_train['Debt-To-Income Ratio'], errors='coerce')
+
+rejected_train_median_loan_amnt = df_rejected_train['Amount Requested'].median(skipna=True)
+rejected_train_median_emp_length = df_rejected_train['Employment Length'].apply(parse_emp_length).median(skipna=True)
+rejected_train_p90_dti = df_rejected_train['Debt-To-Income Ratio'].quantile(0.90, interpolation='nearest')
+rejected_train_p10_credit_score = df_rejected_train['Risk_Score'].quantile(0.10, interpolation='nearest')
+
+def process_lending_data(df: pd.DataFrame,
+                        source_type: str,
+                        fillMissing_loanamnt: int,
+                        fillMissing_emp_length: int, 
+                        fillMissing_dti: float,
+                        fillMissing_credit_score: int) -> pd.DataFrame | None:
+    """
+    Processes LendingClub data (accepted or rejected) to extract common features.
+    
+    This function standardizes column names, handles missing values, transforms
+    data types, and applies validations to ensure consistent data formats across
+    accepted and rejected loan applications.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame (either accepted or rejected).
+        source_type (str): 'accepted' or 'rejected'.
+        fillMissing_loanamnt (int): Value to fill missing loan amount entries.
+        fillMissing_emp_length (int): Value to fill missing employment length entries.
+        fillMissing_dti (float): Value to fill missing debt-to-income ratio entries.
+        fillMissing_credit_score (int): Value to fill missing credit score entries.
+
+    Returns:
+        pd.DataFrame | None: Processed DataFrame with common features (and target for accepted),
+                             or None if input df is None.
+                             
+    Raises:
+        ValueError: If source_type is not 'accepted' or 'rejected'.
+    """
+    if df is None:
+        return None
+
+    df_proc = df.copy()
+
+    # Column mapping and credit_score logic
+    if source_type == 'accepted':
+        rename_map = {
+            'loan_amnt': 'loan_amnt',
+            'emp_length': 'emp_length',
+            'addr_state': 'addr_state',
+            'dti': 'dti',
+            'fico_range_low': 'fico_range_low',
+            'fico_range_high': 'fico_range_high'
+        }
+    elif source_type == 'rejected':
+        rename_map = {
+            'Amount Requested': 'loan_amnt',
+            'Employment Length': 'emp_length',
+            'State': 'addr_state',
+            'Debt-To-Income Ratio': 'dti',
+            'Risk_Score': 'credit_score'
+        }
+    else:
+        raise ValueError("source_type must be 'accepted' or 'rejected'")
+
+    # Warn if missing columns
+    missing_cols = [col for col in rename_map.keys() if col not in df_proc.columns]
+    if missing_cols:
+        print(f"Warning: Missing columns in {source_type} data: {missing_cols}")
+    df_proc = df_proc.rename(columns=rename_map)
+
+    # loan_amnt
+    df_proc['loan_amnt'] = pd.to_numeric(df_proc.get('loan_amnt'), errors='coerce').fillna(fillMissing_loanamnt).clip(lower=500)
+
+    # emp_length
+    df_proc['emp_length'] = df_proc.get('emp_length').apply(parse_emp_length).fillna(fillMissing_emp_length) 
+
+    # dti
+    dti_series = df_proc.get('dti').astype(str).str.replace(r'[^0-9\.\-]', '', regex=True)
+    df_proc['dti'] = pd.to_numeric(dti_series, errors='coerce').fillna(fillMissing_dti).astype("float32").clip(lower=0, upper=300)
+
+    # credit_score
+    if source_type == 'accepted':
+        # Use FICO if available, else fallback
+        if 'fico_range_low' in df_proc.columns and 'fico_range_high' in df_proc.columns:
+            df_proc['credit_score'] = (df_proc['fico_range_low'] + df_proc['fico_range_high']) / 2
+        else:
+            df_proc['credit_score'] = np.nan
+        df_proc['credit_score'] = df_proc['credit_score'].fillna(fillMissing_credit_score).clip(lower=300, upper=850)
+    else:
+        df_proc['credit_score'] = pd.to_numeric(df_proc.get('credit_score'), errors='coerce').fillna(fillMissing_credit_score).clip(lower=300, upper=850)
+
+    # Target column for accepted
+    if source_type == 'accepted':
+        if target_col not in df_proc.columns:
+            print(f"Warning: Target column '{target_col}' not found in accepted data. Adding placeholder.")
+            df_proc[target_col] = 0
+        cols_to_keep = [col for col in common_feature_names if col in df_proc.columns] + [target_col]
+    else:
+        cols_to_keep = [col for col in common_feature_names if col in df_proc.columns]
+
+    return df_proc[cols_to_keep].copy()
+
+# --- Apply the function to the training data ---
+print("Processing training data using the defined function...")
+
+df_accepted_train_common = process_lending_data(
+    df=df_accepted_train, 
+    source_type='accepted',
+    fillMissing_loanamnt=rejected_train_median_loan_amnt,
+    fillMissing_emp_length=rejected_train_median_emp_length, 
+    fillMissing_dti=rejected_train_p90_dti,
+    fillMissing_credit_score=rejected_train_p10_credit_score
+)
+
+df_rejected_train_common = process_lending_data(
+    df=df_rejected_train, 
+    source_type='rejected',
+    fillMissing_loanamnt=rejected_train_median_loan_amnt,
+    fillMissing_emp_length=rejected_train_median_emp_length, 
+    fillMissing_dti=rejected_train_p90_dti,
+    fillMissing_credit_score=rejected_train_p10_credit_score
+)
+
+print(f"Accepted training data processed. Shape: {df_accepted_train_common.shape}")
+# Verify common features are present
+missing_acc = [f for f in common_feature_names if f not in df_accepted_train_common.columns]
+if missing_acc: print(f"  Warning: Missing common features after processing accepted: {missing_acc}")
+
+
+print(f"Rejected training data processed. Shape: {df_rejected_train_common.shape}")
+# Verify common features are present
+missing_rej = [f for f in common_feature_names if f not in df_rejected_train_common.columns]
+if missing_rej: print(f"  Warning: Missing common features after processing rejected: {missing_rej}")
+
+
+print("\nCommon features expected:")
+print(common_feature_names)
+
+
+```
+
+Check dtypes
+
+```{python}
+#| label: tbl-train-dtypes
+#| tbl-cap: "Data types in each data frame"
+
+# Convert .info() output to DataFrame for accepted training data
+accepted_info = pd.DataFrame({
+    "column": df_accepted_train_common.columns,
+    "dtype": [df_accepted_train_common[col].dtype for col in df_accepted_train_common.columns],
+    "null_count": [df_accepted_train_common[col].isnull().sum() for col in df_accepted_train_common.columns],
+    "non_null_count": [df_accepted_train_common[col].notnull().sum() for col in df_accepted_train_common.columns],
+    "unique_count": [df_accepted_train_common[col].nunique() for col in df_accepted_train_common.columns]
+})
+display(accepted_info)
+
+# Convert .info() output to DataFrame for rejected training data
+rejected_info = pd.DataFrame({
+    "column": df_rejected_train_common.columns,
+    "dtype": [df_rejected_train_common[col].dtype for col in df_rejected_train_common.columns],
+    "null_count": [df_rejected_train_common[col].isnull().sum() for col in df_rejected_train_common.columns],
+    "non_null_count": [df_rejected_train_common[col].notnull().sum() for col in df_rejected_train_common.columns],
+    "unique_count": [df_rejected_train_common[col].nunique() for col in df_rejected_train_common.columns]
+})
+
+display(rejected_info)
+```
+
+## Compare Data Distributions
+
+Compare data distributions between `df_accepted_train_common` and `df_rejected_train_common` using `ProfileReport`.
+
+```{python}
+#| label: eda-compare-common
+
+
+# Check if dataframes and ProfileReport exist
+if 'df_accepted_train_common' in locals() and df_accepted_train_common is not None and \
+    'df_rejected_train_common' in locals() and df_rejected_train_common is not None and \
+    'ProfileReport' in locals() and ProfileReport is not None:
+
+     print("Generating comparison report for common features (this might take a while)...")
+
+     # Define sampling fraction for faster report generation
+     p_frac_compare = 0.1 # Sample 10% for comparison
+
+     try:
+          # Profile for Accepted Common Features
+          accepted_common_profile = ProfileReport(
+                df_accepted_train_common.sample(frac=p_frac_compare, random_state=2025),
+                title="Accepted Train",
+                progress_bar=False,
+                duplicates=None,
+                interactions=None
+          )
+
+          # Profile for Rejected Common Features
+          rejected_common_profile = ProfileReport(
+                df_rejected_train_common.sample(frac=p_frac_compare, random_state=2025),
+                title="Rejected Train",
+                progress_bar=False,
+                duplicates=None,
+                interactions=None
+          )
+
+          # Compare the two profiles
+          comparison_report = accepted_common_profile.compare(rejected_common_profile)
+
+          # Save the comparison report
+          comparison_report_path = "Lab02_eda_report_compare_common_features.html"
+          comparison_report.to_file(comparison_report_path)
+          print(f"Comparison report saved to: {comparison_report_path}")
+
+     except Exception as e:
+          print(f"Error generating comparison report: {e}")
+
+else:
+     print("Skipping comparison report generation: Required dataframes or ProfileReport not available.")
+
+```
+
+## Assess Feature Monotonicity (Accepted Data)
+
+**Concept:** Before building complex models, it's essential to understand the fundamental relationship between key features and the target variable (probability of default). We expect certain features to have a monotonic relationship with risk – meaning, as the feature value increases, the risk should consistently increase or consistently decrease.
+
+*   **Example:** We expect higher Debt-to-Income (`dti`) ratios to correspond to higher default risk (monotonic increasing). We expect higher credit scores (`credit_score`) to correspond to lower default risk (monotonic decreasing).
+
+**Method:** We use the `binned_prob_plot` function on the *accepted training data* (`df_accepted_train_common`) to visualize the average default rate across bins of each feature.
+*   For **continuous features**, the plot shows the trend across quantiles, and we calculate the **Spearman rank correlation** between the bin rank and the default rate (or log-odds). A correlation near +1 (increasing) or -1 (decreasing) suggests strong monotonicity.
+*   For **categorical features**, the plot shows the default rate per category, and we calculate **Mutual Information** to measure if the feature provides information about the target, indicating varying risk levels across categories.
+
+**Goal:** Visualize the relationship between selected common features (`loan_amnt`, `dti`, `credit_score`, `emp_length`) and `default_flag` using the accepted training data. Check if the observed trends align with business intuition.
+
+```{python}
+#| label: fig-check-monotonicity-accepted
+#| fig-cap: "Binned probability plots for the accept population."
+
+%matplotlib inline
+
+
+if 'df_accepted_train_common' in locals() and df_accepted_train_common is not None:
+    print("--- Assessing Monotonicity on Accepted Training Data ---")
+    features_to_plot = ['loan_amnt', 'dti', 'credit_score', 'emp_length']
+    monotonicity_results_accepted = []
+    
+    for feature in features_to_plot:
+        if feature in df_accepted_train_common.columns:
+            print(f"\nPlotting for feature: {feature}")
+            
+            output = binned_prob_plot(
+                data=df_accepted_train_common, 
+                feature=feature, 
+                target_binary='default_flag',
+                cont_feat_flag=True
+            )
+            monotonicity_results_accepted.append(output)
+            print(f"  Measure ({output['measure_name']}): {output['measure_value']:.4f}")
+            if output['p_value'] is not None:
+                 print(f"  P-value: {output['p_value']:.4f}")
+        else:
+            print(f"\nSkipping plot for feature '{feature}' as it's not in df_accepted_train_common.")
+            
+    print("\n--- Monotonicity Assessment Summary (Accepted Data) ---")
+    for res in monotonicity_results_accepted:
+        pval_str = f", p-value: {res['p_value']:.4f}" if res['p_value'] is not None else ""
+        print(f"Feature: {res['feature']}, Measure: {res['measure_name']}, Value: {res['measure_value']:.4f}{pval_str}")
+
+else:
+    print("Skipping monotonicity check as df_accepted_train_common is not available.")
+
+```
+
+**Interpretation:** Based on the binned probability plots:
+
+-   **loan_amnt:** Higher loan amounts are associated with higher default rates, indicating a positive correlation.
+-   **dti:** Higher Debt-to-Income ratios correlate with higher default rates, confirming the expected monotonic relationship.
+-   **credit_score:** Higher credit scores are associated with lower default rates, indicating a negative correlation.
+-   **emp_length:** Higher employment lengths are associated with lower default rates, which is expected.
+
+**Categorical Feature Check (State):**
+
+For high-cardinality categorical features like `addr_state`, visualizing the binned probability might be less informative due to the large number of categories. However, we can still calculate the Mutual Information (MI) score to quantify the relationship between the state and the default flag without generating the plot. A higher MI suggests the state provides more information about the likelihood of default.
+
+```{python}
+#| label: check-monotonicity-state
+
+%matplotlib inline
+
+
+if 'df_accepted_train_common' in locals() and df_accepted_train_common is not None:
+    feature_state = 'addr_state'
+    if feature_state in df_accepted_train_common.columns:
+        print(f"\n--- Calculating Mutual Information for {feature_state} (Accepted Data) ---")
+        
+        # Calculate MI without plotting
+        state_mi_output = binned_prob_plot(
+            data=df_accepted_train_common, 
+            feature=feature_state, 
+            target_binary='default_flag',
+            cont_feat_flag=False, # Explicitly categorical
+            show_plot=False # Do not generate the plot
+        )
+        
+        print(f"Feature: {state_mi_output['feature']}")
+        print(f"  Measure: {state_mi_output['measure_name']}")
+        print(f"  Value: {state_mi_output['measure_value']:.4f}")
+        # Store result if needed
+        # monotonicity_results_accepted.append(state_mi_output) 
+    else:
+        print(f"\nSkipping MI calculation for feature '{feature_state}' as it's not in df_accepted_train_common.")
+else:
+    print("\nSkipping MI calculation for 'addr_state' as df_accepted_train_common is not available.")
+```
+
+Mutual Information for `addr_state` is calculated, but the plot is not generated due to the high cardinality of the feature. The MI value is very close to zero.
+
+## Define Modeling Features
+
+In subsequent sections, we will use only the following features: `loan_amnt`, `dti`, `credit_score`, and `emp_length` for modeling. The `addr_state` feature will be excluded from the modeling process due to low mutual information.
+
+```{python}
+#| label: define-modeling-features
+
+modeling_features = ['loan_amnt', 'dti', 'credit_score', 'emp_length']
+print(f"Features selected for modeling: {modeling_features}")
+```
+
+
+# Fuzzy Augmentation
+
+**Concept:** Models trained only on accepted applicants (KGB - Known Good/Bad) suffer from selection bias because they don't learn from the rejected population, which often represents higher risk. Reject Inference (RI) techniques address this by incorporating information from rejects.
+
+**Fuzzy Augmentation:**
+
+1. Train a model (e.g., Logistic Regression) on the *accepted training data* (`df_accepted_train_common`) to predict the probability of default (PD), `PD = P(default=1 | features)`.
+2. Apply this model to the *rejected* applicants to get their predicted `PD`.
+3. Create two copies of the rejected applicant data:
+    1. **Copy 1 (Assumed Bad):** Assign `default_flag = 1` and `sample_weight = PD`.
+    2. **Copy 2 (Assumed Good):** Assign `default_flag = 0` and `sample_weight = 1 - PD`.
+4. Combine the original accepted data (with `sample_weight = 1`) and the two weighted sets of rejected data to create the augmented "Through-the-Door" (TTD) dataset. This approach assigns fractional counts to both default and non-default outcomes for each rejected applicant based on their predicted risk.
+
+
+**Goal:** Implement fuzzy augmentation to create the TTD training dataset.
+
+## Train Initial Model for Weighting
+
+Train a Logistic Regression model on the *accepted training data* (`df_accepted_train_common`) using a subset of the common features. This model estimates the PD needed for weighting.
+
+```{python}
+#| label: ri-train-logit
+
+
+# Using only features selected for the main model for consistency in RI
+ri_features = modeling_features 
+
+print(f"Using RI features (same as modeling features): {ri_features}")
+
+# Prepare data for Logistic Regression - use .copy() to avoid SettingWithCopyWarning
+X_acc_ri = df_accepted_train_common[ri_features].copy()
+y_acc_ri = df_accepted_train_common['default_flag'] 
+
+# Basic Preprocessing Pipeline for Logistic Regression
+# All ri_features are numeric now
+numeric_features_ri = ri_features # Use the selected features
+
+# Define preprocessing steps
+numeric_transformer_ri = Pipeline(steps=[
+    ('scaler', StandardScaler())
+])
+
+# Create the preprocessor - Apply the numeric transformer to the numeric features
+preprocessor_ri = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer_ri, numeric_features_ri)
+    ],
+    remainder='passthrough' # Keep other columns if any (though there shouldn't be here)
+)
+
+
+# Define LogisticRegressionCV with cross-validation parameters
+logreg_cv = LogisticRegressionCV(
+    Cs=10,  # Try 10 C values on a logarithmic scale
+    cv=5,   # Use 5-fold cross-validation
+    penalty='l2', # Use L2 regularization
+    scoring='roc_auc', # Optimize for AUC
+    random_state=2025,
+    max_iter=1000, # Increase max iterations for convergence
+    solver='liblinear' # Suitable solver for this problem size and penalty
+)
+
+# Create the full pipeline with Logistic Regression CV
+ri_model = Pipeline(steps=[('preprocessor', preprocessor_ri),
+                ('classifier', logreg_cv)]) # Use LogisticRegressionCV
+
+global_set_seed(random_seed) # Set global seed
+
+print("Training Reject Inference Logistic Regression model...")
+start_time = time.time()
+ri_model.fit(X_acc_ri, y_acc_ri)
+end_time = time.time()
+print(f"RI model training completed in {end_time - start_time:.2f} seconds.")
+
+
+```
+
+## Check RI Model Coefficients
+
+**Goal:** After training the RI model, we need to check the coefficients to ensure they align with our expectations based on the monotonicity checks. This helps validate that the model is capturing the expected relationships between features and default risk.
+
+Check the `ri_model` (also known as the KGB model) to ensure the coefficients are reasonable.
+
+```{python}
+#| label: tbl-ri-model-coefficients
+#| tbl-cap: "Reject Inference Model Coefficients"
+
+
+print("\n--- RI Model Coefficients ---")
+# Extract coefficients and intercept from the Logistic Regression model
+if hasattr(ri_model.named_steps['classifier'], 'coef_') and \
+    hasattr(ri_model.named_steps['classifier'], 'intercept_'):
+    
+    coeffs = ri_model.named_steps['classifier'].coef_[0] # Get the coefficients
+    intercept = ri_model.named_steps['classifier'].intercept_[0] # Get the intercept
+    
+    # Get feature names from the preprocessor step if possible
+    try:
+        # Access the fitted ColumnTransformer to get output feature names
+        preprocessor = ri_model.named_steps['preprocessor']
+        # Get feature names after transformation (e.g., scaled numeric features)
+        # Note: This relies on the structure of the preprocessor
+        feature_names = preprocessor.get_feature_names_out()
+    except Exception:
+        # Fallback to original feature names if getting transformed names fails
+        print("Warning: Could not get transformed feature names. Using original RI feature names.")
+        feature_names = ri_features # Use the original input feature names
+
+    # Create DataFrame for coefficients
+    coeff_df = pd.DataFrame({'Feature': feature_names, 'Coefficient': coeffs})
+    
+    # Add the intercept as a separate row
+    intercept_df = pd.DataFrame({'Feature': ['Intercept'], 'Coefficient': [intercept]})
+    
+    # Combine coefficients and intercept
+    full_coeff_df = pd.concat([intercept_df, coeff_df], ignore_index=True)
+    
+    # Sort by absolute coefficient value might be more informative, but sorting by value is fine
+    # full_coeff_df.sort_values(by='Coefficient', ascending=False, inplace=True) 
+    
+    display(full_coeff_df)
+        
+
+
+```
+
+**Interpretation:** The coefficients of the RI model should align with our expectations based on the monotonicity checks. For example, we expect a positive coefficient for `dti` (higher DTI leads to higher default risk) and a negative coefficient for `credit_score` (higher credit score leads to lower default risk).
+
+## Calculate Weights and Create TTD Dataset
+
+Apply the trained `ri_model` to the *rejected training data* (`df_rejected_train_common`), calculate fuzzy weights, assign `default_flag=1`, and combine with `df_accepted_train_common` to create `df_ttd_train`.
+
+```{python}
+#| label: tbl-ri-apply-weights
+#| tbl-cap: "Weighted default rates for TTD Train Data"
+
+print("Applying RI model to rejected training data and calculating weights...")
+
+# Create df_ttd_train with the source column
+df_ttd_train = create_TTD_data( # Renamed variable
+    ri_model=ri_model,
+    df_rejected=df_rejected_train_common,
+    df_accepted=df_accepted_train_common,
+    ri_features=ri_features,
+    modeling_features=modeling_features,
+    target_col=target_col
+)
+
+# Calculate and display summary statistics by source using helper function
+summary_default_rates = summarize_ttd_by_source(
+    df_ttd=df_ttd_train,
+    target_col=target_col,
+    weight_col='sample_weight',
+    source_col='source'
+)
+
+```
+
+For rejected applicants in the TTD dataset, the `default_flag` and `sample_weight` are not observed outcomes. Instead, they are assigned based on the RI model's predicted probability of default (PD). Each rejected applicant is represented twice: once as an assumed default (`default_flag=1`, weighted by PD) and once as an assumed non-default (`default_flag=0`, weighted by 1-PD). This approach reflects the model's belief about their likely outcome, rather than an actual observed default status.
+
+```{python}
+#| label: tbl-ttd-sample
+#| tbl-cap: "Sample of Augmented TTD Training Data (Fuzzy Augmentation)"
+
+
+df_sample = df_ttd_train.sample(10, random_state=2025)
+
+display(df_sample)
+```
+
+# Building the TTD Scorecard Model (Initial)
+
+**Goal:** Train a preliminary scorecard model using AutoGluon on the augmented TTD training dataset (`df_ttd_train`). This model will incorporate the `sample_weight` calculated during reject inference but will *not* yet have monotonic constraints applied.
+
+## Configure and Train AutoGluon Model
+
+Set up AutoGluon to train on the TTD data, specifying the label (`default_flag`), sample weight column, and excluding complex models like Neural Networks to favor interpretability.
+
+Sample weights are used only during the fit() process to influence how the model learns from the training data. Once the model is trained, predictions are made based solely on the input features the model learned from. You only need to provide the feature columns in the DataFrame passed to `predict()` or `predict_proba()`.
+
+```{python}
+#| label: tbl-ttd-modeling-initial
+#| tbl-cap: "Leaderboard for initial TTD Model"
+
+label = 'default_flag'
+weight_col = 'sample_weight'
+        
+# --- AutoGluon Configuration ---
+model_folder_ttd_initial = '../Artifacts/models/Lab02_ag_models_TTD_Initial'
+
+# Hyperparameters: Limit tree depth for simplicity and interpretability
+custom_hyperparameters = {
+    'GBM': {'num_boost_round': 10000, 'num_leaves': 4},
+    'CAT': {'iterations': 10000, 'depth': 2}
+}
+excluded_model_types = ['NN_TORCH', 'FASTAI', 'KNN'] 
+
+# Arguments for TabularPredictor initialization (passed via wrapper)
+predictor_args = {
+    'problem_type': 'binary',
+    'eval_metric': 'roc_auc', 
+    'path': model_folder_ttd_initial,
+    'sample_weight': weight_col         # key parameter for Fuzz Augmentation
+}
+
+# Arguments for TabularPredictor.fit (passed via wrapper)
+fit_args = {
+    'presets': {
+        'holdout_frac': 0.2,
+        'excluded_model_types': excluded_model_types,
+        'hyperparameters': custom_hyperparameters, 
+        'time_limit': 300
+    },
+    'num_cpus': num_jobs
+}
+
+global_set_seed(random_seed) # Set global seed
+
+# Train model using the helper function
+ag_model_initial_wrapped = train_autogluon_model(
+    df_train=df_ttd_train,
+    label=label,
+    weight_col=weight_col,
+    modeling_features=modeling_features, # Use derived features list
+    model_folder=model_folder_ttd_initial,
+    predictor_args=predictor_args,
+    fit_args=fit_args
+)
+
+# Access the underlying predictor for leaderboard etc. (optional, as helper prints it)
+ag_predictor_initial = ag_model_initial_wrapped.predictor
+
+
+```
+
+# Initial Model Diagnostics (PDP/ICE)
+
+**Goal:** Analyze the behavior of the *initial, unconstrained* TTD model. Use Partial Dependence Plots (PDP) and Individual Conditional Expectation (ICE) plots to understand how the model's predictions change on average (PDP) and for individual instances (ICE) as key feature values vary. This helps identify if the model learned relationships that contradict business logic (e.g., non-monotonic trends).
+
+
+```{python}
+#| label: fig-pdp-ice-initial
+#| fig-cap: "PDP/ICE plots for the initial TTD model"
+
+%matplotlib inline
+
+# Get all features from ag_model.predictor
+all_features = ag_model_initial_wrapped.predictor.features()
+
+# Get categorical features from ag_model.predictor's feature metadata
+categorical_features = ag_model_initial_wrapped.predictor.feature_metadata.get_features(valid_raw_types=['category'])
+
+# Get numeric features from ag_model.predictor's feature metadata
+numeric_features = ag_model_initial_wrapped.predictor.feature_metadata.get_features(valid_raw_types=['int', 'float', 'int64', 'float64', 'int32', 'float32'])
+
+
+show_pdp(wrappedAGModel = ag_model_initial_wrapped,
+        list_features = all_features, 
+        list_categ_features = categorical_features if categorical_features else None,
+        df = df_ttd_train.drop(columns=[label, weight_col]),
+        show_ice=True,
+    sampSize=25_000,
+    n_jobs=num_jobs
+        )
+```
+
+**Interpretation:** 
+
+Examine the PDP (red dashed line) and ICE (thin blue lines) for each feature:
+
+- Does `loan_amnt` consistently increase the predicted probability?
+- Does `dti` consistently increase the predicted probability?
+- Does `credit_score` consistently decrease the predicted probability?
+
+If any of these plots show non-monotonic behavior (e.g., the average trend goes up then down, or vice-versa), it violates our business intuition and suggests that applying monotonic constraints is necessary. The ICE lines show if this behavior is consistent across all samples or if there's significant heterogeneity.
+
+# Applying Monotonic Constraints
+
+**Concept:** Monotonic constraints force the model to learn relationships that align with business expectations. We specify whether a feature should have a non-decreasing (+) or non-increasing (-) relationship with the target probability. AutoGluon passes these constraints to underlying models that support them (like LightGBM, XGBoost).
+
+**Goal:** Define monotonic constraints based on business logic (e.g., `dti` increases risk, `credit_score` decreases risk) and retrain the AutoGluon model on the TTD data with these constraints enforced.
+
+## Define Constraints and Retrain Model
+
+Specify the desired monotonic relationship for key features using AutoGluon's `feature_metadata` and retrain the model.
+
+```{python}
+#| label: tbl-monotonic-constraints-setup-train
+#| tbl-cap: "Leaderboard for constrained TTD Model"
+
+
+print("Training constrained AutoGluon model with monotonic constraints via hyperparameters...")
+# Define monotonic constraints for boosting models
+
+
+monotone_constraints_dict = {'loan_amnt': 1, 'dti': 1, 'credit_score': -1, 'emp_length': -1}
+
+monotone_constraints_ordered = [monotone_constraints_dict.get(f, 0) for f in all_features] # Default to 0 if feature not in dict
+
+# Update hyperparameters to include monotonic constraints
+custom_hyperparameters_constrained = {
+    'GBM': {**custom_hyperparameters['GBM'], 'monotone_constraints': monotone_constraints_ordered},
+    'CAT': {**custom_hyperparameters['CAT'], 'monotone_constraints': monotone_constraints_dict} # CatBoost uses dict
+}
+
+# Clean up previous model folder
+model_folder_ttd_constrained = '../Artifacts/models/Lab02_ag_models_TTD_Constrained'
+
+# Prepare predictor and fit arguments (reuse from initial, update path and hyperparameters)
+predictor_args_constrained = predictor_args.copy()
+predictor_args_constrained['path'] = model_folder_ttd_constrained
+
+fit_args_constrained = {
+    'presets': {
+        'hyperparameters': custom_hyperparameters_constrained,
+        'excluded_model_types': excluded_model_types,
+        'holdout_frac': 0.2,
+        'time_limit': 300
+    },
+    'num_cpus': num_jobs
+}
+
+global_set_seed(random_seed) # Set global seed
+
+# Train constrained model using the helper function
+ag_model_constrained_wrapped = train_autogluon_model(
+    df_train=df_ttd_train,
+    label=label,
+    weight_col=weight_col,
+    modeling_features=modeling_features, # Use features from initial model
+    model_folder=model_folder_ttd_constrained,
+    predictor_args=predictor_args_constrained,
+    fit_args=fit_args_constrained
+)
+
+# Access the underlying predictor (optional, as helper prints leaderboard)
+ag_predictor_constrained = ag_model_constrained_wrapped.predictor
+
+
+```
+
+# Verifying Constraints (PDP/ICE)
+
+**Goal:** Re-run the PDP/ICE plots on the *constrained* model to visually confirm that the specified monotonic relationships for `loan_amnt`, `dti`, and `credit_score` are now enforced.
+
+```{python}
+#| label: fig-pdp-ice-constrained
+#| fig-cap: "PDP/ICE plots for the constrained TTD model"
+
+
+print("Generating PDP/ICE plots for the constrained model to verify monotonic behavior...")
+# Extract feature lists from the constrained predictor
+all_features_constrained = ag_model_constrained_wrapped.predictor.features()
+categorical_features_constrained = ag_model_constrained_wrapped.predictor.feature_metadata.get_features(valid_raw_types=['category'])
+# Prepare DataFrame for plotting (drop label and weight)
+plot_df_constrained = df_ttd_train.drop(columns=[label, weight_col])
+# Display PDP/ICE using the helper
+show_pdp(
+    wrappedAGModel=ag_model_constrained_wrapped,
+    list_features=all_features_constrained,
+    list_categ_features=categorical_features_constrained if categorical_features_constrained else None,
+    df=plot_df_constrained,
+    show_ice=True,
+    sampSize=25_000,
+    n_jobs=num_jobs
+)
+
+```
+
+**Interpretation:** Carefully examine the PDP curves (red dashed lines) for `loan_amnt`, `dti`, and `credit_score`. They should now exhibit the enforced monotonic behavior: non-decreasing for `loan_amnt` and `dti`, and non-increasing for `credit_score`. If the curves are flat or follow the expected trend without reversals, the constraints have been successfully applied.
+
+# Evaluation & Scoring the Test Set
+
+**Goal:** Evaluate the performance of the final *constrained* model on the held-out TTD test set. Convert predicted PDs into a 3-digit scores and analyze the results using a KS table.
+
+## Prepare Test Set and Evaluate
+
+**Goal:** Apply the same feature processing steps used for the training data to the *accepted* and *rejected* test sets. For the rejected applicants, use the `ri_model` to estimate their reject inference weights. Combine the accepted and rejected test sets, ensuring that the `sample_weight` is set to 1 for accepted applicants and the rejected inference weights are used for rejected applicants.
+
+```{python}
+#| label: tbl-test-weighted-default-rates
+#| tbl-cap: "Weighted default rates for TTD Test Data"
+
+print("--- Preparing TTD Test Set ---")
+
+# 1. Process Accepted Test Data
+print("Processing accepted test data...")
+df_accepted_test_common = process_lending_data(
+    df=df_accepted_test,
+    source_type='accepted',
+    fillMissing_loanamnt=rejected_train_median_loan_amnt, # Use values derived from training
+    fillMissing_emp_length=rejected_train_median_emp_length,
+    fillMissing_dti=rejected_train_p90_dti,
+    fillMissing_credit_score=rejected_train_p10_credit_score
+)
+
+# 2. Process Rejected Test Data
+print("Processing rejected test data...")
+df_rejected_test_common = process_lending_data(
+    df=df_rejected_test,
+    source_type='rejected',
+    fillMissing_loanamnt=rejected_train_median_loan_amnt, # Use values derived from training
+    fillMissing_emp_length=rejected_train_median_emp_length,
+    fillMissing_dti=rejected_train_p90_dti,
+    fillMissing_credit_score=rejected_train_p10_credit_score
+)
+
+# 3. Create TTD Test Set using Fuzzy Augmentation
+print("Creating TTD test set using RI model and Fuzzy Augmentation...")
+df_ttd_test_full = create_TTD_data(
+    ri_model=ri_model,
+    df_rejected=df_rejected_test_common,
+    df_accepted=df_accepted_test_common,
+    ri_features=ri_features, # Features used by ri_model
+    modeling_features=modeling_features, # Features to keep in the final TTD set
+    target_col=target_col
+)
+
+print(f"TTD test set created. Shape: {df_ttd_test_full.shape}")
+
+# 4. Summarize the TTD Test Set by Source using helper function
+summary_default_rates_test = summarize_ttd_by_source(
+    df_ttd=df_ttd_test_full,
+    target_col=target_col,
+    weight_col='sample_weight',
+    source_col='source'
+)
+
+```
+
+```{python}
+# | label: weighted-AUC
+
+# 5. Evaluate the Constrained Model on the TTD Test Set
+print("\n--- Evaluating Constrained Model on TTD Test Set ---")
+
+# Prepare features for prediction - use the features the model was trained on
+X_test_ttd = df_ttd_test_full[ag_model_constrained_wrapped.feature_names_] 
+y_true_ttd = df_ttd_test_full['default_flag']
+weights_test_ttd = df_ttd_test_full['sample_weight']
+
+# Predict probabilities using the wrapped model
+pred_proba_ttd = ag_model_constrained_wrapped.predict_proba(X_test_ttd)[:, 1]
+
+# Create results DataFrame
+df_test_results = df_ttd_test_full.copy()
+df_test_results['pred_proba'] = pred_proba_ttd
+
+# Calculate weighted AUC for the entire TTD test set
+auc_ttd_weighted = roc_auc_score(y_true_ttd, pred_proba_ttd, sample_weight=weights_test_ttd)
+print(f"Weighted AUC on entire TTD Test Set: {auc_ttd_weighted:.4f}")
+
+# Calculate unweighted AUC for the entire TTD test set
+auc_ttd_unweighted = roc_auc_score(y_true_ttd, pred_proba_ttd)
+print(f"Unweighted AUC on entire TTD Test Set: {auc_ttd_unweighted:.4f}")
+
+```
+
+## Convert Probability (PD) to Score
+
+**Concept:** Convert the model's predicted probability of default (PD) into a more intuitive 3-digit credit score (e.g., 300-850). Lower scores indicate higher risk.
+
+
+**Formulas:** 
+
+$Score = BaseScore - Factor \cdot \ln(OddsBad)$
+
+where $OddsBad = \frac{PD}{1 - PD}$
+
+$Factor = \frac{PDO}{\ln(2)}$.
+
+
+
+```{python}
+#| label: fig-convert-pd-to-score
+#| fig-cap: "Distribution of Calculated Scores (TTD Test Set)"
+
+user_pdo = 40
+user_basescore = 680
+
+print("Converting predicted probabilities to scores...")
+# Use the defined helper function
+df_test_results['score'] = calculate_score(
+    df_test_results['pred_proba'], 
+    pdo=user_pdo, 
+    base_score=user_basescore
+)
+
+print("Scores calculated and added to test results.")
+print("\nScore Distribution Summary:")
+print(df_test_results['score'].describe())
+
+# Plot score distribution
+plt.figure(figsize=(10, 5))
+sns.histplot(df_test_results['score'], bins=50, kde=True)
+plt.title('Distribution of Calculated Scores (TTD Test Set)')
+plt.xlabel('Score')
+plt.ylabel('Frequency')
+plt.grid(axis='y', alpha=0.5)
+plt.show()
+
+
+```
+
+## Build KS Table
+
+**Concept:** In credit scorecards, the Kolmogorov-Smirnov (KS) statistic measures how well the scorecard separates "goods" (non-defaults) from "bads" (defaults). It quantifies the maximum difference between the cumulative distribution functions of the scores for the good and bad populations across different score ranges (bins). A higher KS value indicates better separation power of the scorecard.
+
+A model with high KS would generate high PD predictions for defaulted loans and low PD predictions for non-defaulted loans. Ideally, the PD predictions from the two target classes should not overlap. While perfect separation is rarely achieved in practice, a high KS signifies the model is closer to this ideal.
+
+```{python}
+#| label: tbl-build-ks-table
+#| tbl-cap: "KS Table for Constrained Model on TTD Test Set"
+
+
+print("Generating KS table using scores and sample weights...")
+ks_results_table = ks_table(
+    data=df_test_results,
+    y_true_col='default_flag',
+    y_pred_col='score',
+    n_bins=20,
+    is_score=True,
+    sample_weight_col='sample_weight'
+)
+display(ks_results_table)
+
+```
+
+Plot cumulative bad rates and good rates to visualize the KS statistic.
+
+```{python}
+#| label: fig-cumulative-rates
+#| fig-cap: "KS Plot: Cumulative Bad and Good Rates"
+
+
+print("Plotting cumulative bad rates and good rates to visualize the KS statistic...")
+
+plt.figure(figsize=(10, 6))
+plt.plot(ks_results_table['cum_bads_pct'], label='Cumulative Bad Rate (%)', color='red', marker='o')
+plt.plot(ks_results_table['cum_goods_pct'], label='Cumulative Good Rate (%)', color='blue', marker='o')
+plt.fill_between(range(len(ks_results_table)), 
+                    ks_results_table['cum_bads_pct'], 
+                    ks_results_table['cum_goods_pct'], 
+                    color='gray', alpha=0.2, label='KS Gap')
+
+# Highlight the maximum KS point
+max_ks_idx = ks_results_table['ks'].idxmax()
+max_ks_value = ks_results_table.loc[max_ks_idx, 'ks']
+plt.axvline(x=max_ks_idx, color='green', linestyle='--', label=f'Max KS = {max_ks_value:.2f}')
+
+# Set x-ticks to average score from each bin
+y_pred_col_used = 'score' # The column used in ks_table call
+avg_score_col_name = f'avg_{y_pred_col_used}'
+
+if avg_score_col_name in ks_results_table.columns:
+    avg_scores = ks_results_table[avg_score_col_name]
+    plt.xticks(ticks=range(len(avg_scores)), labels=[f"{score:.0f}" for score in avg_scores], rotation=45)
+    plt.xlabel(f'Average {y_pred_col_used.capitalize()} (per Bin)') # Dynamic label
+else:
+    print(f"Warning: Column '{avg_score_col_name}' not found in KS table for x-axis labels.")
+    plt.xlabel('Bin Index') # Fallback label
+
+plt.title('Cumulative Bad and Good Rates with KS Statistic')
+plt.ylabel('Cumulative Percentage (%)')
+plt.legend(loc='best')
+plt.grid(alpha=0.5)
+plt.tight_layout()
+plt.show()
+
+```
+
+**Interpretation:** A KS > 30 is often acceptable, > 40 good, > 50 excellent. These ranges are general guidelines often cited in the industry; the acceptable KS level depends heavily on the specific business context and application.
+
+# Decision Threshold Selection
+
+## Prepare Calibration Data for Thresholding
+
+There are multiple methods to estimate the optimal decision threshold for binary classification. We explored some of those methods in previous lectures and labs:
+
+1. Maximizing F1 score
+2. Maximizing Profit
+
+In this lab, we will use the score associated with the KS statistic.
+
+We will use the calibration data set to estimate the threshold.
+
+First, we need to construct the TTD data for the calibration data.
+
+```{python}
+#| label: tbl-ttd-calibration
+#| tbl-cap: "Weighted default rates for TTD Calibration Data"
+
+df_accepted_calib_common = process_lending_data(
+    df=df_accepted_calib,
+    source_type='accepted',
+    fillMissing_loanamnt=rejected_train_median_loan_amnt, # Use values derived from training
+    fillMissing_emp_length=rejected_train_median_emp_length,
+    fillMissing_dti=rejected_train_p90_dti,
+    fillMissing_credit_score=rejected_train_p10_credit_score
+)
+
+df_rejected_calib_common = process_lending_data(
+    df=df_rejected_calib,
+    source_type='rejected',
+    fillMissing_loanamnt=rejected_train_median_loan_amnt, # Use values derived from training
+    fillMissing_emp_length=rejected_train_median_emp_length,
+    fillMissing_dti=rejected_train_p90_dti,
+    fillMissing_credit_score=rejected_train_p10_credit_score
+)
+
+# Create TTD Calibration Set using Fuzzy Augmentation
+print("Creating TTD calibration set using RI model and Fuzzy Augmentation...")
+df_ttd_calib_full = create_TTD_data(
+    ri_model=ri_model,
+    df_rejected=df_rejected_calib_common,
+    df_accepted=df_accepted_calib_common,
+    ri_features=ri_features, # Features used by ri_model
+    modeling_features=modeling_features, # Features to keep in the final TTD set
+    target_col=target_col
+)
+print(f"TTD calibration set created. Shape: {df_ttd_calib_full.shape}")
+# Summarize the TTD Calibration Set by Source using helper function
+summary_default_rates_calib = summarize_ttd_by_source(
+    df_ttd=df_ttd_calib_full,
+    target_col=target_col,
+    weight_col='sample_weight',
+    source_col='source'
+)
+
+```
+
+## Determine Score Threshold using KS Table
+
+Second, predict each applicant's PD and convert to a score.
+
+```{python}
+#| label: calculate-scores-calib
+
+df_ttd_calib_full['pred_proba'] = ag_model_constrained_wrapped.predict_proba(
+    df_ttd_calib_full[ag_model_constrained_wrapped.feature_names_]
+)[:, 1]
+
+df_ttd_calib_full['score'] = calculate_score(
+    df_ttd_calib_full['pred_proba'], 
+    pdo=user_pdo, 
+    base_score=user_basescore
+)
+```
+
+Finally, find the optimal threshold using the KS statistic.
+
+```{python}
+#| label: tbl-ks-table-calib
+#| tbl-cap: "KS Table for TTD Calibration Data"
+
+ks_calibration = ks_table(
+    data=df_ttd_calib_full,
+    y_true_col='default_flag',
+    y_pred_col='score',
+    n_bins=20,
+    is_score=True,
+    sample_weight_col='sample_weight'
+)
+
+display(ks_calibration)
+```
+
+Based on the KS table for the calibration set, the maximum KS occurs in the bin starting at score 767. We will select 767 as our decision threshold (approve if score >= 767).
+
+In order to simplify model predictions, we will convert the score of 767 into a probability and set the threshold inside AutoGluon.
+
+```{python}
+#| label: set-predict-threshold
+
+score_threshold = 767
+
+PD_threshold = score_to_probability(
+    score=score_threshold, 
+    pdo=user_pdo, 
+    base_score=user_basescore
+)
+
+ag_model_constrained_wrapped.predictor.set_decision_threshold(PD_threshold)
+
+ag_model_constrained_wrapped.predictor.save() # Save the model with the new threshold
+```
+
+## Evaluate Model Decisions
+
+Now let's evaluate the threshold using the test set in a way that matches how the model would be used in production. 
+
+During training and calibration, we used sample weights and cloned the rejected applicants to correct for selection bias (since we don't know their true outcomes). However, when scoring **new** applicants, we do not know their outcomes and do not use sample weights or cloning.
+
+Therefore, to simulate production scoring, we will evaluate the model on the test set by setting all sample weights to 1 and including each applicant only once (no cloning of rejects).
+
+Note that this evaluation differs from the weighted KS calculation in Section 8. There, we assessed the model's ability to separate goods and bads according to the weighted distribution it was trained on. Here, we are simulating the practical application of the chosen score threshold (767) to new, individual applicants (without weighting or cloning) to see the resulting approval/rejection rates.
+
+```{python}
+#| label: tbl-ttd-data-noCloning
+#| tbl-cap: "Sample of TTD Test Data (No Cloning)"
+
+df_ttd_test_noCloning = create_TTD_data(
+    ri_model=None,
+    df_rejected=df_rejected_test_common,
+    df_accepted=df_accepted_test_common,
+    ri_features=None,
+    modeling_features=modeling_features,
+    target_col=target_col,
+    clone_rejected=False
+)
+
+display(df_ttd_test_noCloning.sample(100).head())
+```
+
+We can score the applicants in the test set and determine how many applicants are accepted or rejected by the TTD model.
+
+```{python}
+#| label: tbl-ttd-model-decisions
+#| tbl-cap: "Model Decisions on TTD Test Set (No Cloning)"
+
+df_ttd_test_noCloning['model_decision'] = ag_model_constrained_wrapped.predict(
+    df_ttd_test_noCloning[ag_model_constrained_wrapped.feature_names_]
+)
+
+df_ttd_test_noCloning['model_decision'] = df_ttd_test_noCloning['model_decision'].apply(lambda x: 'Model_Reject' if x==1 else 'Model_Approve')
+
+# Compare model decisions to actual outcomes
+print("\n--- Comparing Model Decisions to Actual Outcomes ---")
+
+# Create a cross-tabulation of model decision vs actual outcome
+comparison = pd.crosstab(
+    df_ttd_test_noCloning['model_decision'],
+    df_ttd_test_noCloning['source'],
+    margins=True,
+    margins_name='Total'
+)
+
+print("\nCount of model decisions vs. actual outcomes:")
+display(comparison)
+
+```
+
+# Conclusion
+
+In this lab, we built a credit scorecard using LendingClub data. We went through the entire process, from preparing the data to evaluating the final model and choosing a cutoff score. A key part was using data from rejected applications to make the model representative of the full applicant pool (this is called reject inference).
+
+**Key steps and takeaways:**
+
+*   **Preparing Data:** We loaded data for both approved and rejected loans, created useful features, and processed both datasets consistently.
+*   **Checking Feature Trends:** We verified that features like Debt-to-Income (DTI) and credit score behaved as expected (e.g., higher credit score means lower risk). This ensures the model makes business sense.
+*   **Using Rejected Data (Reject Inference):** We trained a simple model on approved loans to predict risk for rejected applicants. We then combined the approved and rejected data, assigning weights to the rejected applicants based on their predicted risk. This helps the main model learn from all applicants (Through-the-Door).
+*   **Training the Scorecard Model:** We used AutoGluon to build the main model. We trained it twice: once normally, and a second time forcing it to follow the expected feature trends (monotonic constraints).
+*   **Understanding the Model:** We used plots (PDP/ICE) to visualize how the model made predictions and to confirm it followed the trends we enforced.
+*   **Checking Performance:** We tested the final model on data it hadn't seen before, using metrics like AUC and the KS statistic. We also converted its risk predictions into easy-to-understand 3-digit scores.
+*   **Choosing a Cutoff Score:** We used the KS statistic on a separate 'calibration' dataset to determine the minimum score needed for loan approval. We then checked how this cutoff performed on the test data.
+
+**Summary:**
+This lab demonstrated a complete process for building a practical credit scorecard. By carefully preparing the data, checking feature relationships, including information from rejected applicants, and using tools like AutoGluon with constraints, we created a model that predicts risk accurately and aligns with business logic. These techniques are valuable for credit risk modeling and other areas where fairness and model understanding are crucial.
