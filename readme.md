@@ -18,9 +18,7 @@ Students are highly encouraged to purchase the following two books for the cours
 
 # Key Repo Files
 
--   `conda_env_requirements.yml` : requirements file that specifies the conda environment for the repository
-
--   `Interpretable ML.code-profile`: configuration file for VS code profile
+-   `conda_env_iml4finance_2026.yml` : cross-platform conda environment for the course
 
 -   `IML4Finance.code-workspace`: workspace file for the local repository
 
@@ -45,26 +43,53 @@ Students are highly encouraged to purchase the following two books for the cours
 
 # Conda Environment
 
-1.  In Windows, click the `Start` button.
-2.  Search for `Miniforge Prompt`.
-3.  Change the directory to the local repository (see Step 5 in the previous section).
-4.  Create the conda environment from the `conda_env_requirements.yml` file:
+1.  Open a terminal.
+
+	On Windows, use `Miniforge Prompt` or a shell where `conda` is initialized.
+
+	On macOS or Linux, use your regular terminal.
+
+2.  Change the directory to the local repository (see Step 5 in the previous section).
+
+3.  Create the conda environment from `conda_env_iml4finance_2026.yml`:
 
 ``` bash
-conda env create -f conda_env_requirements.yml -n env_AutoGluon_202502
+conda env create -f conda_env_iml4finance_2026.yml
 ```
 
-5.  Activate the conda environment:
+`conda_env_iml4finance_2026.yml` is the only supported environment file for this repo.
+
+4.  Activate the conda environment:
 
 ``` bash
-conda activate env_AutoGluon_202502
+conda activate env_iml4finance_2026
 ```
 
-6.  Launch VS Code:
+5.  Launch VS Code:
 
 ``` bash
 code
 ```
+
+Lecture, lab, and rendered output filenames use underscore-based names such as `Lecture_02.qmd`, `Lab_01.qmd`, and `Lecture_02.html` to avoid shell and Quarto issues caused by spaces in file paths.
+
+# Repository Structure
+
+-   `Lectures/`: lecture source files (`.qmd`), rendered lecture outputs (`.html`, `_files/`), lecture PDFs, lecture model folders, `Images/`, and `references.bib`
+
+-   `Labs/`: lab source files (`Lab_01.qmd` through `Lab_04.qmd`), rendered lab outputs (`.html`, `_files/`), EDA reports, and lab model folders
+
+-   `Quizzes/`: quiz scripts and quiz-specific data files
+
+-   `Examples/`: standalone example spreadsheets used in the course
+
+-   `course_utils/`: shared Python utilities for labs and other course materials
+
+-   `Data/`: dataset-specific loaders, documentation, and local data assets
+
+Labs now import shared utilities from `course_utils.helpers`, while lectures continue to use local lecture assets from `Lectures/`.
+
+Rendered Quarto outputs now live beside their source `.qmd` files in `Labs/` and `Lectures/`. Model folders created by the course materials also live beside the `.qmd` files that generate or consume them.
 
 # VS Code Profile
 
