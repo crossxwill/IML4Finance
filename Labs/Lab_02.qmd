@@ -803,7 +803,7 @@ label = 'default_flag'
 weight_col = 'sample_weight'
         
 # --- AutoGluon Configuration ---
-model_folder_ttd_initial = '../Artifacts/models/Lab02_ag_models_TTD_Initial'
+model_folder_ttd_initial = './Lab02_ag_models_TTD_Initial'
 
 # Hyperparameters: Limit tree depth for simplicity and interpretability
 custom_hyperparameters = {
@@ -921,7 +921,7 @@ custom_hyperparameters_constrained = {
 }
 
 # Clean up previous model folder
-model_folder_ttd_constrained = '../Artifacts/models/Lab02_ag_models_TTD_Constrained'
+model_folder_ttd_constrained = './Lab02_ag_models_TTD_Constrained'
 
 # Prepare predictor and fit arguments (reuse from initial, update path and hyperparameters)
 predictor_args_constrained = predictor_args.copy()

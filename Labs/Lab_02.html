@@ -1153,7 +1153,7 @@ Feature: addr_state
 <div class="cell-output cell-output-stdout">
 <pre><code>Using RI features (same as modeling features): ['loan_amnt', 'dti', 'credit_score', 'emp_length']
 Training Reject Inference Logistic Regression model...
-RI model training completed in 31.11 seconds.</code></pre>
+RI model training completed in 32.40 seconds.</code></pre>
 </div>
 </div>
 </section>
@@ -1462,7 +1462,7 @@ Table&nbsp;4: Sample of Augmented TTD Training Data (Fuzzy Augmentation)
 <span id="cb37-2"><a href="#cb37-2"></a>weight_col <span class="op">=</span> <span class="st">'sample_weight'</span></span>
 <span id="cb37-3"><a href="#cb37-3"></a>        </span>
 <span id="cb37-4"><a href="#cb37-4"></a><span class="co"># --- AutoGluon Configuration ---</span></span>
-<span id="cb37-5"><a href="#cb37-5"></a>model_folder_ttd_initial <span class="op">=</span> <span class="st">'../Artifacts/models/Lab02_ag_models_TTD_Initial'</span></span>
+<span id="cb37-5"><a href="#cb37-5"></a>model_folder_ttd_initial <span class="op">=</span> <span class="st">'./Lab02_ag_models_TTD_Initial'</span></span>
 <span id="cb37-6"><a href="#cb37-6"></a></span>
 <span id="cb37-7"><a href="#cb37-7"></a><span class="co"># Hyperparameters: Limit tree depth for simplicity and interpretability</span></span>
 <span id="cb37-8"><a href="#cb37-8"></a>custom_hyperparameters <span class="op">=</span> {</span>
@@ -1513,25 +1513,24 @@ Table&nbsp;5: Leaderboard for initial TTD Model
 </figcaption>
 <div aria-describedby="tbl-ttd-modeling-initial-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <div class="cell-output cell-output-stdout">
-<pre><code>--- Training AutoGluon Model in: ../Artifacts/models/Lab02_ag_models_TTD_Initial ---
-Removed existing AutoGluon folder: ../Artifacts/models/Lab02_ag_models_TTD_Initial
+<pre><code>--- Training AutoGluon Model in: ./Lab02_ag_models_TTD_Initial ---
 Using features: ['loan_amnt', 'dti', 'credit_score', 'emp_length']
 Training data shape: (1956420, 7)
 Sum of weights in training data: 1656420.00</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>AutoGluon training completed in 18.23 seconds.
+<pre><code>AutoGluon training completed in 18.48 seconds.
 
 AutoGluon Leaderboard:
                  model  score_val eval_metric  pred_time_val   fit_time  \
-0             LightGBM   0.735284     roc_auc       0.167308   3.268042   
-1  WeightedEnsemble_L2   0.735284     roc_auc       0.201270   4.998284   
-2             CatBoost   0.733252     roc_auc       0.017539  11.219010   
+0             LightGBM   0.735284     roc_auc       0.176060   3.242524   
+1  WeightedEnsemble_L2   0.735284     roc_auc       0.210701   4.988178   
+2             CatBoost   0.733252     roc_auc       0.012298  11.341047   
 
    pred_time_val_marginal  fit_time_marginal  stack_level  can_infer  \
-0                0.167308           3.268042            1       True   
-1                0.033962           1.730241            2       True   
-2                0.017539          11.219010            1       True   
+0                0.176060           3.242524            1       True   
+1                0.034640           1.745653            2       True   
+2                0.012298          11.341047            1       True   
 
    fit_order  
 0          1  
@@ -1661,7 +1660,7 @@ Figure&nbsp;2
 <span id="cb41-13"><a href="#cb41-13"></a>}</span>
 <span id="cb41-14"><a href="#cb41-14"></a></span>
 <span id="cb41-15"><a href="#cb41-15"></a><span class="co"># Clean up previous model folder</span></span>
-<span id="cb41-16"><a href="#cb41-16"></a>model_folder_ttd_constrained <span class="op">=</span> <span class="st">'../Artifacts/models/Lab02_ag_models_TTD_Constrained'</span></span>
+<span id="cb41-16"><a href="#cb41-16"></a>model_folder_ttd_constrained <span class="op">=</span> <span class="st">'./Lab02_ag_models_TTD_Constrained'</span></span>
 <span id="cb41-17"><a href="#cb41-17"></a></span>
 <span id="cb41-18"><a href="#cb41-18"></a><span class="co"># Prepare predictor and fit arguments (reuse from initial, update path and hyperparameters)</span></span>
 <span id="cb41-19"><a href="#cb41-19"></a>predictor_args_constrained <span class="op">=</span> predictor_args.copy()</span>
@@ -1701,25 +1700,24 @@ Table&nbsp;6: Leaderboard for constrained TTD Model
 <div aria-describedby="tbl-monotonic-constraints-setup-train-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <div class="cell-output cell-output-stdout">
 <pre><code>Training constrained AutoGluon model with monotonic constraints via hyperparameters...
---- Training AutoGluon Model in: ../Artifacts/models/Lab02_ag_models_TTD_Constrained ---
-Removed existing AutoGluon folder: ../Artifacts/models/Lab02_ag_models_TTD_Constrained
+--- Training AutoGluon Model in: ./Lab02_ag_models_TTD_Constrained ---
 Using features: ['loan_amnt', 'dti', 'credit_score', 'emp_length']
 Training data shape: (1956420, 7)
 Sum of weights in training data: 1656420.00</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>AutoGluon training completed in 18.74 seconds.
+<pre><code>AutoGluon training completed in 18.92 seconds.
 
 AutoGluon Leaderboard:
                  model  score_val eval_metric  pred_time_val   fit_time  \
-0             LightGBM   0.734591     roc_auc       0.109611   2.892530   
-1  WeightedEnsemble_L2   0.734591     roc_auc       0.141661   4.532419   
-2             CatBoost   0.733427     roc_auc       0.016081  12.221820   
+0             LightGBM   0.734591     roc_auc       0.110978   2.885149   
+1  WeightedEnsemble_L2   0.734591     roc_auc       0.143452   4.542215   
+2             CatBoost   0.733427     roc_auc       0.011715  12.359550   
 
    pred_time_val_marginal  fit_time_marginal  stack_level  can_infer  \
-0                0.109611           2.892530            1       True   
-1                0.032051           1.639889            2       True   
-2                0.016081          12.221820            1       True   
+0                0.110978           2.885149            1       True   
+1                0.032474           1.657066            2       True   
+2                0.011715          12.359550            1       True   
 
    fit_order  
 0          1  
@@ -2522,7 +2520,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.657035</td>
 <td>10.308608</td>
 <td>1.249952</td>
-<td>9.058657e+00</td>
+<td>9.058657</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
@@ -2535,7 +2533,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.639497</td>
 <td>20.487722</td>
 <td>2.582896</td>
-<td>1.790483e+01</td>
+<td>17.904826</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
@@ -2548,7 +2546,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.450295</td>
 <td>27.387540</td>
 <td>4.539495</td>
-<td>2.284805e+01</td>
+<td>22.848045</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
@@ -2561,7 +2559,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.476733</td>
 <td>34.850684</td>
 <td>6.442332</td>
-<td>2.840835e+01</td>
+<td>28.408352</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
@@ -2574,7 +2572,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.364370</td>
 <td>40.581539</td>
 <td>8.764604</td>
-<td>3.181693e+01</td>
+<td>31.816934</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">5</th>
@@ -2587,7 +2585,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.252973</td>
 <td>46.532999</td>
 <td>12.847023</td>
-<td>3.368598e+01</td>
+<td>33.685976</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">6</th>
@@ -2600,7 +2598,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.209337</td>
 <td>52.707700</td>
 <td>18.264461</td>
-<td>3.444324e+01</td>
+<td>34.443239</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">7</th>
@@ -2613,7 +2611,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.189987</td>
 <td>58.517189</td>
 <td>24.018039</td>
-<td>3.449915e+01</td>
+<td>34.499150</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">8</th>
@@ -2626,7 +2624,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.172551</td>
 <td>63.818040</td>
 <td>29.922801</td>
-<td>3.389524e+01</td>
+<td>33.895239</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">9</th>
@@ -2639,7 +2637,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.158035</td>
 <td>68.634093</td>
 <td>35.883042</td>
-<td>3.275105e+01</td>
+<td>32.751051</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">10</th>
@@ -2652,7 +2650,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.149642</td>
 <td>73.233762</td>
 <td>41.954699</td>
-<td>3.127906e+01</td>
+<td>31.279063</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">11</th>
@@ -2665,7 +2663,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.129127</td>
 <td>77.195145</td>
 <td>48.160787</td>
-<td>2.903436e+01</td>
+<td>29.034358</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">12</th>
@@ -2678,7 +2676,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.130208</td>
 <td>81.206330</td>
 <td>54.384990</td>
-<td>2.682134e+01</td>
+<td>26.821340</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">13</th>
@@ -2691,7 +2689,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.114913</td>
 <td>84.748321</td>
 <td>60.722200</td>
-<td>2.402612e+01</td>
+<td>24.026122</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">14</th>
@@ -2704,7 +2702,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.112103</td>
 <td>88.192177</td>
 <td>67.058325</td>
-<td>2.113385e+01</td>
+<td>21.133852</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">15</th>
@@ -2717,7 +2715,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.100978</td>
 <td>91.296301</td>
 <td>73.478053</td>
-<td>1.781825e+01</td>
+<td>17.818248</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">16</th>
@@ -2730,7 +2728,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.091754</td>
 <td>94.127547</td>
 <td>79.988174</td>
-<td>1.413937e+01</td>
+<td>14.139373</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">17</th>
@@ -2743,7 +2741,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.078404</td>
 <td>96.514778</td>
 <td>86.506359</td>
-<td>1.000842e+01</td>
+<td>10.008419</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">18</th>
@@ -2756,7 +2754,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.065710</td>
 <td>98.534188</td>
 <td>93.176049</td>
-<td>5.358140e+00</td>
+<td>5.358140</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">19</th>
@@ -2769,7 +2767,7 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <td>0.047526</td>
 <td>100.000000</td>
 <td>100.000000</td>
-<td>1.421085e-14</td>
+<td>0.000000</td>
 </tr>
 </tbody>
 </table>
@@ -4268,7 +4266,7 @@ Table&nbsp;12: Model Decisions on TTD Test Set (No Cloning)
 <span id="cb66-835"><a href="#cb66-835"></a>weight_col <span class="op">=</span> <span class="st">'sample_weight'</span></span>
 <span id="cb66-836"><a href="#cb66-836"></a>        </span>
 <span id="cb66-837"><a href="#cb66-837"></a><span class="co"># --- AutoGluon Configuration ---</span></span>
-<span id="cb66-838"><a href="#cb66-838"></a>model_folder_ttd_initial <span class="op">=</span> <span class="st">'../Artifacts/models/Lab02_ag_models_TTD_Initial'</span></span>
+<span id="cb66-838"><a href="#cb66-838"></a>model_folder_ttd_initial <span class="op">=</span> <span class="st">'./Lab02_ag_models_TTD_Initial'</span></span>
 <span id="cb66-839"><a href="#cb66-839"></a></span>
 <span id="cb66-840"><a href="#cb66-840"></a><span class="co"># Hyperparameters: Limit tree depth for simplicity and interpretability</span></span>
 <span id="cb66-841"><a href="#cb66-841"></a>custom_hyperparameters <span class="op">=</span> {</span>
@@ -4386,7 +4384,7 @@ Table&nbsp;12: Model Decisions on TTD Test Set (No Cloning)
 <span id="cb66-957"><a href="#cb66-957"></a>}</span>
 <span id="cb66-958"><a href="#cb66-958"></a></span>
 <span id="cb66-959"><a href="#cb66-959"></a><span class="co"># Clean up previous model folder</span></span>
-<span id="cb66-960"><a href="#cb66-960"></a>model_folder_ttd_constrained <span class="op">=</span> <span class="st">'../Artifacts/models/Lab02_ag_models_TTD_Constrained'</span></span>
+<span id="cb66-960"><a href="#cb66-960"></a>model_folder_ttd_constrained <span class="op">=</span> <span class="st">'./Lab02_ag_models_TTD_Constrained'</span></span>
 <span id="cb66-961"><a href="#cb66-961"></a></span>
 <span id="cb66-962"><a href="#cb66-962"></a><span class="co"># Prepare predictor and fit arguments (reuse from initial, update path and hyperparameters)</span></span>
 <span id="cb66-963"><a href="#cb66-963"></a>predictor_args_constrained <span class="op">=</span> predictor_args.copy()</span>

@@ -134,7 +134,7 @@ df_ttd_test_noCloning = pd.read_parquet("../Data/lendingclub/lendingclub_ttd_tes
 ```{python}
 #| label: load-model
 
-model_path = "../Artifacts/models/Lab02_ag_models_TTD_Constrained"
+model_path = "./Lab02_ag_models_TTD_Constrained"
 
 AutoGluon_TTD_model = load_autogluon(
     folder_path=model_path,

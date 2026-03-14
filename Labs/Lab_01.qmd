@@ -402,7 +402,7 @@ test_data = TabularDataset(df_campaign_1_test_subset)
 Remove the model folder if it already exists.
 
 ```{python}
-model_folder = '../Artifacts/models/Lab01_ag_models_NoTransform'
+model_folder = './Lab01_ag_models_NoTransform'
 
 remove_ag_folder(model_folder)
 ```
@@ -1104,7 +1104,7 @@ class IndexPreservingSelectKBest(BaseEstimator, TransformerMixin):
 
 ```{python}
 # remove ag folder if exists
-filter_model_folder = '../Artifacts/models/Lab01_ag_models_FilterMethod'
+filter_model_folder = './Lab01_ag_models_FilterMethod'
 remove_ag_folder(filter_model_folder)
 
 # ensures that the output after is transformation is a data frame
@@ -1190,7 +1190,7 @@ The chunk below creates a scikit-learn pipeline that uses `SelectFromModel` and 
 
 ```{python}
 # remove ag folder if exists
-embedded_model_folder = '../Artifacts/models/Lab01_ag_models_EmbeddedMethod'
+embedded_model_folder = './Lab01_ag_models_EmbeddedMethod'
 remove_ag_folder(embedded_model_folder)
 
 ag_model_embedded_method = Pipeline([
@@ -1274,7 +1274,7 @@ The chunk below creates a scikit-learn pipeline that uses forward selection (`Se
 
 ```{python}
 # remove ag folder if exists
-wrapper_model_folder = '../Artifacts/models/Lab01_ag_models_WrapperMethod'
+wrapper_model_folder = './Lab01_ag_models_WrapperMethod'
 remove_ag_folder(wrapper_model_folder)
 
 ag_model_wrapper_method = Pipeline([

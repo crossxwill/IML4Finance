@@ -10,7 +10,6 @@ Data/home-credit-default-risk
 *.vtt
 *.mp4
 *.zip
-Artifacts/logs/*
 .DS_Store
 .venv/
 .venv/*

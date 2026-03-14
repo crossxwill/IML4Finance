@@ -757,7 +757,7 @@ display(summary_df.style.hide(axis='index'))
 #| message: false
 
 # Static save path for the model
-save_path = '../Artifacts/models/kgb_model'
+save_path = './kgb_model'
 
 # Remove the folder if it exists
 remove_ag_folder(save_path)
@@ -899,7 +899,7 @@ plt.show()
 #| output: false 
 
 # Static save path for augmented model (all-bad assumption)
-save_path = '../Artifacts/models/augmented_all_bad_model'
+save_path = './augmented_all_bad_model'
 
 # Remove the folder if it exists
 remove_ag_folder(save_path)
@@ -1051,7 +1051,7 @@ display(error_df.style.hide(axis='index'))
 
 
 # Static save path for augmented model (bureau proxy)
-save_path = '../Artifacts/models/augmented_bureau_proxy_model'
+save_path = './augmented_bureau_proxy_model'
 
 # Remove the folder if it exists
 remove_ag_folder(save_path)

@@ -953,7 +953,7 @@ Setup AutoGluon parameters.
 #| label: setup-autogluon-do-nothing
 
 strategy_name_1 = "1. Do Nothing"
-model_folder_s1 = "../Artifacts/models/Lab04_ag_models_s1_do_nothing"
+model_folder_s1 = "./Lab04_ag_models_s1_do_nothing"
 remove_ag_folder(model_folder_s1)
 
 predictor_args_s1 = {
@@ -1002,12 +1002,15 @@ leaderboard_s1 = ag_model_s1_predictor.leaderboard(
 display(leaderboard_s1)
 ```
 
-Set the best model to CatBoost due to inference speed and performance.
+Prefer CatBoost due to inference speed and performance when it is available.
 
 ```{python}
 #| label: set-best-model-s1
 
-ag_model_s1_predictor.set_model_best('CatBoost')
+available_models_s1 = ag_model_s1_predictor.model_names()
+selected_best_model_s1 = 'CatBoost' if 'CatBoost' in available_models_s1 else ag_model_s1_predictor.model_best
+
+ag_model_s1_predictor.set_model_best(selected_best_model_s1)
 
 ag_model_s1.predictor.save()  # Save the predictor for later use
 
@@ -1148,7 +1151,7 @@ Setup AutoGluon parameters.
 #| label: setup-autogluon-class-sensitive-evaluation
 
 strategy_name_2 = "2. Class Sensitive Evaluation"
-model_folder_s2 = "../Artifacts/models/Lab04_ag_models_s2_class_sensitive"
+model_folder_s2 = "./Lab04_ag_models_s2_class_sensitive"
 remove_ag_folder(model_folder_s2)
 
 predictor_args_s2 = {
@@ -1200,12 +1203,15 @@ leaderboard_s2 = ag_model_s2_predictor.leaderboard(
 display(leaderboard_s2)
 ```
 
-Set the best model to CatBoost due to inference speed and performance.
+Prefer CatBoost due to inference speed and performance when it is available.
 
 ```{python}
 #| label: set-best-model-s2
 
-ag_model_s2_predictor.set_model_best('CatBoost')
+available_models_s2 = ag_model_s2_predictor.model_names()
+selected_best_model_s2 = 'CatBoost' if 'CatBoost' in available_models_s2 else ag_model_s2_predictor.model_best
+
+ag_model_s2_predictor.set_model_best(selected_best_model_s2)
 
 ag_model_s2.predictor.save()  # Save the predictor for later use
 
@@ -1345,7 +1351,7 @@ Setup AutoGluon parameters.
 #| label: setup-autogluon-cost-sensitive
 
 strategy_name_3 = "3. Cost Sensitive Learning"
-model_folder_s3 = "../Artifacts/models/Lab04_ag_models_s3_cost_sensitive"
+model_folder_s3 = "./Lab04_ag_models_s3_cost_sensitive"
 remove_ag_folder(model_folder_s3)
 
 predictor_args_s3 = {
@@ -1395,12 +1401,15 @@ leaderboard_s3 = ag_model_s3_predictor.leaderboard(
 display(leaderboard_s3)
 ```
 
-Set the best model to CatBoost due to inference speed and performance.
+Prefer CatBoost due to inference speed and performance when it is available.
 
 ```{python}
 #| label: set-best-model-s3
 
-ag_model_s3_predictor.set_model_best('CatBoost')
+available_models_s3 = ag_model_s3_predictor.model_names()
+selected_best_model_s3 = 'CatBoost' if 'CatBoost' in available_models_s3 else ag_model_s3_predictor.model_best
+
+ag_model_s3_predictor.set_model_best(selected_best_model_s3)
 
 ag_model_s3.predictor.save()  # Save the predictor for later use
 
@@ -1589,7 +1598,7 @@ if X_train.empty or X_train_smote.empty:
 else:
     print("\n--- Strategy 4: Class-Based Resampling (SMOTE) ---")
     strategy_name_4 = "4. Resampling (SMOTE)"
-    model_folder_s4 = "../Artifacts/models/Lab04_ag_models_s4_smote"
+    model_folder_s4 = "./Lab04_ag_models_s4_smote"
     remove_ag_folder(model_folder_s4)
 
     predictor_args_s4 = {
