@@ -30,6 +30,8 @@ dependencies:
   - openpyxl=3.1.5
   - pypdf=6.6.0
   - pip=25.3
+  - ipykernel=6.29.5
+  - setuptools=75.8.2
   - pip:
       - mljar-scikit-plot==0.3.12
       - polars==1.37.1
