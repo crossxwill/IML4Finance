@@ -2,7 +2,7 @@
 
 Northwestern University
 
-[MLDS 490-0-1 Special Topics](https://www.mccormick.northwestern.edu/machine-learning-data-science/curriculum/descriptions/mlds-490-1.html)
+[MLDS 490-0-1 Special Topics](https://www.mccormick.northwestern.edu/machine-learning-data-science/curriculum/descriptions/mlds-490-finance.html)
 
 # Syllabus and Data
 
@@ -21,6 +21,8 @@ Students are highly encouraged to purchase the following two books for the cours
 -   `conda_env_iml4finance_2026.yml` : cross-platform conda environment for the course
 
 -   `IML4Finance.code-workspace`: workspace file for the local repository
+
+-	`.vscode/Interpretable ML.code-profile`: VS code profile of extensions and keyboard shortcuts
 
 # System Prerequisites
 
@@ -94,10 +96,14 @@ Rendered Quarto outputs now live beside their source `.qmd` files in `Labs/` and
 # VS Code Profile
 
 1.  Open VS Code
-2.  Type `Ctrl + Shift + P`
+2.  Type `Ctrl + Shift + P` on Windows and `Cmd + Shift + P` on Mac
 3.  Type `>Profiles: New Profile`
 4.  Delete the profile that is called "Untitled"
 5.  Click on the drop-down arrow next to the "New Profile" button
 6.  Click `Import Profile`
 7.  Click `Select File`
 8.  Choose `Interpretable ML.code-profile`
+
+# Hidden folders on a Mac
+
+To see hidden folders (that start with a dot) on a Mac, toggle on/off with `Cmd + Shift + .`.
