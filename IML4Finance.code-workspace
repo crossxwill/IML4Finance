@@ -5,6 +5,7 @@
 		}
 	],
 	"settings": {
+		"python.useEnvironmentsExtension": true,
 		"workbench.editorAssociations": {
 			"*.copilotmd": "vscode.markdown.preview.editor",
 			"file:/**/*.csv": "jupyter-data-wrangler",
