@@ -77,9 +77,9 @@ Lecture, lab, and rendered output filenames use underscore-based names such as `
 
 # Repository Structure
 
--   `Lectures/`: lecture source files (`.qmd`), rendered lecture outputs (`.html`, `_files/`), lecture PDFs, lecture model folders, `Images/`, and `references.bib`
+-   `Lectures/`: lecture source files (`.qmd`), rendered lecture outputs (`.html`, `_files/`), lecture PDFs, tracked model folders, `Images/`, and `references.bib`
 
--   `Labs/`: lab source files (`Lab_01.qmd` through `Lab_04.qmd`), rendered lab outputs (`.html`, `_files/`), EDA reports, and lab model folders
+-   `Labs/`: lab source files (`Lab_01.qmd` through `Lab_04.qmd`), rendered lab outputs (`.html`, `_files/`), and EDA reports
 
 -   `Quizzes/`: quiz scripts and quiz-specific data files
 
@@ -91,7 +91,7 @@ Lecture, lab, and rendered output filenames use underscore-based names such as `
 
 Labs now import shared utilities from `course_utils.helpers`, while lectures continue to use local lecture assets from `Lectures/`.
 
-Rendered Quarto outputs now live beside their source `.qmd` files in `Labs/` and `Lectures/`. Model folders created by the course materials also live beside the `.qmd` files that generate or consume them.
+Rendered Quarto outputs now live beside their source `.qmd` files in `Labs/` and `Lectures/`. In the current tracked repo state, model folders are present under `Lectures/`; running course materials may create additional model folders based on the execution working directory.
 
 # VS Code Profile
 
