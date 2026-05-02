@@ -16,13 +16,19 @@ Students are highly encouraged to purchase the following two books for the cours
 
 -   Molnar, Christoph. [*Interpreting Machine Learning Models With SHAP: A Guide With Python Examples and Theory on Shapley Values*](https://christophmolnar.com/books/shap/). Independent publication, 2023.
 
-# Key Repo Files
+# Key Repo Files and Folders
 
--   `conda_env_requirements.yml` : requirements file that specifies the conda environment for the repository
+-   `conda_env_requirements.yml` : conda environment definition for the repository
 
 -   `Interpretable ML.code-profile`: configuration file for VS code profile
 
 -   `IML4Finance.code-workspace`: workspace file for the local repository
+
+-   `course_utils/`: shared Python helper functions used across course materials
+
+-   `Data/`: dataset-specific loading and preprocessing scripts for the course data sets
+
+-   `Lectures/`: Quarto source files (`.qmd`), rendered lecture and lab outputs (`.html`), and saved model/report artifacts used in class
 
 # System Prerequisites
 
