@@ -94,7 +94,7 @@ execute:
 -   **Home Equity Products**:
     -   Home equity loans: Secured, term loan, fixed rate
     -   HELOCs: Secured, line of credit, variable rate, draw period followed by amortizing period
--   **Student Loans**: Unsecured, term loan. Federal student loans typically have fixed rates, while private student loans may have fixed or variable rates.
+-   **Student Loans**: Unsecured, term loan, fixed rate
 
 # Credit Scoring Systems
 
@@ -169,26 +169,21 @@ execute:
 
 ## PDO: Mathematical Details - Part 1 {.smaller}
 
--   **Mathematical relationship**: Let $p$ be the probability of default. The score is calculated as:
-
-$$\text{Score} = A - B \cdot \ln\left(\frac{p}{1-p}\right)$$
-
-where:
-    -   $\frac{p}{1-p}$ represents the **odds of default** (the ratio of default probability to non-default probability).
-    -   $B$ is defined as $\text{PDO}/\ln(2)$. This factor converts log-odds into score points such that adding PDO points to the score exactly halves the odds of default (or equivalently, doubles the odds of being a "good" borrower).
+-   **Mathematical relationship**: Let $p$ be the probability of default and define the odds as $\frac{p}{1-p}$; then: $$\text{Score} = A - B \cdot \ln\left(\frac{p}{1-p}\right)$$
+    -   Here, $B$ is defined as $\text{PDO}/\ln(2)$.
+    -   The scaling factor ($1 / \ln(2)$) ensures that an increase of PDO points in the score exactly doubles the odds of being a "good" borrower.
     -   $A$ is a scaling constant (reference score) to position the score in the desired range.
--   **Key insight**: As the score increases by PDO points, the odds of default are halved. This means higher scores indicate lower default risk.
+-   **Ambiguity in odds definition**: The "odds of being a good borrower" $\frac{1-p}{p}$ is the inverse of the "odds of default" $\frac{p}{1-p}$. In the formula above, as the score increases by PDO points, the odds of default are halved, which is equivalent to saying the odds of being a good borrower are doubled.
 
 ## PDO: Mathematical Details - Part 2 {.smaller}
 
 -   For PDO = 40:
     1.  Calculate $B = 40 / \ln(2) \approx 40 / 0.693 \approx 57.7$.
     2.  If a 650 score corresponds to a 5% default probability ($p=0.05$):
-        -   Compute the odds of default: $\frac{p}{1-p} = \frac{0.05}{0.95} \approx 0.0526$ and $\ln(0.0526) \approx -2.944$.
+        -   Compute the odds: $\frac{0.05}{1-0.05} = \frac{0.05}{0.95} \approx 0.0526$ and $\ln(0.0526) \approx -2.944$.
         -   Then, $650 = A - 57.7 \cdot (-2.944) = A + 169.7$.
         -   Solve for $A \approx 650 - 169.7 \approx 480.3$.
     3.  Final formula: $$\text{Score} = 480.3 - 57.7 \cdot \ln\left(\frac{p}{1-p}\right)$$
-    4.  Verification: A score of 690 ($650 + 40$) should have odds of default equal to $0.0526 / 2 = 0.0263$, which corresponds to $p \approx 2.6\%$ default probability.
 
 ## Industry Standards
 
@@ -197,7 +192,7 @@ where:
 -   **FICO** and **VantageScore** do not disclose exact PDO values
 -   **Typical PDO values**: Range from 20 to 40 points
 -   Credit scoring systems may change PDO when they publish new versions of their models (e.g., FICO 8, FICO 9)
--   A higher PDO (like 40) means **more** points are needed to double the odds of good performance. A lower PDO (like 20) means **fewer** points are needed for the same effect, indicating a more sensitive or discriminating score where small score differences translate to larger changes in odds.
+-   A low PDO (like 20) indicates a less sensitive scoring model, while a high PDO (like 40) indicates a more sensitive model
 
 ## Credit Scores as Risk Rankings {.smaller}
 
@@ -370,17 +365,8 @@ Let's create a simulation to demonstrate how selection bias affects model perfor
 import os
 import shutil
 import random
-CPU_LIMIT = 2
-os.environ['OMP_NUM_THREADS'] = str(CPU_LIMIT)
-os.environ['OPENBLAS_NUM_THREADS'] = str(CPU_LIMIT)
-os.environ['MKL_NUM_THREADS'] = str(CPU_LIMIT)
-os.environ['VECLIB_MAXIMUM_THREADS'] = str(CPU_LIMIT)
-os.environ['NUMEXPR_NUM_THREADS'] = str(CPU_LIMIT)
 import torch
 import numpy as np
-
-num_jobs = CPU_LIMIT
-torch.set_num_threads(num_jobs)
 
 # Data manipulation and visualization
 import duckdb
@@ -399,12 +385,15 @@ from sklearn.inspection import PartialDependenceDisplay
 from sklearn.compose import make_column_transformer, make_column_selector
 from sklearn.ensemble import ExtraTreesClassifier
 from sklearn import set_config
+# from sklearnex import patch_sklearn
 
 # Specialized ML libraries
 from autogluon.tabular import TabularPredictor, TabularDataset
 from ydata_profiling import ProfileReport
 from scikitplot.metrics import plot_cumulative_gain, plot_lift_curve
 from PyALE import ale
+
+# patch_sklearn()
 
 class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
     """
@@ -445,11 +434,10 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
         Whether the estimator has been fitted
     """
     
-    def __init__(self, label, predictor_args=None, fit_args=None, n_jobs=None):
+    def __init__(self, label, predictor_args=None, fit_args=None):
         self.label = label
         self.predictor_args = predictor_args if predictor_args else {}
         self.fit_args = fit_args if fit_args else {}
-        self.n_jobs = n_jobs
         self.predictor = None
         self.classes_ = None
         self.n_features_in_ = None
@@ -485,14 +473,10 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
         train_data = TabularDataset(train_data)
         
         # Initialize and fit AutoGluon predictor
-        fit_args = dict(self.fit_args)
-        if self.n_jobs is not None and fit_args.get('num_cpus') is None:
-            fit_args['num_cpus'] = self.n_jobs
-
         self.predictor = TabularPredictor(
             label=self.label, 
             **self.predictor_args
-        ).fit(train_data, **fit_args)
+        ).fit(train_data, **self.fit_args)
         
         # Store sklearn-specific attributes
         if self.predictor.problem_type in ['binary', 'multiclass']:
@@ -597,8 +581,7 @@ def show_pdp(wrappedAGModel: BaseEstimator,
             list_categ_features: list,
             df: pd.DataFrame,
             xGTzero: bool = False,
-            sampSize: int = 40000,
-            n_jobs: int = num_jobs) -> None:
+            sampSize: int = 40000) -> None:
 
   for feature in list_features:
 
@@ -621,7 +604,7 @@ def show_pdp(wrappedAGModel: BaseEstimator,
         grid_resolution=100,
         ax = ax,
         random_state=2025,
-        n_jobs = n_jobs
+        n_jobs = -1
     )
 
     ax.set_title(f"Partial Dependence for {feature}")
@@ -757,7 +740,7 @@ display(summary_df.style.hide(axis='index'))
 #| message: false
 
 # Static save path for the model
-save_path = './kgb_model'
+save_path = 'kgb_model'
 
 # Remove the folder if it exists
 remove_ag_folder(save_path)
@@ -786,17 +769,15 @@ kgb_predictor = AutoGluonSklearnWrapper(
     fit_args={'holdout_frac': 0.2,
                 'excluded_model_types': ['KNN', 'NN_TORCH'],
                 'presets': 'medium_quality',
-                'time_limit': 180},
-    n_jobs=num_jobs)
+                'time_limit': 180})
 
 kgb_predictor.fit(X_kgb_train, y_kgb_train)
 
-# Use the best model from the trained ensemble
-# Note: CatBoost may not be available if not trained, so we use the actual best model
+# Set the best model to CatBoost
 
-# Get the actual best model name from the predictor
-best_model_name = kgb_predictor.predictor.model_best
-# kgb_predictor.predictor.set_model_best(best_model_name)  # Already set by training
+best_model_name = 'CatBoost'
+
+kgb_predictor.predictor.set_model_best(best_model_name)
 
 # Get predictions on the entire TTD test population
 ttd_predictions = kgb_predictor.predict_proba(X_ttd_test_features)
@@ -899,7 +880,7 @@ plt.show()
 #| output: false 
 
 # Static save path for augmented model (all-bad assumption)
-save_path = './augmented_all_bad_model'
+save_path = 'augmented_all_bad_model'
 
 # Remove the folder if it exists
 remove_ag_folder(save_path)
@@ -924,8 +905,7 @@ augmented_predictor = AutoGluonSklearnWrapper(
     fit_args={'holdout_frac': 0.2,
                 'excluded_model_types': ['KNN', 'NN_TORCH'],
                 'presets': 'medium_quality',
-                'time_limit': 180},
-    n_jobs=num_jobs)
+                'time_limit': 180})
 
 augmented_predictor.fit(X_augmented_train, y_augmented_train)
 
@@ -1051,7 +1031,7 @@ display(error_df.style.hide(axis='index'))
 
 
 # Static save path for augmented model (bureau proxy)
-save_path = './augmented_bureau_proxy_model'
+save_path = 'augmented_bureau_proxy_model'
 
 # Remove the folder if it exists
 remove_ag_folder(save_path)
@@ -1158,15 +1138,14 @@ bureau_proxy_predictor = AutoGluonSklearnWrapper(
     fit_args={'holdout_frac': 0.2,
               'excluded_model_types': ['KNN', 'NN_TORCH'],
               'presets': 'medium_quality',
-              'time_limit': 180},
-    n_jobs=num_jobs
+              'time_limit': 180}
 )
 
 bureau_proxy_predictor.fit(X_bureau_proxy_train, y_bureau_proxy_train)
 
-# Use the best model from the trained ensemble
-best_model = bureau_proxy_predictor.predictor.model_best
-# bureau_proxy_predictor.predictor.set_model_best(best_model)  # Already set by training
+# Set the best model to CatBoost
+best_model = 'CatBoost'  # Specify the best model
+bureau_proxy_predictor.predictor.set_model_best(best_model)
 
 # Get predictions
 bureau_proxy_predictions = bureau_proxy_predictor.predict_proba(X_ttd_test_features)

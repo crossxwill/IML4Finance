@@ -54,12 +54,7 @@ def global_set_seed(seed_value: int = 2025) -> None:
     np.random.seed(seed_value)
     torch.manual_seed(seed_value)
     
-    # Try to set dice_ml seed if available
-    try:
-        import dice_ml
-        dice_ml.utils.helpers.set_random_seed(seed_value)
-    except (ImportError, AttributeError):
-        pass
+
 
 
 # =============================================================================

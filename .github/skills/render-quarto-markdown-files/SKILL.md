@@ -99,7 +99,7 @@ conda activate <env_name>; $env:QUARTO_PYTHON = "<full-python-path>"; quarto ren
 
 Example:
 ```powershell
-conda activate env_iml4finance_2026; $env:QUARTO_PYTHON = "C:\Users\chiuw\miniforge3\envs\env_iml4finance_2026\python.exe"; quarto render Labs/Lab_01.qmd; if ($LASTEXITCODE -eq 0) { echo "Render finished" }
+conda activate env_AutoGluon_202502; $env:QUARTO_PYTHON = "C:\Users\chiuw\miniforge3\envs\env_AutoGluon_202502\python.exe"; quarto render Labs/Lab_01.qmd; if ($LASTEXITCODE -eq 0) { echo "Render finished" }
 ```
 
 ### Error: "Unknown project cache version" / "Assertion failed" (Sass/revealjs)
@@ -123,7 +123,7 @@ Harmless cleanup error. Use `-ErrorAction SilentlyContinue` on `Remove-Item` com
 ### General pre-render checklist
 
 Before rendering any `.qmd` in this project, always:
-1. Activate the conda environment: `conda activate env_iml4finance_2026`
+1. Activate the conda environment: `conda activate env_AutoGluon_202502`
 2. Set `$env:QUARTO_PYTHON` to the conda env's Python executable
 3. Clear stale Quarto caches if previous renders failed
 4. Use `--no-cache` if cache issues persist

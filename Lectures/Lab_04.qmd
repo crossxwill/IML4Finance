@@ -1,0 +1,1951 @@
+---
+title: "Lab 04: Fraud Detection and Imbalanced Learning"
+format: 
+    html:
+        toc: true
+        code-fold: true
+        code-tools: true
+        code-line-numbers: true
+        page-layout: full
+number-sections: true
+number-figures: true
+number-tables: true
+execute:
+    warning: false
+    message: false
+bibliography: ../Lectures/references.bib
+---
+
+# Overview
+
+The lab explores Python libraries for handling large datasets, feature engineering, and strategies for addressing imbalanced data in fraud detection.
+
+# Import Code
+
+The chunks below include all necessary Python libraries. Helper functions are imported from `course_utils.helpers`.
+
+```{python}
+#| label: lab04-import-python-libraries
+
+# System utilities
+import os
+import shutil
+import random
+import sys
+import warnings
+import time
+import gc
+import psutil
+import glob # For finding files
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path.cwd().parent))
+
+CPU_LIMIT = max(1, (os.cpu_count() or 1) - 1)
+os.environ['OMP_NUM_THREADS'] = str(CPU_LIMIT)
+os.environ['OPENBLAS_NUM_THREADS'] = str(CPU_LIMIT)
+os.environ['MKL_NUM_THREADS'] = str(CPU_LIMIT)
+os.environ['VECLIB_MAXIMUM_THREADS'] = str(CPU_LIMIT)
+os.environ['NUMEXPR_NUM_THREADS'] = str(CPU_LIMIT)
+num_jobs = CPU_LIMIT
+
+# Data manipulation and visualization
+import numpy as np
+import pandas as pd
+import polars as pl # Polars is a fast DataFrame library
+import matplotlib.pyplot as plt
+from IPython.display import display # Explicit import for display
+import re
+import duckdb
+
+# Machine learning - scikit-learn
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.metrics import roc_auc_score, average_precision_score, f1_score, classification_report
+from sklearn.pipeline import Pipeline
+from sklearn.inspection import PartialDependenceDisplay
+from sklearn.calibration import CalibratedClassifierCV, CalibrationDisplay # Added for probability calibration
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
+from sklearn.utils.validation import check_is_fitted
+from sklearn import set_config
+
+# Imbalanced-learn for resampling
+from imblearn.pipeline import Pipeline as ImbPipeline
+from imblearn.under_sampling import RandomUnderSampler
+from imblearn.over_sampling import RandomOverSampler, SMOTE
+
+# Specialized ML libraries
+from autogluon.tabular import TabularPredictor, TabularDataset
+from ydata_profiling import ProfileReport
+import shap
+import dice_ml
+from dice_ml.utils import helpers 
+import torch
+torch.set_num_threads(num_jobs)
+
+# Helper functions from course_utils.helpers
+from course_utils.helpers import (
+    global_set_seed,
+    remove_ag_folder,
+    AutoGluonSklearnWrapper
+)
+
+# Settings
+pd.set_option('display.max_columns', 50)
+pd.set_option('display.max_rows', 100)
+warnings.filterwarnings('ignore', category=FutureWarning) # Suppress specific FutureWarnings
+warnings.filterwarnings('ignore', category=UserWarning) # Suppress some UserWarnings from libraries
+set_config(transform_output="pandas") # Set sklearn output to pandas
+
+# Initialize global seed
+global_set_seed(2025)
+```
+
+# Credit Card Fraud Detection
+
+Credit card fraud is a significant concern for financial institutions, merchants, and consumers. Understanding the types of fraud and how detection systems operate is crucial for developing effective machine learning models.
+
+## Card-present frauds
+
+-   Card-present (CP) fraud occurs when a transaction is made using a **physical credit card** that has been lost, stolen, counterfeited, or intercepted.
+-   The legitimate cardholder is typically unaware of the fraudulent use until they notice unauthorized transactions on their statement or are alerted by their bank.
+-   The key characteristic of CP fraud is that the **physical card** is used at the point of sale (e.g., a retail store, restaurant).
+
+## Card-not-present frauds
+
+-   Card-not-present (CNP) fraud occurs when credit card information (such as card number, expiry date, CVV) is used **without** the physical card being present.
+-   This type of fraud is common in online purchases.
+-   Fraudsters may obtain card details through data breaches, phishing scams, or malware.
+-   CNP fraud has become increasingly prevalent with the growth of e-commerce.
+
+## Credit Card Fraud Detection Systems (CCFDS)
+
+-   **Credit Card Fraud Detection Systems (CCFDS)** are designed to identify and prevent fraudulent transactions in real-time or near real-time by analyzing transaction data (e.g., amount, location, time, customer behavior, terminal ID) using rules and machine learning models.
+-   If a transaction is flagged as potentially fraudulent, the system may block the transaction, alert the cardholder (e.g., via SMS or app notification), or refer the case to human fraud analysts for review.
+-   The primary goal of a CCFDS is to minimize financial losses from fraud while also reducing false positives (legitimate transactions incorrectly blocked), which can negatively impact customer experience.
+-   CCFDS must balance detection accuracy, speed, and customer convenience, often operating under strict latency requirements to avoid disrupting normal transaction flows.
+
+## Class Imbalance in Fraud Detection
+
+Class imbalance occurs when one class (e.g., fraudulent transactions) is significantly smaller compared to another class (e.g., legitimate transactions).
+
+**Characteristics in Fraud Data**
+
+-   Rarity of Fraud: Fraudulent transactions are typically a small fraction (often $< 1\%$, sometimes $< 0.1\%$) of total transactions.
+
+-   Standard accuracy can be misleading; a naive model predicting "no fraud" for all transactions might appear highly accurate.
+
+**Impact of Sample Size**
+
+The difficulty of modeling depends on both the imbalance ratio (IR) and the absolute number of samples in the minority class (fraud) .
+
+A higher imbalance ratio (IR) indicates greater class imbalance: $$IR = \frac{\text{Number of samples in majority class}}{\text{Number of samples in minority class}}$$
+
+The absolute number of samples in the minority class (fraud) also matters:
+
+-   **Large Datasets:** A low fraud rate (e.g., 0.1%) in a large dataset (e.g., 100 million transactions) can still yield enough fraud examples (e.g., 100,000) for effective modeling training and testing.
+
+-   **Small Datasets:** The same low fraud rate in a small dataset (e.g., 1,000 transactions) results in very few fraud examples (approximately 1 fraud case if the rate is 0.1%). This is often insufficient for reliable model training and evaluation.
+
+The lab assumes large imbalanced data sets.
+
+# Dealing with Class Imbalance
+
+Several strategies can be employed to mitigate the effects of class imbalance when training fraud detection models. The choice of strategy can significantly impact model performance and its real-world effectiveness.
+
+## Do-Nothing Approach
+
+**Rationale:**
+
+-   Class imbalance is an inherent characteristic of the data that reflects the true state of the world
+-   Modifying the data (e.g., through resampling) distorts reality
+-   Many modern machine learning estimators are relatively insensitive to class imbalance if configured and evaluated appropriately, including:
+    -   Tree-based ensembles (LightGBM, XGBoost, CatBoost)
+    -   Neural networks
+-   Under the do-nothing approach, class imbalance is a "key feature" of the data rather than a bug/defect that needs to be fixed.
+
+**Process:**
+
+1.  Train multiple estimators on the original, imbalanced dataset.
+
+2.  Select the best model with the lowest **log loss** on the test set.
+
+3.  Check for proper probability calibration (i.e., how well aligned are the predicted probabilities to the observed frequencies of fraud). Calibrate the predicted probabilities if needed.
+
+4.  Select the optimal decision threshold.
+
+5.  Evaluate the performance of the calibrated model and the optimal threshold on the test set.
+
+## Class-Sensitive Evaluation Approach
+
+**Rationale:**
+
+-   In fraud detection, the positive class (fraud) is much rarer than the negative class (legitimate transactions).
+-   **ROC-AUC** is a common binary classification metric, but it can be misleading when classes are highly imbalanced:
+    -   ROC plots the True Positive Rate (also known as TPR, recall, sensitivity, or gain) against the False Positive Rate (FPR) at different decision thresholds.
+    -   FPR is calculated as $\frac{\text{False Positives}}{\text{All Actual Negatives}}$. When the negative class (legitimate transactions) is very large, even a substantial number of false positives may result in a low FPR, making the ROC curve appear optimistic.
+    -   While a model predicting only "not fraud" would have ROC-AUC of 0.5 (random performance), the more important issue is that ROC-AUC can appear reasonably high even for models that perform poorly on the minority class, because high accuracy on the majority class can mask deficiencies in minority class detection.
+-   **Precision-Recall (PR) curves** are more informative for imbalanced data:
+    -   The PR curve plots Precision ($\frac{\text{True Positives}}{\text{True Positives} + \text{False Positives}}$) against Recall ($\frac{\text{True Positives}}{\text{True Positives} + \text{False Negatives}}$).
+    -   Precision directly measures how many of the predicted frauds are actually fraud, which is critical when investigating alerts.
+    -   PR curves do not account for true negatives, making them more sensitive to the model's performance on the minority class.
+-   **PR-AUC** (Area Under the PR Curve, also called Average Precision or AP) summarizes the PR curve in a single number.
+    -   A high PR-AUC means the model can achieve both high precision and high recall for fraud detection.
+    -   The baseline (random classifier) PR-AUC equals the prevalence of the positive class, making it easier to assess model quality.
+
+**Process:**
+
+1.  Train multiple estimators on the original, imbalanced dataset.
+
+2.  Select the best model with the highest **average precision** on the test set.
+
+3.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.
+
+4.  Select the optimal decision threshold.
+
+5.  Evaluate the performance of the calibrated model and the optimal threshold on the test set.
+
+## Cost-Sensitive Learning Approach
+
+**Rationale:**
+
+-   Cost-sensitive learning assigns different costs to classification errors.
+-   In fraud detection, failing to detect a fraudulent transaction (a false negative) is typically much more costly than incorrectly flagging a legitimate transaction as fraudulent (a false positive).
+-   By incorporating these costs, the model is encouraged to pay more attention to the minority (fraud) class.
+
+**Implementation Detail:**
+
+-   One common way to implement cost-sensitive learning is by using sample weights:
+    -   Instances from the minority class are given higher weights.
+    -   Instances from the majority class are given lower weights.
+    -   The weights are inversely proportional to class frequencies.
+-   AutoGluon provides a convenient way to do this:
+    -   Set the `sample_weight` argument in `predictor_args` to the special string `"balance_weight"`.
+    -   This automatically calculates and applies appropriate weights to balance the classes during training.
+-   Sample weights are not needed for the test set evaluation.
+
+**Process:**
+
+1.  Specify sample weights for each observation in the training set. This can be done by setting the `sample_weight` argument in `predictor_args` to `"balance_weight"`.
+
+2.  Train multiple estimators on the original, imbalanced dataset.
+
+3.  Select the best model with the highest **average precision** on the test set.
+
+4.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.
+
+5.  Select the optimal decision threshold.
+
+6.  Evaluate the performance of the calibrated model and the optimal threshold on the test set.
+
+## Resampling Approach
+
+**Rationale:**
+
+-   Class-based resampling techniques modify the training data's class distribution to create a more balanced dataset.
+-   Resampling is performed **only** on the training data
+-   The calibration and test sets remain in their original, imbalanced form to reflect reality (i.e., fraud is rare).
+
+**Common Resampling Schemes:**
+
+-   **Random Undersampling (RUS):** Randomly remove instances from the majority class until the dataset is more balanced. This can lead to loss of information from the majority class. However, the scheme substantially reduces the dataset size, which can be beneficial for training speed and memory usage.
+
+-   **Random Oversampling (ROS):** Randomly duplicate instances from the minority class. This can lead to overfitting on the minority class examples.
+
+-   **SMOTE (Synthetic Minority Over-sampling Technique):** Creates synthetic samples for the minority class by interpolating between actual minority instances. This can help to create a more diverse set of minority examples than simple oversampling.
+
+-   **Hybrid Methods:** Combine oversampling and undersampling. For example:
+
+    -   First, apply SMOTE to generate synthetic samples for the minority class.
+    -   Then, apply random undersampling to the majority class.
+
+**Process:**
+
+1.  Use RUS, ROS, SMOTE, or hybrid to create a **balanced** training set.
+
+2.  Train multiple estimators on the **balanced** training set.
+
+3.  Select the best model with the highest **average precision** on the test set (which is imbalanced).
+
+4.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.
+
+5.  Select the optimal decision threshold.
+
+6.  Evaluate the performance of the calibrated model and the optimal threshold on the test set (which is imbalanced).
+
+# Data Prep for Big Data
+
+-   Credit card transaction data involves a huge number of records, often millions or even billions, and new data arrives quickly.
+-   Handling such large datasets efficiently is essential for fast analysis and model building.
+-   Traditional tools like `pandas` can be slow and use a lot of memory with big data.
+-   Modern libraries like `polars` and databases like `DuckDB` are designed to work faster and use memory more efficiently, making them better choices for large-scale data tasks.
+
+## Data Loading
+
+We will load all the parquet files found in the `Data/credit-card-fraud/simulated-data/` folder. Each parquet file contains credit card transactions for a single day.
+
+Some notes about the parquet file format:
+
+-   The parquet file format is widely used for tabular data.
+-   Parquet is designed for efficient storage (small file sizes) and fast processing (quick reads).
+-   Data frame libraries such as `pandas`, `polars`, and `DuckDB` support reading from and writing to parquet files.
+-   One drawback of parquet files is the lack of human readability, unlike CSV files.
+-   Writing a parquet file to disk is also slower than writing a CSV file.
+
+Read all the parquet files into a `polars` data frame and a `DuckDB` table.
+
+```{python}
+#| label: read-parquet-polars
+
+data_dir = "../Data/credit-card-fraud/simulated-data/"
+
+path_parquet_files = glob.glob(os.path.join(data_dir, "*.parquet"))
+
+df_fraud = pl.read_parquet(path_parquet_files)
+```
+
+```{python}
+#| label: read-parquet-duckdb
+
+tbl_fraud = duckdb.query(f"""
+    SELECT * 
+    FROM read_parquet({path_parquet_files})
+    """)
+```
+
+```{python}
+#| label: num-parquet-files
+
+print(len(path_parquet_files)) # Display the number of parquet files found
+```
+
+Take a peek at the data.
+
+```{python}
+#| label: peek-polars
+
+display(df_fraud.head(10))
+```
+
+```{python}
+#| label: peek-duckdb
+
+display(tbl_fraud.limit(10))
+```
+
+Get column names and data types for both `polars` and `DuckDB`.
+
+```{python}
+#| label: column-info-polars
+
+# Get schema as a dictionary
+summary_df = pl.DataFrame({
+    "Column Name": df_fraud.columns,
+    "Data Type": [str(dtype) for dtype in df_fraud.dtypes]
+})
+
+display(summary_df)
+```
+
+```{python}
+#| label: column-info-duckdb
+
+duckdb.sql("""
+    SELECT column_name, column_type
+    FROM
+    (DESCRIBE SELECT * FROM tbl_fraud)
+    """).show()
+```
+
+Read the same parquet files with `pandas` for comparison.
+
+```{python}
+#| label: lab04-load-pandas-data
+# Read all parquet files into a pandas DataFrame (only .parquet files)
+
+df_fraud_pd = pd.read_parquet(path_parquet_files)
+
+# Display the first few rows
+display(df_fraud_pd.head())
+```
+
+## Data Frame Benchmarks
+
+Calculate the fraud rate per CUSTOMER_ID using `polars`, `DuckDB`, and `pandas`. Show the fraud rate only for customers with more than 10 transactions. This will help us compare the performance of these libraries on a common task.
+
+```{python}
+#| label: fraud-rate-polars-complex
+
+start_time = time.time()
+
+fraud_analysis_polars = (
+    df_fraud
+    .group_by(pl.col("CUSTOMER_ID"))
+    .agg(
+        FRAUD_RATE = pl.col("TX_FRAUD").mean(),  # FRAUD_RATE by CUSTOMER_ID
+        TOTAL_FRAUDS = pl.col("TX_FRAUD").sum(),
+        AVG_AMOUNT = pl.col("TX_AMOUNT").mean(),
+        STD_AMOUNT = pl.col("TX_AMOUNT").std(),
+        P95_AMOUNT = pl.col("TX_AMOUNT").quantile(0.95),
+        MIN_AMOUNT = pl.col("TX_AMOUNT").min(),
+        MAX_AMOUNT = pl.col("TX_AMOUNT").max(),
+        TX_COUNT = pl.len(),
+        FRAUD_VALUE = (pl.col("TX_AMOUNT") * pl.col("TX_FRAUD")).sum(),
+        FIRST_TX = pl.col("TX_DATETIME").min(),
+        LAST_TX = pl.col("TX_DATETIME").max()
+    )
+    .with_columns(
+        AVG_FRAUD_AMOUNT = (pl.col("FRAUD_VALUE") / pl.col("TX_COUNT")),
+        CUSTOMER_TENURE_DAYS = (pl.col("LAST_TX") - pl.col("FIRST_TX")).dt.total_days()
+    )
+    .filter(pl.col("TX_COUNT") > 10)
+    .sort("FRAUD_RATE", descending=True)
+)
+
+end_time = time.time()
+print(f"Polars fraud analysis completed in {end_time - start_time:.2f} seconds.")
+
+```
+
+```{python}
+#| label: print-polars-fraud-rate
+
+display(fraud_analysis_polars.head(10))
+```
+
+```{python}
+#| label: fraud-rate-duckdb-complex
+
+start_time = time.time()
+
+fraud_analysis_duckdb = duckdb.query("""
+    WITH customer_stats AS (
+        SELECT 
+            CUSTOMER_ID,
+            AVG(TX_FRAUD) AS FRAUD_RATE,  -- FRAUD_RATE by CUSTOMER_ID
+            SUM(TX_FRAUD) AS TOTAL_FRAUDS,
+            AVG(TX_AMOUNT) AS AVG_AMOUNT,
+            STDDEV(TX_AMOUNT) AS STD_AMOUNT,
+            PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY TX_AMOUNT) AS P95_AMOUNT,
+            MIN(TX_AMOUNT) AS MIN_AMOUNT,
+            MAX(TX_AMOUNT) AS MAX_AMOUNT,
+            COUNT(*) AS TX_COUNT,
+            SUM(TX_AMOUNT * TX_FRAUD) AS FRAUD_VALUE,
+            MIN(TX_DATETIME) AS FIRST_TX,
+            MAX(TX_DATETIME) AS LAST_TX
+        FROM tbl_fraud
+        GROUP BY CUSTOMER_ID
+        HAVING COUNT(*) > 10
+    )
+    SELECT *,
+        FRAUD_VALUE / TX_COUNT AS AVG_FRAUD_AMOUNT,
+        DATE_DIFF('day', FIRST_TX, LAST_TX) AS CUSTOMER_TENURE_DAYS
+    FROM customer_stats
+    ORDER BY FRAUD_RATE DESC
+""")
+
+end_time = time.time()
+print(f"DuckDB fraud analysis completed in {end_time - start_time:.2f} seconds.")
+
+```
+
+```{python}
+#| label: print-duckdb-fraud-rate
+
+display(fraud_analysis_duckdb.limit(10))
+```
+
+```{python}
+#| label: fraud-rate-pandas-complex
+
+start_time = time.time()
+
+df_fraud_pd['FRAUD_VALUE'] = df_fraud_pd['TX_AMOUNT'] * df_fraud_pd['TX_FRAUD']
+
+fraud_analysis_pandas = (
+    df_fraud_pd
+    .groupby("CUSTOMER_ID", sort=False)
+    .agg(
+        FRAUD_RATE=('TX_FRAUD', 'mean'),  # FRAUD_RATE by CUSTOMER_ID
+        TOTAL_FRAUDS=('TX_FRAUD', 'sum'),
+        AVG_AMOUNT=('TX_AMOUNT', 'mean'),
+        STD_AMOUNT=('TX_AMOUNT', 'std'),
+        P95_AMOUNT=('TX_AMOUNT', lambda x: x.quantile(0.95)),
+        MIN_AMOUNT=('TX_AMOUNT', 'min'),
+        MAX_AMOUNT=('TX_AMOUNT', 'max'),
+        TX_COUNT=('TX_FRAUD', 'size'),
+        FRAUD_VALUE=('FRAUD_VALUE', 'sum'),
+        FIRST_TX=('TX_DATETIME', 'min'),
+        LAST_TX=('TX_DATETIME', 'max')
+    )
+    .reset_index()
+    .query("TX_COUNT > 10")
+    .assign(
+        AVG_FRAUD_AMOUNT=lambda x: x['FRAUD_VALUE'] / x['TX_COUNT'],
+        CUSTOMER_TENURE_DAYS=lambda x: (x['LAST_TX'] - x['FIRST_TX']).dt.days
+    )
+    .sort_values("FRAUD_RATE", ascending=False)
+)
+
+end_time = time.time()
+print(f"Pandas fraud analysis completed in {end_time - start_time:.2f} seconds.")
+
+```
+
+```{python}
+#| label: print-pandas-fraud-rate
+
+display(fraud_analysis_pandas.head(10))
+
+```
+
+## Prequential Data Splitting (using Polars)
+
+To properly evaluate fraud detection models, we split the data **chronologically** into training, tuning (calibration), and test sets based on the `TX_DATETIME` column.
+
+Also known as out-of-time validation, prequential data splitting ensures that future transactions do not influence model training or validation.
+
+The lab splits the data into three sets:
+
+-   `df_train`: Transactions before `2018-07-31` (inclusive).
+-   `df_tuning`: Transactions between `2018-08-01` (inclusive) and `2018-08-31` (inclusive).
+-   `df_test`: Transactions after `2018-09-01` (inclusive).
+
+```{python}
+#| label: lab04-split-data-polars
+# Prequential data splitting using Polars
+
+def split_data(df: pl.DataFrame
+            , type: str = "train") -> pl.DataFrame:
+    """
+    Splits the data into train, tuning, and test sets based on TX_DATETIME.
+    """
+    if type == "train":
+        return df.filter(pl.col("TX_DATETIME") <= pl.date(2018, 7, 31))
+    elif type == "tuning":
+        return df.filter((pl.col("TX_DATETIME") >= pl.date(2018, 8, 1)) 
+                        & (pl.col("TX_DATETIME") <= pl.date(2018, 8, 31)))
+    elif type == "test":
+        return df.filter(pl.col("TX_DATETIME") >= pl.date(2018, 9, 1))
+    else:
+        raise ValueError(f"Unknown split type: {type}")
+
+# Split the data into train, tuning, and test sets
+
+# df_train: Transactions before 2018-07-31 (inclusive)
+df_train = split_data(df_fraud, type="train")
+
+# df_tuning: Transactions between 2018-08-01 (inclusive) and 2018-08-31 (inclusive)
+df_tuning = split_data(df_fraud, type="tuning")
+
+# df_test: Transactions after 2018-09-01 (inclusive)
+df_test = split_data(df_fraud, type="test")
+
+```
+
+```{python}
+#| label: sample-sizes
+
+df_train.shape, df_tuning.shape, df_test.shape
+```
+
+# EDA: Compare `df_train` and `df_tuning`
+
+Unfortunately, the `ydata_profiling` library does not support polars data frames. The lab will randomly sample 10% of each data frame and then convert to pandas data frames for profiling. This is a workaround to allow us to compare the two datasets using the `ydata_profiling` library.
+
+For the data dictionary, please refer to Chapter 3 of @leborgne2022fraud.
+
+```{python}
+#| label: eda-train-tuning-comparison
+
+p_frac = 0.1
+
+train_data_profile = ProfileReport(
+            df_train.sample(fraction=p_frac, seed=2025).to_pandas(), 
+            title="Train",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
+
+tuning_data_profile = ProfileReport(
+            df_tuning.sample(fraction=p_frac*2, seed=2025).to_pandas(), 
+            title="Tuning",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
+
+compare_profile = train_data_profile.compare(tuning_data_profile)
+
+compare_profile.to_file("Lab04_eda_compare_train_tuning.html")
+
+```
+
+# Feature Engineering
+
+The section creates new features that enhance the effectiveness of fraud detection models.
+
+The feature engineering logic is based on Chapter 3 of @leborgne2022fraud, but has been adapted to use Polars expressions for improved speed and efficiency.
+
+## Polars Feature Functions
+
+We will create functions to generate the following features. Each function will take a Polars DataFrame as input and return a Polars DataFrame with the new feature(s) added.
+
+Date-related features:
+
+1.  TX_DURING_WEEKEND: whether the transaction occurred on a weekend (1 if weekend, 0 if weekday).
+
+2.  TX_DURING_NIGHT: whether the transaction occurred during the night (1 if night, 0 if day).
+
+Customer features:
+
+3.  CUSTOMER_ID_NB_TX_1DAY_WINDOW: number of transactions for the customer in the last 1 day.
+
+4.  CUSTOMER_ID_AVG_AMOUNT_1DAY_WINDOW: average transaction amount for the customer in the last 1 day.
+
+5.  CUSTOMER_ID_NB_TX_7DAY_WINDOW: number of transactions for the customer in the last 7 days.
+
+6.  CUSTOMER_ID_AVG_AMOUNT_7DAY_WINDOW: average transaction amount for the customer in the last 7 days.
+
+7.  CUSTOMER_ID_NB_TX_30DAY_WINDOW: number of transactions for the customer in the last 30 days.
+
+8.  CUSTOMER_ID_AVG_AMOUNT_30DAY_WINDOW: average transaction amount for the customer in the last 30 days.
+
+Terminal features:
+
+9.  TERMINAL_ID_NB_TX_1DAY_WINDOW: number of transactions for the terminal in the last 1 day. Lagged 7 days to account for a lag in fraud labeling.
+
+10. TERMINAL_ID_RISK_1DAY_WINDOW: proportion of **fraudulent** transactions for the terminal in the last 1 day. Lagged 7 days to account for a lag in fraud labeling.
+
+11. TERMINAL_ID_NB_TX_7DAY_WINDOW: number of transactions for the terminal in the last 7 days. Lagged 7 days to account for a lag in fraud labeling.
+
+12. TERMINAL_ID_RISK_7DAY_WINDOW: proportion of **fraudulent** transactions for the terminal in the last 7 days. Lagged 7 days to account for a lag in fraud labeling.
+
+13. TERMINAL_ID_NB_TX_30DAY_WINDOW: number of transactions for the terminal in the last 30 days. Lagged 7 days to account for a lag in fraud labeling.
+
+14. TERMINAL_ID_RISK_30DAY_WINDOW: proportion of **fraudulent** transactions for the terminal in the last 30 days. Lagged 7 days to account for a lag in fraud labeling.
+
+### Weekend Flag
+
+The feature indicates if a transaction occurred on a weekend.
+
+```{python}
+#| label: feature-is-weekend
+#| 
+def fe_is_weekend(df: pl.DataFrame) -> pl.DataFrame:
+    """Adds IS_WEEKEND feature (1 if weekend, 0 if weekday)."""
+    # Polars weekday(): Monday=1, Sunday=7. So, Saturday (6) or Sunday (7) are weekends.
+    return df.with_columns(
+        TX_DURING_WEEKEND = (pl.col("TX_DATETIME").dt.weekday()
+                                .is_in([6, 7])
+                                .cast(pl.UInt8))
+    )
+
+
+```
+
+### Night Flag
+
+The feature indicates if a transaction occurred during the night (defined as between midnight and 6:00 AM).
+
+```{python}
+#| label: feature-is-night
+
+def fe_is_night(df: pl.DataFrame) -> pl.DataFrame:
+    """Adds IS_NIGHT feature (1 if hour < 6, 0 otherwise)."""
+    return df.with_columns(
+        TX_DURING_NIGHT = pl.when(pl.col("TX_DATETIME").dt.hour() < 6)
+                            .then(1)
+                            .otherwise(0)
+                            .cast(pl.UInt8)
+    )
+
+```
+
+### Customer Features
+
+The features describe a customer's recent transaction count and average transaction amount over different rolling time windows (1, 7, and 30 days).
+
+```{python}
+#| label: feature-customer-spending
+def fe_customer_spending(df: pl.DataFrame, window_sizes_in_days=[1, 7, 30]) -> pl.DataFrame:
+    """
+    Calculates customer spending features:
+    - Count of transactions per customer over different window_sizes.
+    - Average transaction amount per customer over different window_sizes.
+    """
+
+    df_int = (
+        df
+        .sort(pl.col("CUSTOMER_ID"), pl.col("TX_DATETIME")) # very important to sort
+        .with_columns(
+            pl.col("CUSTOMER_ID").cast(pl.UInt64),
+            pl.lit(1).alias("TX_COUNT")
+        )
+    )
+
+    result_df = df_int
+    for window in window_sizes_in_days:
+        result_df = (
+            result_df
+            .with_columns(
+                pl.col("TX_COUNT")
+                    .rolling_sum_by(by=pl.col("TX_DATETIME")
+                        , window_size=f"{window}d"
+                        , closed="both"
+                        )
+                    .over("CUSTOMER_ID")
+                .alias(f"CID_NB_TX_{window}DAY_WINDOW"),
+
+                pl.col("TX_AMOUNT")
+                    .rolling_mean_by(by=pl.col("TX_DATETIME")
+                        , window_size=f"{window}d"
+                        , closed="both"
+                        )
+                    .over("CUSTOMER_ID")
+                .alias(f"CID_AVG_AMOUNT_{window}DAY_WINDOW")
+            )
+        )
+
+    return result_df
+```
+
+### Terminal Features
+
+The features describe a point-of-sale terminal's recent transactions count and the proportion of fraudulent transactions over several rolling time windows (1, 7, 30 days). A 7-day delay period is introduced because fraud labels are not be available immediately.
+
+```{python}
+#| label: feature-terminal-risk
+def fe_terminal_risk(
+    df: pl.DataFrame, 
+    delay_period_days: int = 7, 
+    window_sizes_in_days: list = [1, 7, 30]
+) -> pl.DataFrame:
+    """
+    Adds terminal risk features for various window sizes, considering a 7-day delay in fraud labeling.
+    For each window, computes:
+        - Number of transactions at the terminal in the window (lagged by delay_period_days)
+        - Proportion of fraudulent transactions at the terminal in the window (lagged)
+    """
+    # Sort by TERMINAL_ID and TX_DATETIME for correct rolling calculations
+    df_int = (
+        df
+        .sort(pl.col("TERMINAL_ID")
+            , pl.col("TX_DATETIME")
+        )
+        .with_columns(
+            pl.col("TERMINAL_ID").cast(pl.UInt64),
+            pl.lit(1).alias("TX_COUNT")
+        )
+    )
+
+    result_df = df_int
+    for window in window_sizes_in_days:
+
+        full_offset = window + delay_period_days
+
+        # Rolling window with delay (offset)
+        result_df = (
+            result_df
+            .with_columns(
+                pl.col("TX_COUNT")
+                    .rolling_sum_by("TX_DATETIME"
+                        , window_size=f"{window}d"
+                        , closed="both"
+                        )
+                    .over("TERMINAL_ID")
+                .alias(f"TID_NB_TX_{window}DAY_WINDOW"),
+
+                pl.col("TX_COUNT")
+                    .rolling_sum_by("TX_DATETIME"
+                        , window_size=f"{full_offset}d"
+                        , closed="both"
+                        )
+                    .over("TERMINAL_ID")
+                .alias(f"TID_NB_TX_{full_offset}DAY_WINDOW"),
+
+
+                pl.col("TX_FRAUD")
+                    .rolling_sum_by("TX_DATETIME"
+                        , window_size=f"{window}d"
+                        , closed="both"
+                        )  
+                    .over("TERMINAL_ID")
+                .alias(f"TID_NB_FRAUD_{window}DAY_WINDOW"),
+
+                pl.col("TX_FRAUD")
+                    .rolling_sum_by("TX_DATETIME"
+                        , window_size=f"{full_offset}d"
+                        , closed="both"
+                        )  
+                    .over("TERMINAL_ID")
+                .alias(f"TID_NB_FRAUD_{full_offset}DAY_WINDOW")
+            )
+
+        )
+
+        # Compute risk (proportion of frauds)
+        risk_col = f"TID_RISK_{window}DAY_WINDOW"
+
+        nb_tx_col = f"TID_NB_TX_{window}DAY_WINDOW"
+        nb_fraud_col = f"TID_NB_FRAUD_{window}DAY_WINDOW"
+
+        nb_tx_col_fulloffset = f"TID_NB_TX_{full_offset}DAY_WINDOW"
+        nb_fraud_col_fulloffset = f"TID_NB_FRAUD_{full_offset}DAY_WINDOW"
+
+        result_df = (
+            result_df
+            .with_columns(
+                (pl.col(nb_tx_col_fulloffset) - pl.col(nb_tx_col)).alias(nb_tx_col),
+                (pl.col(nb_fraud_col_fulloffset) - pl.col(nb_fraud_col)).alias(nb_fraud_col)
+            )
+            .select(pl.col("*")
+                .exclude([nb_tx_col_fulloffset, nb_fraud_col_fulloffset])
+                )
+            .with_columns(
+                pl.when(pl.col(nb_tx_col) > 0)
+                    .then(pl.col(nb_fraud_col) / (pl.col(nb_tx_col)))
+                    .otherwise(0.0)
+                .alias(risk_col)
+            )
+
+        )
+
+        # Drop the intermediate fraud count column
+        result_df = result_df.drop(nb_fraud_col)
+
+    return result_df
+```
+
+## Data Pipeline
+
+The function applies each data transformation step in sequence using the `pipe` method from Polars. This allows for a clean and readable feature engineering pipeline.
+
+```{python}
+#| label: feature-engineering-pipeline-function
+
+def polars_feature_pipeline(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Apply all feature engineering steps in sequence using Polars pipe
+    """
+    return (df.lazy()
+            .pipe(fe_is_weekend)
+            .pipe(fe_is_night)
+            .pipe(fe_customer_spending
+                ,window_sizes_in_days=[1, 7, 30])
+            .pipe(fe_terminal_risk
+                ,delay_period_days=7
+                ,window_sizes_in_days=[1, 7, 30])
+            ) 
+```
+
+Apply the data pipeline to `df_fraud` and then split the data into training and calibration sets.
+
+```{python}
+#| label: apply-feature-engineering
+
+df_fraud_ft = polars_feature_pipeline(df_fraud).collect()
+
+df_train_ft = split_data(df_fraud_ft, type="train")
+df_tuning_ft = split_data(df_fraud_ft, type="tuning")
+df_test_ft = split_data(df_fraud_ft, type="test")
+```
+
+# EDA: Compare `df_train_ft` and `df_tuning_ft`
+
+```{python}
+#| label: eda-train-tuning-comparison-ft
+
+p_frac = 0.1
+
+ft_train_data_profile = ProfileReport(
+            df_train_ft.sample(fraction=p_frac, seed=2025).to_pandas(), 
+            title="Train-FT",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
+
+ft_tuning_data_profile = ProfileReport(
+            df_tuning_ft.sample(fraction=p_frac*2, seed=2025).to_pandas(), 
+            title="Tuning-FT",
+            progress_bar=False,
+            duplicates=None,
+            interactions=None
+            )
+
+ft_compare_profile = ft_train_data_profile.compare(ft_tuning_data_profile)
+
+ft_compare_profile.to_file("Lab04_eda_compare_train_tuning_ft.html")
+```
+
+# Modeling and Evaluation
+
+The section implements and compares different strategies for handling imbalanced datasets.
+
+-   **Do-Nothing Pipeline**: No resampling, just feature engineering and model training.
+-   **Class-Sensitive Evaluation Pipeline**: No resampling, but uses PR-AUC (average precision)) to select the best model.
+-   **Cost-Sensitive Learning Pipeline**: Uses sample weights to handle class imbalance during model training.
+-   **Undersampling Pipeline**: Undersamples the majority class to balance the training set before model training.
+-   **Oversampling Pipeline**: Oversamples the minority class to balance the training set before model training.
+-   **SMOTE Pipeline**: Applies SMOTE to generate synthetic samples for the minority class before model training.
+-   **Hybrid Pipeline**: Combines oversampling and SMOTE to balance the training set before model training.
+
+The section evalutes each strategy by using the tuning set and test set.
+
+If the predicted probabilities are not well calibrated, we will calibrate them using isotonic regression.
+
+Finally, we will select the optimal decision threshold based on the tuning set and evaluate the F1-score on the test set.
+
+## Data
+
+-   The target label is `TX_FRAUD`, which indicates whether a transaction is fraudulent (1) or not (0).
+
+-   The list of final features exclude features that are not relevant for modeling, such as IDs and datetime columns.
+
+```{python}
+#| label: lab04-define-modeling-features
+
+target_label = "TX_FRAUD"
+
+final_features = [
+    'TX_AMOUNT',
+    'TX_DURING_WEEKEND', 
+    'TX_DURING_NIGHT', 
+    'CID_NB_TX_1DAY_WINDOW',
+    'CID_AVG_AMOUNT_1DAY_WINDOW', 
+    'CID_NB_TX_7DAY_WINDOW',
+    'CID_AVG_AMOUNT_7DAY_WINDOW', 
+    'CID_NB_TX_30DAY_WINDOW',
+    'CID_AVG_AMOUNT_30DAY_WINDOW', 
+    'TID_NB_TX_1DAY_WINDOW',
+    'TID_RISK_1DAY_WINDOW', 
+    'TID_NB_TX_7DAY_WINDOW',
+    'TID_RISK_7DAY_WINDOW', 
+    'TID_NB_TX_30DAY_WINDOW',
+    'TID_RISK_30DAY_WINDOW'
+]
+```
+
+Setup features data frame and target series for training, tuning, and test sets. The data frames are converted to pandas data frames for compatibility with AutoGluon.
+
+```{python}
+#| label: lab04-prepare-training-data
+X_train = df_train_ft[final_features].to_pandas()
+y_train = df_train_ft[target_label].to_pandas()
+
+X_tuning = df_tuning_ft[final_features].to_pandas()
+y_tuning = df_tuning_ft[target_label].to_pandas()
+
+X_test = df_test_ft[final_features].to_pandas()
+y_test = df_test_ft[target_label].to_pandas()
+
+comparison_results = []
+```
+
+## Do-Nothing Approach
+
+**Concept Recap:** Train the model on the original, imbalanced training data. We will use `log_loss` as the `eval_metric` for AutoGluon to select the best base models.
+
+Setup AutoGluon parameters.
+
+```{python}
+#| label: setup-autogluon-do-nothing
+
+strategy_name_1 = "1. Do Nothing"
+model_folder_s1 = "./Lab04_ag_models_s1_do_nothing"
+remove_ag_folder(model_folder_s1)
+
+predictor_args_s1 = {
+    'problem_type': 'binary',
+    'eval_metric': 'log_loss', 
+    'path': model_folder_s1
+}
+
+fit_args_s1 = {'holdout_frac': 0.2,
+            'excluded_model_types': ['KNN'],
+            'presets': 'medium_quality',
+            'time_limit': 180}
+
+ag_wrapper_s1 = AutoGluonSklearnWrapper(
+    label=target_label,
+    predictor_args=predictor_args_s1,
+    fit_args=fit_args_s1,
+    n_jobs=num_jobs
+)
+```
+
+Fit the model using AutoGluon.
+
+```{python}
+#| label: lab04-fit-autogluon-s1
+ag_model_s1 = ag_wrapper_s1.fit(X_train, y_train)
+
+ag_model_s1.predictor.save()  # Save the predictor for later use
+```
+
+Access the AutoGluon predictor object.
+```{python}
+#| label: access-autogluon-predictor-s1
+
+ag_model_s1_predictor = ag_model_s1.predictor
+
+```
+
+Check the leaderboard.
+
+```{python}
+#| label: leaderboard-s1
+leaderboard_s1 = ag_model_s1_predictor.leaderboard(
+    df_tuning_ft.to_pandas()
+    , extra_metrics=['average_precision', 'f1']
+)
+display(leaderboard_s1)
+```
+
+Prefer CatBoost due to inference speed and performance when it is available.
+
+```{python}
+#| label: set-best-model-s1
+
+available_models_s1 = ag_model_s1_predictor.model_names()
+selected_best_model_s1 = 'CatBoost' if 'CatBoost' in available_models_s1 else ag_model_s1_predictor.model_best
+
+ag_model_s1_predictor.set_model_best(selected_best_model_s1)
+
+ag_model_s1.predictor.save()  # Save the predictor for later use
+
+```
+
+Check feature importance.
+
+```{python}
+#| label: feature-importance-s1
+
+feature_importance_s1 = ag_model_s1_predictor.feature_importance(
+    df_tuning_ft.to_pandas(),
+    subsample_size = None,
+    num_shuffle_sets = 5
+)
+
+display(feature_importance_s1)
+```
+
+Check probability calibration using the tuning set.
+
+```{python}
+#| label: calibration-s1
+#| 
+
+%matplotlib inline
+
+pre_cal_disp_s1 = CalibrationDisplay.from_estimator(
+        estimator = ag_model_s1,
+        X = X_tuning,
+        y = y_tuning,
+        n_bins = 20,
+        name = 'Pre-Calib Curve: Do Nothing Strategy',
+        color = 'orange'
+    )
+
+pre_cal_disp_s1.ax_.set_title("Calibration Plot (Tuning Set)")
+```
+
+Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
+
+```{python}
+#| label: lab04-fit-calibration-s1
+cal_model_s1 = CalibratedClassifierCV(
+    estimator = ag_model_s1,
+    method='isotonic',
+    cv="prefit" # Use the fitted model from ag_model
+)
+
+global_set_seed()
+
+cal_model_s1.fit(X = X_tuning,
+            y = y_tuning)
+```
+
+Since the isotonic regression model was fitted on the tuning set, we can no longer use the tuning set for calibration evaluation. We will use the test set for calibration evaluation.
+
+```{python}
+#| label: calibration-s1-test
+
+%matplotlib inline
+
+fig, ax = plt.subplots()
+
+for estimator, name, color in [(ag_model_s1, 'Uncalib_CatBoost', 'orange'),
+          (cal_model_s1, 'Calib_CatBoost', 'blue')]:
+
+  CalibrationDisplay.from_estimator(
+      estimator = estimator,
+      X = X_test,
+      y = y_test,
+      n_bins = 20,
+      name = name,
+      color = color,
+      ax = ax
+    )
+    
+ax.set_title("Calibration Plot (Test Set)")
+plt.show()
+```
+
+The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
+
+Evalulate the original decision threshold of 0.5 on the test set.
+
+```{python}
+#| label: evaluate-default-threshold-s1
+
+leaderboard_s1_default = ag_model_s1_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
+
+display(leaderboard_s1_default)
+
+```
+
+Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score.
+
+```{python}
+#| label: threshold-tuning-s1
+
+best_threshold_s1 = (ag_model_s1_predictor
+                .calibrate_decision_threshold(
+                data = df_tuning_ft.to_pandas(),
+                metric = 'f1',
+                decision_thresholds = 200)
+                )
+
+ag_model_s1_predictor.set_decision_threshold(best_threshold_s1)
+
+ag_model_s1_predictor.save()  # Save the predictor with the new threshold
+```
+
+Use the test set to evaluate the effectivness of the decision threshold.
+
+```{python}
+#| label: evaluate-threshold-s1
+
+leaderboard_s1_optimized = ag_model_s1_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
+
+display(leaderboard_s1_optimized)
+```
+
+Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score.
+
+
+## Class-Sensitive Evaluation Approach
+
+**Concept Recap:** Train the model on the original, imbalanced training data. We will use `average_precision` (aka PR-AUC) as the `eval_metric` for AutoGluon to select the best base models.
+
+
+Setup AutoGluon parameters.
+
+```{python}
+#| label: setup-autogluon-class-sensitive-evaluation
+
+strategy_name_2 = "2. Class Sensitive Evaluation"
+model_folder_s2 = "./Lab04_ag_models_s2_class_sensitive"
+remove_ag_folder(model_folder_s2)
+
+predictor_args_s2 = {
+    'problem_type': 'binary',
+    'eval_metric': 'average_precision', 
+    'path': model_folder_s2
+}
+
+fit_args_s2 = {'holdout_frac': 0.2,
+            'excluded_model_types': ['KNN'],
+            'presets': 'medium_quality',
+            'time_limit': 180}
+
+ag_wrapper_s2 = AutoGluonSklearnWrapper(
+    label=target_label,
+    predictor_args=predictor_args_s2,
+    fit_args=fit_args_s2,
+    n_jobs=num_jobs
+)
+```
+
+Fit the model using AutoGluon.
+
+```{python}
+#| label: fit-autogluon-class-sensitive-evaluation
+#| 
+ag_model_s2 = ag_wrapper_s2.fit(X_train, y_train)
+
+ag_model_s2.predictor.save()  # Save the predictor for later use
+```
+
+Access the AutoGluon predictor object.
+```{python}
+#| label: access-autogluon-predictor-s2
+
+ag_model_s2_predictor = ag_model_s2.predictor
+
+```
+
+Check the leaderboard.
+
+```{python}
+#| label: leaderboard-s2
+#| 
+leaderboard_s2 = ag_model_s2_predictor.leaderboard(
+    df_tuning_ft.to_pandas()
+    , extra_metrics=['average_precision', 'f1']
+)
+display(leaderboard_s2)
+```
+
+Prefer CatBoost due to inference speed and performance when it is available.
+
+```{python}
+#| label: set-best-model-s2
+
+available_models_s2 = ag_model_s2_predictor.model_names()
+selected_best_model_s2 = 'CatBoost' if 'CatBoost' in available_models_s2 else ag_model_s2_predictor.model_best
+
+ag_model_s2_predictor.set_model_best(selected_best_model_s2)
+
+ag_model_s2.predictor.save()  # Save the predictor for later use
+
+```
+
+Check feature importance.
+
+```{python}
+#| label: feature-importance-s2
+
+feature_importance_s2 = ag_model_s2_predictor.feature_importance(
+    df_tuning_ft.to_pandas(),
+    subsample_size = None,
+    num_shuffle_sets = 5
+)
+
+display(feature_importance_s2)
+```
+
+Check probability calibration using the tuning set.
+
+```{python}
+#| label: calibration-s2
+#| 
+
+%matplotlib inline
+
+pre_cal_disp_s2 = CalibrationDisplay.from_estimator(
+        estimator = ag_model_s2,
+        X = X_tuning,
+        y = y_tuning,
+        n_bins = 20,
+        name = 'Pre-Calib Curve: Do Nothing Strategy',
+        color = 'orange'
+    )
+
+pre_cal_disp_s2.ax_.set_title("Calibration Plot (Tuning Set)")
+```
+
+Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
+
+```{python}
+#| label: lab04-fit-calibration-s2
+cal_model_s2 = CalibratedClassifierCV(
+    estimator = ag_model_s2,
+    method='isotonic',
+    cv="prefit" # Use the fitted model from ag_model
+)
+
+global_set_seed()
+
+cal_model_s2.fit(X = X_tuning,
+            y = y_tuning)
+```
+
+Since the isotonic regression model was fitted on the tuning set, we can no longer use the tuning set for calibration evaluation. We will use the test set for calibration evaluation.
+
+```{python}
+#| label: calibration-s2-test
+
+%matplotlib inline
+
+fig, ax = plt.subplots()
+
+for estimator, name, color in [(ag_model_s2, 'Uncalib_CatBoost', 'orange'),
+          (cal_model_s2, 'Calib_CatBoost', 'blue')]:
+
+  CalibrationDisplay.from_estimator(
+      estimator = estimator,
+      X = X_test,
+      y = y_test,
+      n_bins = 20,
+      name = name,
+      color = color,
+      ax = ax
+    )
+    
+ax.set_title("Calibration Plot (Test Set)")
+plt.show()
+```
+
+The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
+
+Evalulate the original decision threshold of 0.5 on the test set.
+
+```{python}
+#| label: evaluate-default-threshold-s2
+
+leaderboard_s2_default = ag_model_s2_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
+
+display(leaderboard_s2_default)
+
+```
+
+Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score.
+
+```{python}
+#| label: threshold-tuning-s2
+
+best_threshold_s2 = (ag_model_s2_predictor
+                .calibrate_decision_threshold(
+                data = df_tuning_ft.to_pandas(),
+                metric = 'f1',
+                decision_thresholds = 200)
+                )
+
+ag_model_s2_predictor.set_decision_threshold(best_threshold_s2)
+
+ag_model_s2_predictor.save()  # Save the predictor with the new threshold
+```
+
+Use the test set to evaluate the effectivness of the decision threshold.
+
+```{python}
+#| label: evaluate-threshold-s2
+
+leaderboard_s2_optimized = ag_model_s2_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
+
+display(leaderboard_s2_optimized)
+```
+
+Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score.
+
+
+## Cost-Sensitive Learning Approach
+
+**Concept Recap:** Cost-sensitive learning is achieved by assigning higher weights to the minority class (fraud) instances during training. AutoGluon handles this internally when `sample_weight='balance_weight'` is specified. We will use `average_precision` as the evaluation metric.
+
+Setup AutoGluon parameters.
+
+```{python}
+#| label: setup-autogluon-cost-sensitive
+
+strategy_name_3 = "3. Cost Sensitive Learning"
+model_folder_s3 = "./Lab04_ag_models_s3_cost_sensitive"
+remove_ag_folder(model_folder_s3)
+
+predictor_args_s3 = {
+    'problem_type': 'binary',
+    'eval_metric': 'average_precision', 
+    'path': model_folder_s3,
+    'sample_weight': 'balance_weight' # Use balance weights for cost-sensitive learning
+}
+
+fit_args_s3 = {'holdout_frac': 0.2,
+            'excluded_model_types': ['KNN'],
+            'presets': 'medium_quality',
+            'time_limit': 180}  
+
+ag_wrapper_s3 = AutoGluonSklearnWrapper(
+    label=target_label,
+    predictor_args=predictor_args_s3,
+    fit_args=fit_args_s3,
+    n_jobs=num_jobs
+)
+```
+
+Fit the model using AutoGluon.
+
+```{python}
+#| label: lab04-fit-autogluon-s3
+ag_model_s3 = ag_wrapper_s3.fit(X_train, y_train) 
+
+ag_model_s3.predictor.save()  # Save the predictor for later use
+```
+
+Access the AutoGluon predictor object.
+```{python}
+#| label: access-autogluon-predictor-s3
+
+ag_model_s3_predictor = ag_model_s3.predictor
+
+```
+
+Check the leaderboard.
+
+```{python}
+#| label: leaderboard-s3
+leaderboard_s3 = ag_model_s3_predictor.leaderboard(
+    df_tuning_ft.to_pandas()
+    , extra_metrics=['average_precision', 'f1']
+)
+display(leaderboard_s3)
+```
+
+Prefer CatBoost due to inference speed and performance when it is available.
+
+```{python}
+#| label: set-best-model-s3
+
+available_models_s3 = ag_model_s3_predictor.model_names()
+selected_best_model_s3 = 'CatBoost' if 'CatBoost' in available_models_s3 else ag_model_s3_predictor.model_best
+
+ag_model_s3_predictor.set_model_best(selected_best_model_s3)
+
+ag_model_s3.predictor.save()  # Save the predictor for later use
+
+```
+
+Check feature importance.
+
+```{python}
+#| label: feature-importance-s3
+
+feature_importance_s3 = ag_model_s3_predictor.feature_importance(
+    df_tuning_ft.to_pandas(),
+    subsample_size = None,
+    num_shuffle_sets = 5
+)
+
+display(feature_importance_s3)
+```
+
+Check probability calibration using the tuning set.
+
+```{python}
+#| label: calibration-s3
+#| 
+
+%matplotlib inline
+
+pre_cal_disp_s3 = CalibrationDisplay.from_estimator(
+        estimator = ag_model_s3,
+        X = X_tuning,
+        y = y_tuning,
+        n_bins = 20,
+        name = 'Pre-Calib Curve: Do Nothing Strategy',
+        color = 'orange'
+    )
+
+pre_cal_disp_s3.ax_.set_title("Calibration Plot (Tuning Set)")
+```
+
+Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
+
+```{python}
+#| label: lab04-fit-calibration-s3
+cal_model_s3 = CalibratedClassifierCV(
+    estimator = ag_model_s3,
+    method='isotonic',
+    cv="prefit" # Use the fitted model from ag_model
+)
+
+global_set_seed()
+
+cal_model_s3.fit(X = X_tuning,
+            y = y_tuning)
+```
+
+Since the isotonic regression model was fitted on the tuning set, we can no longer use the tuning set for calibration evaluation. We will use the test set for calibration evaluation.
+
+```{python}
+#| label: calibration-s3-test
+
+%matplotlib inline
+
+fig, ax = plt.subplots()
+
+for estimator, name, color in [(ag_model_s3, 'Uncalib_CatBoost', 'orange'),
+          (cal_model_s3, 'Calib_CatBoost', 'blue')]:
+
+  CalibrationDisplay.from_estimator(
+      estimator = estimator,
+      X = X_test,
+      y = y_test,
+      n_bins = 20,
+      name = name,
+      color = color,
+      ax = ax
+    )
+    
+ax.set_title("Calibration Plot (Test Set)")
+plt.show()
+```
+
+The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
+
+Evalulate the original decision threshold of 0.5 on the test set.
+
+```{python}
+#| label: evaluate-default-threshold-s3
+
+leaderboard_s3_default = ag_model_s3_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
+
+display(leaderboard_s3_default)
+
+```
+
+Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score.
+
+```{python}
+#| label: threshold-tuning-s3
+
+best_threshold_s3 = (ag_model_s3_predictor
+                .calibrate_decision_threshold(
+                data = df_tuning_ft.to_pandas(),
+                metric = 'f1',
+                decision_thresholds = 200)
+                )
+
+ag_model_s3_predictor.set_decision_threshold(best_threshold_s3)
+
+ag_model_s3_predictor.save()  # Save the predictor with the new threshold
+```
+
+Use the test set to evaluate the effectivness of the decision threshold.
+
+```{python}
+#| label: evaluate-threshold-s3
+
+leaderboard_s3_optimized = ag_model_s3_predictor.leaderboard(
+    df_test_ft.to_pandas()
+    , extra_metrics=['f1']
+)
+
+display(leaderboard_s3_optimized)
+```
+
+Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score.
+
+**stopped here 6/4**
+
+
+## Resampling Approach
+
+**Concept Recap:** Modify the training data distribution to be more balanced. We will use SMOTE (Synthetic Minority Over-sampling Technique) to oversample the minority (fraud) class in the training set. The tuning and test sets remain unchanged. Probability calibration after training on resampled data is a critical concern.
+
+### Random Undersampling of Majority Class (RUS)
+
+### Random Oversampling of Minority Class (ROS)
+
+```{python}
+#| label: model-strategy4-resampling-prep
+
+if X_train.empty:
+    print("Skipping data preparation for Strategy 4: Training data is empty.")
+    X_train_smote, y_train_smote = pd.DataFrame(), pd.Series(dtype='int') # Placeholders
+else:
+    print("\n--- Preparing Resampled Training Data (SMOTE) for Strategy 4 ---")
+    
+    # Initialize SMOTE. We can adjust the sampling_strategy if needed.
+    # Default is to oversample the minority class to have an equal number of samples as the majority class.
+    smote = SMOTE(random_state=2025, k_neighbors=5) # k_neighbors should be less than minority samples
+    
+    # Check minority class size for k_neighbors
+    minority_class_count = y_train.value_counts().min()
+    if minority_class_count <= smote.k_neighbors:
+        # Adjust k_neighbors if it's too large for the number of minority samples
+        # This is a common issue with very small minority classes in CV folds or small datasets.
+        new_k = max(1, minority_class_count - 1)
+        print(f"Warning: Original k_neighbors ({smote.k_neighbors}) for SMOTE is >= minority samples ({minority_class_count}). Adjusting k_neighbors to {new_k}.")
+        smote.k_neighbors = new_k
+
+    if minority_class_count > 1: # SMOTE needs at least 2 samples in the minority class to operate with k_neighbors=1
+        start_time_smote = time.time()
+        try:
+            X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
+            end_time_smote = time.time()
+            print(f"SMOTE applied in {end_time_smote - start_time_smote:.2f} seconds.")
+            print(f"Resampled training data shape: {X_train_smote.shape}, Resampled target distribution:\n{y_train_smote.value_counts(normalize=True)}")
+        except ValueError as e:
+            print(f"Error during SMOTE: {e}. This can happen if minority class count is too low for k_neighbors.")
+            print("Skipping SMOTE, proceeding with original data for this strategy as a fallback.")
+            X_train_smote, y_train_smote = X_train.copy(), y_train.copy()
+    else:
+        print("Minority class count is too low for SMOTE. Skipping resampling for Strategy 4.")
+        X_train_smote, y_train_smote = X_train.copy(), y_train.copy() # Fallback to original
+
+```
+
+### Synthetic Minority Over-sampling Technique (SMOTE)
+
+```{python}
+#| label: model-strategy4-resampling-train
+
+if X_train.empty or X_train_smote.empty:
+    print("Skipping Strategy 4 training: Training data (original or resampled) is empty.")
+else:
+    print("\n--- Strategy 4: Class-Based Resampling (SMOTE) ---")
+    strategy_name_4 = "4. Resampling (SMOTE)"
+    model_folder_s4 = "./Lab04_ag_models_s4_smote"
+    remove_ag_folder(model_folder_s4)
+
+    predictor_args_s4 = {
+        'problem_type': 'binary',
+        'eval_metric': 'average_precision', # Continue using PR-AUC
+        'path': model_folder_s4
+    }
+
+    fit_args_s4 = {
+        'holdout_frac': 0.2,
+        'excluded_model_types': ['KNN'],
+        'presets': 'medium_quality',
+        'time_limit': 180
+    }
+
+    ag_model_s4 = AutoGluonSklearnWrapper(
+        label='TX_FRAUD',
+        predictor_args=predictor_args_s4,
+        fit_args=fit_args_s4,
+        n_jobs=num_jobs
+    )
+    
+    print("Training AutoGluon model for Strategy 4 on SMOTE data...")
+    start_time = time.time()
+    ag_model_s4.fit(X_train_smote, y_train_smote) # Train on resampled data
+    end_time = time.time()
+    print(f"Strategy 4 model training finished in {end_time - start_time:.2f} seconds.")
+
+    # Performance Reporting
+    print("\n--- Performance on Test Set (Strategy 4) ---")
+    leaderboard_s4 = ag_model_s4.predictor.leaderboard(df_test_ft.to_pandas(), extra_metrics=['average_precision', 'f1', 'roc_auc'], silent=True)
+    display(leaderboard_s4)
+    
+    best_model_name_s4 = leaderboard_s4.iloc[0]['model']
+    pr_auc_s4_test = leaderboard_s4.iloc[0]['score_test'] # average_precision
+    roc_auc_s4_test = leaderboard_s4.iloc[0]['roc_auc']
+    f1_default_s4_test = leaderboard_s4.iloc[0]['f1']
+    print(f"Best model: {best_model_name_s4}")
+    print(f"Test PR-AUC (average_precision, from leaderboard): {pr_auc_s4_test:.4f}")
+    print(f"Test ROC-AUC (from leaderboard): {roc_auc_s4_test:.4f}")
+    print(f"Test F1 Score at default 0.5 threshold (from leaderboard): {f1_default_s4_test:.4f}")
+
+    # Probability Calibration Check & Threshold Tuning
+    print("\n--- Probability Calibration & Threshold Tuning (Strategy 4) ---")
+    pred_proba_tuning_s4_raw = ag_model_s4.predict_proba(X_tuning)[:, 1]
+
+    plt.figure(figsize=(10, 7))
+    disp_raw = CalibrationDisplay.from_predictions(y_tuning, pred_proba_tuning_s4_raw, n_bins=10, name=f"{best_model_name_s4} (Raw from SMOTE)")
+    plt.title("Calibration Curve (Strategy 4: SMOTE - Before Calibration)")
+    plt.grid(True)
+    plt.show()
+    calibration_note_s4 = "Review plot; SMOTE often miscalibrates. Explicit calibration likely needed."
+    print(calibration_note_s4)
+
+    # Explicit Probability Calibration Step for resampled model (if needed)
+    # We use CalibratedClassifierCV on the *predictions* of the AutoGluon model.
+    # This requires fitting CalibratedClassifierCV on the tuning set predictions.
+    # For simplicity with AutoGluon, which is an ensemble, we might re-calibrate its best model's predictions.
+    # However, AutoGluon's internal models might already have some calibration.
+    # Let's demonstrate a conceptual recalibration on the tuning set predictions if they look off.
+    
+    print("\nAttempting to calibrate probabilities from SMOTE model using Isotonic Regression on tuning set...")
+    # We fit the calibrator on the tuning set's raw probabilities and tuning labels
+    isotonic_calibrator = CalibratedClassifierCV(estimator=None, method='isotonic', cv='prefit') 
+    # To use CalibratedClassifierCV with a pre-fitted model's probabilities, we need to wrap it slightly
+    # or directly use IsotonicRegression from sklearn.calibration.
+    # For this lab, we'll use a simpler path: fit IsotonicRegression on (pred_proba_tuning_s4_raw, y_tuning)
+    # and then apply it to pred_proba_tuning_s4_raw for threshold tuning, and pred_proba_test_s4_raw for final eval.
+    
+    from sklearn.isotonic import IsotonicRegression
+    iso_reg = IsotonicRegression(out_of_bounds='clip') # y_min=0, y_max=1 by default for clip
+    # Fit on tuning probabilities and tuning labels
+    # Reshape pred_proba_tuning_s4_raw if it gives shape warning for IsotonicRegression
+    try:
+        iso_reg.fit(pred_proba_tuning_s4_raw, y_tuning)
+        pred_proba_tuning_s4_calibrated = iso_reg.predict(pred_proba_tuning_s4_raw)
+        print("Probabilities calibrated using Isotonic Regression for threshold tuning.")
+        
+        # Display calibrated curve
+        plt.figure(figsize=(10, 7))
+        disp_calib = CalibrationDisplay.from_predictions(y_tuning, pred_proba_tuning_s4_calibrated, n_bins=10, name=f"{best_model_name_s4} (Calibrated)")
+        plt.title("Calibration Curve (Strategy 4: SMOTE - After Isotonic Calibration)")
+        plt.grid(True)
+        plt.show()
+        calibration_note_s4 += " Applied Isotonic."
+        # Use calibrated probabilities for threshold tuning
+        pred_proba_tuning_for_thresholding = pred_proba_tuning_s4_calibrated
+    except Exception as e:
+        print(f"Could not fit IsotonicRegression (e.g. if all probabilities are same): {e}. Using raw probabilities.")
+        pred_proba_tuning_for_thresholding = pred_proba_tuning_s4_raw # Fallback to raw if calibration failed
+
+
+    best_f1_s4 = 0
+    best_threshold_s4 = 0.5
+    thresholds = np.arange(0.01, 1.0, 0.01)
+    f1_scores_tuning_s4 = []
+    for threshold in thresholds:
+        y_pred_tuning_thresholded_s4 = (pred_proba_tuning_for_thresholding >= threshold).astype(int)
+        current_f1 = f1_score(y_tuning, y_pred_tuning_thresholded_s4)
+        f1_scores_tuning_s4.append(current_f1)
+        if current_f1 > best_f1_s4:
+            best_f1_s4 = current_f1
+            best_threshold_s4 = threshold
+            
+    print(f"Best F1-score on (potentially calibrated) tuning probabilities: {best_f1_s4:.4f} at threshold {best_threshold_s4:.2f}")
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(thresholds, f1_scores_tuning_s4, marker='.')
+    plt.axvline(best_threshold_s4, color='r', linestyle='--', label=f'Best Threshold: {best_threshold_s4:.2f}')
+    plt.title('F1 Score vs. Threshold on (Potentially Calibrated) Tuning Probs (Strategy 4)')
+    plt.xlabel('Threshold')
+    plt.ylabel('F1 Score')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    # Evaluate on test set with optimal threshold, using calibrated probabilities for test set too
+    pred_proba_test_s4_raw = ag_model_s4.predict_proba(X_test)[:, 1]
+    if 'iso_reg' in locals() and hasattr(iso_reg, 'is_fitted_') and iso_reg.is_fitted_ : # Check if calibrator was successfully fitted
+         pred_proba_test_s4_final = iso_reg.predict(pred_proba_test_s4_raw)
+    else:
+         pred_proba_test_s4_final = pred_proba_test_s4_raw # Fallback to raw if calibration failed
+         
+    y_pred_test_optimal_s4 = (pred_proba_test_s4_final >= best_threshold_s4).astype(int)
+    f1_optimal_s4_test = f1_score(y_test, y_pred_test_optimal_s4)
+    print(f"F1-score on test set with optimal threshold ({best_threshold_s4:.2f}) using (potentially calibrated) probabilities: {f1_optimal_s4_test:.4f}")
+
+    print("\nClassification Report on Test Set (Optimal Threshold, Strategy 4):")
+    print(classification_report(y_test, y_pred_test_optimal_s4, target_names=['Legitimate', 'Fraud']))
+
+    comparison_results.append({
+        "Strategy": strategy_name_4,
+        "Test ROC-AUC": roc_auc_s4_test,
+        "Test PR-AUC": pr_auc_s4_test,
+        "Test F1 (Optimized)": f1_optimal_s4_test,
+        "Optimized Threshold": best_threshold_s4,
+        "Calibration Note": calibration_note_s4
+    })
+```
+
+### Hybrid: SMOTE + RUS
+
+### Comparison of Resampling Strategies
+
+After running all strategies, we compile the results into a summary table to compare their effectiveness.
+
+```{python}
+#| label: tbl-comparison-summary
+#| tbl-cap: "Comparison of Imbalance Handling Strategies"
+
+if comparison_results:
+    summary_df = pd.DataFrame(comparison_results)
+    display(summary_df)
+else:
+    print("No modeling results to display in the summary table.")
+
+```
+
+### Interpreting the Best Model
+
+Assuming one of the strategies yielded a satisfactory model (e.g., based on a combination of PR-AUC, F1-score, and good calibration), we can perform further interpretability analysis on it. Let's assume `ag_model_s2` (PR-AUC metric) was chosen as a good candidate for this example. You should replace this with your actual best model.
+
+```{python}
+#| label: interpret-best-model
+
+# Choose the model to interpret (e.g., ag_model_s2)
+# For the lab, let's assume Strategy 2 (PR-AUC) gave a good balance.
+# If another model was better, replace ag_model_s2 accordingly.
+if 'ag_model_s2' in locals() and ag_model_s2.is_fitted_:
+    chosen_model_to_interpret = ag_model_s2
+    chosen_model_name = "Strategy 2 Model (PR-AUC)"
+    print(f"--- Interpreting: {chosen_model_name} ---")
+
+    # 1. Permutation Feature Importance
+    print("\nCalculating Permutation Feature Importance...")
+    # AutoGluon's feature_importance is essentially permutation importance
+    # It needs the data to have the label column for evaluation during permutation.
+    X_test_with_label = X_test.copy()
+    X_test_with_label['TX_FRAUD'] = y_test
+    
+    pfi = chosen_model_to_interpret.predictor.feature_importance(data=X_test_with_label, silent=True)
+    pfi_df = pfi.reset_index().rename(columns={'index': 'feature', 0: 'importance'})
+    print("Permutation Feature Importance (Test Set):")
+    display(pfi_df)
+
+    # 2. Partial Dependence Plots (PDP) / Individual Conditional Expectation (ICE)
+    print("\nGenerating PDP/ICE plots...")
+    # We need a sample of the data for PDP/ICE for performance reasons
+    # Background data for PDP should not have the target column
+    pdp_ice_sample_data = X_train.sample(min(1000, len(X_train)), random_state=2025) 
+    
+    # Get features from the predictor if possible
+    try:
+        pdp_features = chosen_model_to_interpret.predictor.features()
+        # Select top N features by PFI for PDP/ICE if too many features
+        if len(pdp_features) > 5:
+            pdp_features_to_plot = pfi_df['feature'].head(5).tolist()
+        else:
+            pdp_features_to_plot = pdp_features
+            
+        # Get categorical features metadata
+        cat_features_metadata = chosen_model_to_interpret.predictor.feature_metadata
+        categorical_for_pdp = [f for f in pdp_features_to_plot if cat_features_metadata.get_feature_type_raw(f) == 'category']
+
+        for feature_to_plot in pdp_features_to_plot:
+            print(f"PDP/ICE for feature: {feature_to_plot}")
+            try:
+                PartialDependenceDisplay.from_estimator(
+                    chosen_model_to_interpret, 
+                    pdp_ice_sample_data, 
+                    features=[feature_to_plot],
+                    categorical_features=[feature_to_plot] if feature_to_plot in categorical_for_pdp else None,
+                    kind='both', # PDP and ICE
+                    subsample=50, # Number of ICE lines
+                    random_state=2025,
+                    pd_line_kw={"color": "red", "linestyle": "--", "linewidth": 2},
+                    ice_lines_kw={"color": "lightblue", "alpha": 0.5, "linewidth": 0.5}
+                )
+                plt.title(f"PDP and ICE for {feature_to_plot} ({chosen_model_name})")
+                plt.grid(True)
+                plt.show()
+            except Exception as e_pdp:
+                print(f"  Could not generate PDP/ICE for {feature_to_plot}: {e_pdp}")
+
+    except Exception as e:
+        print(f"Could not generate PDP/ICE plots: {e}")
+
+    # 3. SHAP Values (using a sample of test data for SHAP summary)
+    print("\nCalculating SHAP values for summary plots...")
+    # SHAP can be slow on large datasets, so use a sample of X_test
+    if len(X_test) > 200:
+        shap_sample_data = X_test.sample(200, random_state=2025)
+    else:
+        shap_sample_data = X_test
+
+    try:
+        # Create a SHAP explainer. For tree models, TreeExplainer is efficient.
+        # AutoGluon often ensembles, so KernelExplainer might be more general but slower.
+        # If the best model is a single tree-based one (e.g. LGBM, CatBoost), we can try to optimize.
+        # For the wrapper, a generic lambda explainer is safer.
+        shap_explainer = shap.Explainer(lambda x: chosen_model_to_interpret.predict_proba(x)[:,1], shap_sample_data)
+        shap_values_summary = shap_explainer(shap_sample_data)
+
+        max_display_features = min(10, shap_sample_data.shape[1])
+        max_abs_shap = float(np.max(np.abs(shap_values_summary.values)))
+
+        if max_abs_shap < 1e-4:
+            print(
+                "Note: the sampled SHAP values are numerically very small, so the beeswarm may appear tightly compressed around zero."
+            )
+
+        print("SHAP Summary Plot (Beeswarm):")
+        plt.close('all')
+        shap.plots.beeswarm(
+            shap_values_summary,
+            max_display=max_display_features,
+            plot_size=(10, 6),
+            alpha=0.9,
+            s=24,
+            show=False
+        )
+        plt.xlabel("SHAP value (impact on predicted fraud probability)")
+        plt.title(f"SHAP Beeswarm Plot ({chosen_model_name})")
+        plt.tight_layout()
+        plt.show()
+        plt.close('all')
+
+        print("SHAP Feature Importance (Bar Plot based on mean absolute SHAP values):")
+        plt.close('all')
+        shap.plots.bar(shap_values_summary, max_display=max_display_features, show=False)
+        plt.gcf().set_size_inches(10, 6)
+        plt.title(f"SHAP Bar Plot ({chosen_model_name})")
+        plt.tight_layout()
+        plt.show()
+        plt.close('all')
+
+        # SHAP Dependence Plots for top features
+        print("SHAP Dependence Plots:")
+        # Get top features from PFI to plot SHAP dependence
+        top_shap_features = pfi_df['feature'].head(min(5, len(pfi_df))).tolist()
+        for feature_shap_dep in top_shap_features:
+            if feature_shap_dep in shap_sample_data.columns:
+                print(f"  Dependence plot for {feature_shap_dep}")
+                shap.dependence_plot(feature_shap_dep, shap_values_summary.values, shap_sample_data, show=False)
+                plt.title(f"SHAP Dependence Plot for {feature_shap_dep} ({chosen_model_name})")
+                plt.show()
+            else:
+                 print(f"  Skipping SHAP dependence for {feature_shap_dep} as it is not in shap_sample_data columns (this should not happen if PFI features are correct).")
+
+    except Exception as e_shap:
+        print(f"Could not generate SHAP plots: {e_shap}")
+else:
+    print("Chosen model for interpretation (ag_model_s2) not available or not fitted. Skipping interpretation.")
+
+```
+
+------------------------------------------------------------------------
+
+# Key Conclusions and Recommendations
+
+This lab explored several common strategies for handling class imbalance in the context of credit card fraud detection. We compared: 1. Doing nothing (training on original imbalanced data). 2. Using a class-sensitive evaluation metric (PR-AUC / `average_precision`) for model selection. 3. Employing cost-sensitive learning via `sample_weight='balance_weight'`. 4. Applying class-based resampling (SMOTE) to the training data.
+
+**Hypothetical Findings & Discussion:**
+
+(Students should replace this with their actual findings based on the lab execution. The following is a general discussion based on common outcomes in such scenarios.)
+
+-   **Strategy 1 (Do Nothing with ROC-AUC):** While simple, relying solely on ROC-AUC for model selection in highly imbalanced scenarios can be misleading. The model might achieve a high ROC-AUC by correctly classifying the vast majority of legitimate transactions, yet still perform poorly on identifying fraud. The F1-score after threshold tuning is the more critical indicator here.
+
+-   **Strategy 2 (PR-AUC Metric):** Using PR-AUC (`average_precision`) as the primary evaluation metric often leads to models that are better at distinguishing the minority (fraud) class. This is because PR-AUC focuses on the trade-off between precision and recall, which is more relevant when the number of true negatives is very large. The F1-score obtained after threshold tuning on this model is usually a strong contender.
+
+-   **Strategy 3 (Cost-Sensitive Learning with `balance_weight`):** This approach directly tells the learning algorithm to pay more attention to the minority class by up-weighting its instances. It often yields good performance, comparable to or sometimes better than just using PR-AUC, especially in terms of recall for the fraud class. The `balance_weight` option in AutoGluon is a convenient way to implement this.
+
+-   **Strategy 4 (SMOTE Resampling):** While resampling techniques like SMOTE aim to provide the model with more minority examples, they come with significant caveats:
+
+    -   **Probability Calibration:** SMOTE (and other oversampling methods) almost invariably destroy the probability calibration of a model. The predicted probabilities from a model trained on SMOTE-d data often do not reflect the true likelihoods on the original, imbalanced data distribution. This was likely observed in the calibration plot for Strategy 4 before explicit recalibration.
+    -   **Recalibration Necessity:** If using resampled data, an explicit probability recalibration step (e.g., using Isotonic Regression or Platt Scaling, often via `sklearn.calibration.CalibratedClassifierCV` applied to the *predictions* of the already trained model) is crucial if reliable probabilities are needed.
+    -   **Overfitting Risk:** SMOTE can sometimes lead to overfitting if the synthetic samples do not generalize well or if the underlying minority class patterns are not distinct enough.
+    -   **Performance:** In practice, despite the intuitive appeal, resampling methods like SMOTE do not always outperform strategies like using PR-AUC and/or cost-sensitive learning, especially when considering the F1-score on an unadulterated test set and the reliability of probabilities.
+
+**General Recommendations:**
+
+1.  **Prioritize Class-Sensitive Metrics:** For imbalanced fraud detection, always prioritize metrics like PR-AUC (`average_precision`), F1-score, precision, and recall over simple accuracy or ROC-AUC for final model assessment and selection. AutoGluon makes it easy to specify `eval_metric='average_precision'`.
+
+2.  **Consider Cost-Sensitive Learning:** Techniques like `sample_weight='balance_weight'` are often effective and less prone to distorting probabilities compared to aggressive resampling. This is generally a robust approach.
+
+3.  **Be Cautious with Resampling:** Do not manipulate training data (e.g., via RUS, ROS, SMOTE) solely because it is imbalanced or "difficult to model." Such methods can introduce their own problems:
+
+    -   **Loss of Information (RUS):** Undersampling can discard valuable data from the majority class.
+    -   **Overfitting (ROS, SMOTE):** Oversampling can lead to models that are too specific to the (potentially synthetic) minority samples.
+    -   **Destroyed Probability Calibration:** This is a major issue, especially if the model outputs are used for more than just binary classification (e.g., risk scoring, estimating expected fraud rates).
+    -   **Increased Complexity:** More complex pipelines can be harder to maintain, understand, and debug.
+
+4.  **Probability Calibration is Crucial:** If the model's predicted probabilities are used for downstream tasks like estimating 'expected frauds per day,' 'expected fraud value,' or for any decision-making that relies on the magnitude of the probability (not just its rank), then accurate probability calibration is essential. Models trained on heavily resampled data often require a separate, explicit calibration step on a non-resampled tuning set.
+
+5.  **Threshold Tuning is Key:** Regardless of the imbalance strategy, always use a dedicated tuning set to find an optimal decision threshold that aligns with business objectives (e.g., maximizing F1-score, or balancing precision and recall according to specific cost considerations).
+
+6.  **Domain Knowledge & Feature Engineering:** Robust feature engineering, informed by domain knowledge, often provides more significant and reliable gains than complex imbalance handling techniques alone.
+
+**Further Reading:**
+
+For a deeper dive into practical fraud detection and the nuances of handling imbalanced data, students are highly encouraged to explore the **Fraud Detection Handbook**: <https://fraud-detection-handbook.github.io/fraud-detection-handbook/Foreword.html>
+
+This handbook provides extensive insights into various aspects of fraud detection, including data preprocessing, feature engineering, model selection, and dealing with challenges like class imbalance and concept drift.

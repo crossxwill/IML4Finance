@@ -1,6 +1,5 @@
 {
     "python.useEnvironmentsExtension": true,
-
     "python-envs.pythonProjects": [
         {
             "path": ".",

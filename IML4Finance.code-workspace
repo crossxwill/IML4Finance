@@ -5,34 +5,10 @@
 		}
 	],
 	"settings": {
-		"python.useEnvironmentsExtension": true,
 		"workbench.editorAssociations": {
 			"*.copilotmd": "vscode.markdown.preview.editor",
 			"file:/**/*.csv": "jupyter-data-wrangler",
 			"file:/**/*.parquet": "jupyter-data-wrangler"
-		},
-		"chat.tools.terminal.autoApprove": {
-			"/^python .*[\\\\/]\\.github[\\\\/]skills[\\\\/]create-edit-agent-skill[\\\\/]scripts[\\\\/]validate\\.py .*[\\\\/]\\.github[\\\\/]skills[\\\\/]custom-sklearn-estimator$/": {
-				"approve": true,
-				"matchCommandLine": true
-			},
-			"conda": true,
-			".venv\\Scripts\\activate": true,
-			"quarto": true,
-			"gh": true,
-			"/^conda activate env_AutoGluon_202601; copilot --help$/": {
-				"approve": true,
-				"matchCommandLine": true
-			},
-			"/^copilot help config$/": {
-				"approve": true,
-				"matchCommandLine": true
-			},
-			"/^copilot help commands$/": {
-				"approve": true,
-				"matchCommandLine": true
-			},
-			"copilot": true
 		}
 	}
 }

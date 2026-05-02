@@ -8,7 +8,7 @@ The project uses `conda-forge` (conda) to manage dependencies. If you want to ru
 conda activate {.env_name}
 ```
 
-The `.env_name` is env_iml4finance_2026.
+The `.env_name` is env_AutoGluon_202502.
 
 If the environment has not yet been created, you can create it by running:
 

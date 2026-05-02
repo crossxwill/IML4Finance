@@ -32,6 +32,7 @@ William Chiu, FRM
 ## Model Lifecycle
 
 ```{mermaid}
+#| label: lecture01-model-lifecycle
 timeline
     1. Business Context : Understanding the Business Problem
                         : Converting a Business Problem to a ML Problem
@@ -167,6 +168,7 @@ timeline
 ## When You Pay Your Loans
 
 ```{dot}
+#| label: lecture01-credit-reporting-flow
 digraph {
     size="8,5"  // Sets overall graph size to 8 inches wide, 5 inches tall
     nodesep=1.0  // Increases horizontal spacing between nodes
@@ -190,6 +192,7 @@ digraph {
 ## When You Apply for a Loan
 
 ```{dot}
+#| label: lecture01-loan-application-flow
 digraph {
     size="8,5"  // Sets overall graph size to 8 inches wide, 5 inches tall
     nodesep=1.0  // Increases horizontal spacing between nodes
@@ -246,14 +249,12 @@ digraph {
 -   Two major scoring models:
     -   FICO
     -   VantageScore
--   FICO Credit Score Ranges:
+-   Credit Score Ranges:
     -   Excellent: 800+
     -   Very Good: 740-799
     -   Good: 670-739
     -   Fair: 580-669
-    -   Poor: 300-579
-
-Note: VantageScore uses a similar 300-850 range but with slightly different tier boundaries.
+    -   Poor: Below 580
 
 # Prescreen Campaigns to Acquire New Clients
 
@@ -262,6 +263,7 @@ Note: VantageScore uses a similar 300-850 range but with slightly different tier
 ## Prescreen Process
 
 ```{dot}
+#| label: lecture01-prescreen-process
 digraph {
     rankdir=TD; // Top-down
     size="8,5"; // Set graph aspect ratio
