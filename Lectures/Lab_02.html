@@ -211,7 +211,7 @@ window.Quarto = {
 <h1 data-number="2"><span class="header-section-number">2</span> Setup</h1>
 <section id="import-python-libraries" class="level2" data-number="2.1">
 <h2 data-number="2.1" class="anchored" data-anchor-id="import-python-libraries"><span class="header-section-number">2.1</span> Import Python Libraries</h2>
-<div id="setup-imports" class="cell" data-message="false" data-execution_count="1">
+<div id="lab02-import-python-libraries" class="cell" data-message="false" data-execution_count="1">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1"></a><span class="co"># System utilities</span></span>
@@ -284,7 +284,7 @@ window.Quarto = {
 <section id="helper-functions-and-classes" class="level2" data-number="2.2">
 <h2 data-number="2.2" class="anchored" data-anchor-id="helper-functions-and-classes"><span class="header-section-number">2.2</span> Helper Functions and Classes</h2>
 <p>Define helper functions for plotting, scoring, data transformation, and a wrapper for AutoGluon compatibility with scikit-learn.</p>
-<div id="helper-funcs-classes" class="cell" data-execution_count="2">
+<div id="lab02-helper-functions" class="cell" data-execution_count="2">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">def</span> binned_prob_plot(</span>
@@ -1837,7 +1837,7 @@ Feature: emp_length, Measure: spearman_corr, Value: -0.7576, p-value: 0.0111</co
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-check-monotonicity-accepted-2" class="quarto-float quarto-figure quarto-figure-center anchored" width="1141" height="565">
+<div id="fig-check-monotonicity-accepted-2" class="quarto-float quarto-figure quarto-figure-center anchored" height="565" width="1141">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-check-monotonicity-accepted-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="Lab_02_files/figure-html/fig-check-monotonicity-accepted-output-4.png" id="fig-check-monotonicity-accepted-2" data-ref-parent="fig-check-monotonicity-accepted" width="1141" height="565" class="figure-img">
@@ -1849,7 +1849,7 @@ Feature: emp_length, Measure: spearman_corr, Value: -0.7576, p-value: 0.0111</co
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-check-monotonicity-accepted-3" class="quarto-float quarto-figure quarto-figure-center anchored" width="1141" height="565">
+<div id="fig-check-monotonicity-accepted-3" class="quarto-float quarto-figure quarto-figure-center anchored" height="565" width="1141">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-check-monotonicity-accepted-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="Lab_02_files/figure-html/fig-check-monotonicity-accepted-output-6.png" id="fig-check-monotonicity-accepted-3" data-ref-parent="fig-check-monotonicity-accepted" width="1141" height="565" class="figure-img">
@@ -1861,7 +1861,7 @@ Feature: emp_length, Measure: spearman_corr, Value: -0.7576, p-value: 0.0111</co
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-check-monotonicity-accepted-4" class="quarto-float quarto-figure quarto-figure-center anchored" width="1141" height="565">
+<div id="fig-check-monotonicity-accepted-4" class="quarto-float quarto-figure quarto-figure-center anchored" height="565" width="1141">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-check-monotonicity-accepted-4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="Lab_02_files/figure-html/fig-check-monotonicity-accepted-output-8.png" id="fig-check-monotonicity-accepted-4" data-ref-parent="fig-check-monotonicity-accepted" width="1141" height="565" class="figure-img">
@@ -1931,7 +1931,7 @@ Feature: addr_state
 <section id="define-modeling-features" class="level2" data-number="4.4">
 <h2 data-number="4.4" class="anchored" data-anchor-id="define-modeling-features"><span class="header-section-number">4.4</span> Define Modeling Features</h2>
 <p>In subsequent sections, we will use only the following features: <code>loan_amnt</code>, <code>dti</code>, <code>credit_score</code>, and <code>emp_length</code> for modeling. The <code>addr_state</code> feature will be excluded from the modeling process due to low mutual information.</p>
-<div id="define-modeling-features" class="cell" data-execution_count="12">
+<div id="lab02-define-modeling-features" class="cell" data-execution_count="12">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1"></a>modeling_features <span class="op">=</span> [<span class="st">'loan_amnt'</span>, <span class="st">'dti'</span>, <span class="st">'credit_score'</span>, <span class="st">'emp_length'</span>]</span>
@@ -2017,7 +2017,7 @@ Feature: addr_state
 <div class="cell-output cell-output-stdout">
 <pre><code>Using RI features (same as modeling features): ['loan_amnt', 'dti', 'credit_score', 'emp_length']
 Training Reject Inference Logistic Regression model...
-RI model training completed in 29.77 seconds.</code></pre>
+RI model training completed in 27.94 seconds.</code></pre>
 </div>
 </div>
 </section>
@@ -2410,12 +2410,13 @@ Table&nbsp;4: Sample of Augmented TTD Training Data (Fuzzy Augmentation)
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>--- Training AutoGluon Model in: Lab02_ag_models_TTD_Initial ---
+Removed existing AutoGluon folder: Lab02_ag_models_TTD_Initial
 Using features: ['loan_amnt', 'dti', 'credit_score', 'emp_length']
 Training data shape: (1956420, 7)
 Sum of weights in training data: 1656420.00</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>AutoGluon training completed in 13.42 seconds.
+<pre><code>AutoGluon training completed in 12.67 seconds.
 
 AutoGluon Leaderboard:</code></pre>
 </div>
@@ -2451,10 +2452,10 @@ Table&nbsp;5: Leaderboard for initial TTD Model
 <td>LightGBM</td>
 <td>0.735284</td>
 <td>roc_auc</td>
-<td>0.121425</td>
-<td>3.883240</td>
-<td>0.121425</td>
-<td>3.883240</td>
+<td>0.108586</td>
+<td>3.833050</td>
+<td>0.108586</td>
+<td>3.833050</td>
 <td>1</td>
 <td>True</td>
 <td>1</td>
@@ -2464,10 +2465,10 @@ Table&nbsp;5: Leaderboard for initial TTD Model
 <td>WeightedEnsemble_L2</td>
 <td>0.735284</td>
 <td>roc_auc</td>
-<td>0.154691</td>
-<td>5.776500</td>
-<td>0.033266</td>
-<td>1.893260</td>
+<td>0.143146</td>
+<td>5.643567</td>
+<td>0.034560</td>
+<td>1.810517</td>
 <td>2</td>
 <td>True</td>
 <td>3</td>
@@ -2477,10 +2478,10 @@ Table&nbsp;5: Leaderboard for initial TTD Model
 <td>CatBoost</td>
 <td>0.732403</td>
 <td>roc_auc</td>
-<td>0.015840</td>
-<td>5.260838</td>
-<td>0.015840</td>
-<td>5.260838</td>
+<td>0.016503</td>
+<td>4.864611</td>
+<td>0.016503</td>
+<td>4.864611</td>
 <td>1</td>
 <td>True</td>
 <td>2</td>
@@ -2538,7 +2539,7 @@ Table&nbsp;5: Leaderboard for initial TTD Model
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-pdp-ice-initial-2" class="quarto-float quarto-figure quarto-figure-center anchored" width="684" height="399">
+<div id="fig-pdp-ice-initial-2" class="quarto-float quarto-figure quarto-figure-center anchored" height="399" width="684">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-pdp-ice-initial-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="Lab_02_files/figure-html/fig-pdp-ice-initial-output-2.png" id="fig-pdp-ice-initial-2" data-ref-parent="fig-pdp-ice-initial" width="684" height="399" class="figure-img">
@@ -2550,7 +2551,7 @@ Table&nbsp;5: Leaderboard for initial TTD Model
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-pdp-ice-initial-3" class="quarto-float quarto-figure quarto-figure-center anchored" width="684" height="400">
+<div id="fig-pdp-ice-initial-3" class="quarto-float quarto-figure quarto-figure-center anchored" height="400" width="684">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-pdp-ice-initial-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="Lab_02_files/figure-html/fig-pdp-ice-initial-output-3.png" id="fig-pdp-ice-initial-3" data-ref-parent="fig-pdp-ice-initial" width="684" height="400" class="figure-img">
@@ -2562,7 +2563,7 @@ Table&nbsp;5: Leaderboard for initial TTD Model
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-pdp-ice-initial-4" class="quarto-float quarto-figure quarto-figure-center anchored" width="684" height="400">
+<div id="fig-pdp-ice-initial-4" class="quarto-float quarto-figure quarto-figure-center anchored" height="400" width="684">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-pdp-ice-initial-4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="Lab_02_files/figure-html/fig-pdp-ice-initial-output-4.png" id="fig-pdp-ice-initial-4" data-ref-parent="fig-pdp-ice-initial" width="684" height="400" class="figure-img">
@@ -2648,12 +2649,13 @@ Figure&nbsp;2
 <div class="cell-output cell-output-stdout">
 <pre><code>Training constrained AutoGluon model with monotonic constraints via hyperparameters...
 --- Training AutoGluon Model in: Lab02_ag_models_TTD_Constrained ---
+Removed existing AutoGluon folder: Lab02_ag_models_TTD_Constrained
 Using features: ['loan_amnt', 'dti', 'credit_score', 'emp_length']
 Training data shape: (1956420, 7)
 Sum of weights in training data: 1656420.00</code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>AutoGluon training completed in 11.19 seconds.
+<pre><code>AutoGluon training completed in 10.63 seconds.
 
 AutoGluon Leaderboard:</code></pre>
 </div>
@@ -2689,10 +2691,10 @@ Table&nbsp;6: Leaderboard for constrained TTD Model
 <td>LightGBM</td>
 <td>0.734591</td>
 <td>roc_auc</td>
-<td>0.094788</td>
-<td>1.406310</td>
-<td>0.094788</td>
-<td>1.406310</td>
+<td>0.100077</td>
+<td>1.317407</td>
+<td>0.100077</td>
+<td>1.317407</td>
 <td>1</td>
 <td>True</td>
 <td>1</td>
@@ -2702,10 +2704,10 @@ Table&nbsp;6: Leaderboard for constrained TTD Model
 <td>WeightedEnsemble_L2</td>
 <td>0.734591</td>
 <td>roc_auc</td>
-<td>0.129300</td>
-<td>3.178548</td>
-<td>0.034512</td>
-<td>1.772238</td>
+<td>0.132914</td>
+<td>3.056167</td>
+<td>0.032836</td>
+<td>1.738759</td>
 <td>2</td>
 <td>True</td>
 <td>3</td>
@@ -2715,10 +2717,10 @@ Table&nbsp;6: Leaderboard for constrained TTD Model
 <td>CatBoost</td>
 <td>0.732820</td>
 <td>roc_auc</td>
-<td>0.018703</td>
-<td>5.843751</td>
-<td>0.018703</td>
-<td>5.843751</td>
+<td>0.016894</td>
+<td>5.491145</td>
+<td>0.016894</td>
+<td>5.491145</td>
 <td>1</td>
 <td>True</td>
 <td>2</td>
@@ -2775,7 +2777,7 @@ Table&nbsp;6: Leaderboard for constrained TTD Model
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-pdp-ice-constrained-2" class="quarto-float quarto-figure quarto-figure-center anchored" width="684" height="399">
+<div id="fig-pdp-ice-constrained-2" class="quarto-float quarto-figure quarto-figure-center anchored" height="399" width="684">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-pdp-ice-constrained-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="Lab_02_files/figure-html/fig-pdp-ice-constrained-output-3.png" id="fig-pdp-ice-constrained-2" data-ref-parent="fig-pdp-ice-constrained" width="684" height="399" class="figure-img">
@@ -2787,7 +2789,7 @@ Table&nbsp;6: Leaderboard for constrained TTD Model
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-pdp-ice-constrained-3" class="quarto-float quarto-figure quarto-figure-center anchored" width="684" height="400">
+<div id="fig-pdp-ice-constrained-3" class="quarto-float quarto-figure quarto-figure-center anchored" height="400" width="684">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-pdp-ice-constrained-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="Lab_02_files/figure-html/fig-pdp-ice-constrained-output-4.png" id="fig-pdp-ice-constrained-3" data-ref-parent="fig-pdp-ice-constrained" width="684" height="400" class="figure-img">
@@ -2799,7 +2801,7 @@ Table&nbsp;6: Leaderboard for constrained TTD Model
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="fig-pdp-ice-constrained-4" class="quarto-float quarto-figure quarto-figure-center anchored" width="684" height="400">
+<div id="fig-pdp-ice-constrained-4" class="quarto-float quarto-figure quarto-figure-center anchored" height="400" width="684">
 <figure class="quarto-float quarto-subfloat-fig figure">
 <div aria-describedby="fig-pdp-ice-constrained-4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="Lab_02_files/figure-html/fig-pdp-ice-constrained-output-5.png" id="fig-pdp-ice-constrained-4" data-ref-parent="fig-pdp-ice-constrained" width="684" height="400" class="figure-img">
@@ -2938,7 +2940,7 @@ Table&nbsp;7: Weighted default rates for TTD Test Data
 </figure>
 </div>
 </div>
-<div id="weighted-auc" class="cell" data-execution_count="22">
+<div id="lab02-evaluate-ttd-test-set" class="cell" data-execution_count="22">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb49"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb49-1"><a href="#cb49-1"></a><span class="co"># 5. Evaluate the Constrained Model on the TTD Test Set</span></span>
@@ -3344,7 +3346,7 @@ Table&nbsp;8: KS Table for Constrained Model on TTD Test Set
 <td>0.048456</td>
 <td>100.000000</td>
 <td>100.000000</td>
-<td>4.263256e-14</td>
+<td>1.421085e-14</td>
 </tr>
 </tbody>
 </table>
@@ -3633,25 +3635,25 @@ Table&nbsp;10: KS Table for TTD Calibration Data
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
 <td>685</td>
-<td>729</td>
-<td>701.741252</td>
-<td>16369.852938</td>
-<td>5964.687482</td>
-<td>10405.165455</td>
-<td>0.364370</td>
-<td>33.118394</td>
-<td>6.861766</td>
-<td>2.625663e+01</td>
-</tr>
-<tr class="odd">
-<th data-quarto-table-cell-role="th">4</th>
-<td>685</td>
 <td>685</td>
 <td>685.000000</td>
 <td>16293.509047</td>
 <td>7767.658946</td>
 <td>8525.850102</td>
 <td>0.476733</td>
+<td>34.850684</td>
+<td>6.442332</td>
+<td>2.840835e+01</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">4</th>
+<td>685</td>
+<td>729</td>
+<td>701.741252</td>
+<td>16369.852938</td>
+<td>5964.687482</td>
+<td>10405.165455</td>
+<td>0.364370</td>
 <td>40.581539</td>
 <td>8.764604</td>
 <td>3.181693e+01</td>
@@ -4590,7 +4592,7 @@ Table&nbsp;12: Model Decisions on TTD Test Set (No Cloning)
 <span id="cb67-39"><a href="#cb67-39"></a><span class="fu">## Import Python Libraries</span></span>
 <span id="cb67-40"><a href="#cb67-40"></a></span>
 <span id="cb67-43"><a href="#cb67-43"></a><span class="in">```{python}</span></span>
-<span id="cb67-44"><a href="#cb67-44"></a><span class="co">#| label: setup-imports</span></span>
+<span id="cb67-44"><a href="#cb67-44"></a><span class="co">#| label: lab02-import-python-libraries</span></span>
 <span id="cb67-45"><a href="#cb67-45"></a><span class="co">#| message: false</span></span>
 <span id="cb67-46"><a href="#cb67-46"></a></span>
 <span id="cb67-47"><a href="#cb67-47"></a><span class="co"># System utilities</span></span>
@@ -4661,7 +4663,7 @@ Table&nbsp;12: Model Decisions on TTD Test Set (No Cloning)
 <span id="cb67-112"><a href="#cb67-112"></a>Define helper functions for plotting, scoring, data transformation, and a wrapper for AutoGluon compatibility with scikit-learn.</span>
 <span id="cb67-113"><a href="#cb67-113"></a></span>
 <span id="cb67-116"><a href="#cb67-116"></a><span class="in">```{python}</span></span>
-<span id="cb67-117"><a href="#cb67-117"></a><span class="co"># | label: helper-funcs-classes</span></span>
+<span id="cb67-117"><a href="#cb67-117"></a><span class="co">#| label: lab02-helper-functions</span></span>
 <span id="cb67-118"><a href="#cb67-118"></a></span>
 <span id="cb67-119"><a href="#cb67-119"></a></span>
 <span id="cb67-120"><a href="#cb67-120"></a><span class="kw">def</span> binned_prob_plot(</span>
@@ -6022,7 +6024,7 @@ Table&nbsp;12: Model Decisions on TTD Test Set (No Cloning)
 <span id="cb67-1493"><a href="#cb67-1493"></a>In subsequent sections, we will use only the following features: <span class="in">`loan_amnt`</span>, <span class="in">`dti`</span>, <span class="in">`credit_score`</span>, and <span class="in">`emp_length`</span> for modeling. The <span class="in">`addr_state`</span> feature will be excluded from the modeling process due to low mutual information.</span>
 <span id="cb67-1494"><a href="#cb67-1494"></a></span>
 <span id="cb67-1497"><a href="#cb67-1497"></a><span class="in">```{python}</span></span>
-<span id="cb67-1498"><a href="#cb67-1498"></a><span class="co">#| label: define-modeling-features</span></span>
+<span id="cb67-1498"><a href="#cb67-1498"></a><span class="co">#| label: lab02-define-modeling-features</span></span>
 <span id="cb67-1499"><a href="#cb67-1499"></a></span>
 <span id="cb67-1500"><a href="#cb67-1500"></a>modeling_features <span class="op">=</span> [<span class="st">'loan_amnt'</span>, <span class="st">'dti'</span>, <span class="st">'credit_score'</span>, <span class="st">'emp_length'</span>]</span>
 <span id="cb67-1501"><a href="#cb67-1501"></a><span class="bu">print</span>(<span class="ss">f"Features selected for modeling: </span><span class="sc">{</span>modeling_features<span class="sc">}</span><span class="ss">"</span>)</span>
@@ -6456,7 +6458,7 @@ Table&nbsp;12: Model Decisions on TTD Test Set (No Cloning)
 <span id="cb67-1947"><a href="#cb67-1947"></a><span class="in">```</span></span>
 <span id="cb67-1948"><a href="#cb67-1948"></a></span>
 <span id="cb67-1951"><a href="#cb67-1951"></a><span class="in">```{python}</span></span>
-<span id="cb67-1952"><a href="#cb67-1952"></a><span class="co"># | label: weighted-AUC</span></span>
+<span id="cb67-1952"><a href="#cb67-1952"></a><span class="co">#| label: lab02-evaluate-ttd-test-set</span></span>
 <span id="cb67-1953"><a href="#cb67-1953"></a></span>
 <span id="cb67-1954"><a href="#cb67-1954"></a><span class="co"># 5. Evaluate the Constrained Model on the TTD Test Set</span></span>
 <span id="cb67-1955"><a href="#cb67-1955"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">--- Evaluating Constrained Model on TTD Test Set ---"</span>)</span>

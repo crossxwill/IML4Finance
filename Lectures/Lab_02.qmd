@@ -39,7 +39,7 @@ We will cover data preparation, assessing feature relationships, reject inferenc
 ## Import Python Libraries
 
 ```{python}
-#| label: setup-imports
+#| label: lab02-import-python-libraries
 #| message: false
 
 # System utilities
@@ -110,7 +110,7 @@ print("Libraries imported successfully.")
 Define helper functions for plotting, scoring, data transformation, and a wrapper for AutoGluon compatibility with scikit-learn.
 
 ```{python}
-# | label: helper-funcs-classes
+#| label: lab02-helper-functions
 
 
 def binned_prob_plot(
@@ -1471,7 +1471,7 @@ Mutual Information for `addr_state` is calculated, but the plot is not generated
 In subsequent sections, we will use only the following features: `loan_amnt`, `dti`, `credit_score`, and `emp_length` for modeling. The `addr_state` feature will be excluded from the modeling process due to low mutual information.
 
 ```{python}
-#| label: define-modeling-features
+#| label: lab02-define-modeling-features
 
 modeling_features = ['loan_amnt', 'dti', 'credit_score', 'emp_length']
 print(f"Features selected for modeling: {modeling_features}")
@@ -1905,7 +1905,7 @@ summary_default_rates_test = summarize_ttd_by_source(
 ```
 
 ```{python}
-# | label: weighted-AUC
+#| label: lab02-evaluate-ttd-test-set
 
 # 5. Evaluate the Constrained Model on the TTD Test Set
 print("\n--- Evaluating Constrained Model on TTD Test Set ---")

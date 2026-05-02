@@ -27,7 +27,7 @@ We will use counterfactual explanations to provide actionable feedback to applic
 We will use SHAP for both local (individual applicant) and global (overall feature importance) model explanations. SHAP values are versatile, offering alternatives to methods like permutation feature importance, partial dependence plots, ICE plots, and ALE plots.
 
 ```{python}
-#| label: setup-imports
+#| label: lab03-import-python-libraries
 #| message: false
 
 # System utilities

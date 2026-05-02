@@ -25,7 +25,7 @@ The lab explores Python libraries for handling large datasets, feature engineeri
 The chunks below include all necessary Python libraries. Helper functions are imported from `course_utils.helpers`.
 
 ```{python}
-#| label: setup-imports
+#| label: lab04-import-python-libraries
 
 # System utilities
 import os
@@ -361,6 +361,7 @@ duckdb.sql("""
 Read the same parquet files with `pandas` for comparison.
 
 ```{python}
+#| label: lab04-load-pandas-data
 # Read all parquet files into a pandas DataFrame (only .parquet files)
 
 df_fraud_pd = pd.read_parquet(path_parquet_files)
@@ -512,7 +513,7 @@ The lab splits the data into three sets:
 -   `df_test`: Transactions after `2018-09-01` (inclusive).
 
 ```{python}
-# | label: data-splitting-polars
+#| label: lab04-split-data-polars
 # Prequential data splitting using Polars
 
 def split_data(df: pl.DataFrame
@@ -905,7 +906,7 @@ Finally, we will select the optimal decision threshold based on the tuning set a
 -   The list of final features exclude features that are not relevant for modeling, such as IDs and datetime columns.
 
 ```{python}
-#| label: define-modeling-features
+#| label: lab04-define-modeling-features
 
 target_label = "TX_FRAUD"
 
@@ -931,6 +932,7 @@ final_features = [
 Setup features data frame and target series for training, tuning, and test sets. The data frames are converted to pandas data frames for compatibility with AutoGluon.
 
 ```{python}
+#| label: lab04-prepare-training-data
 X_train = df_train_ft[final_features].to_pandas()
 y_train = df_train_ft[target_label].to_pandas()
 
@@ -978,6 +980,7 @@ ag_wrapper_s1 = AutoGluonSklearnWrapper(
 Fit the model using AutoGluon.
 
 ```{python}
+#| label: lab04-fit-autogluon-s1
 ag_model_s1 = ag_wrapper_s1.fit(X_train, y_train)
 
 ag_model_s1.predictor.save()  # Save the predictor for later use
@@ -1053,6 +1056,7 @@ pre_cal_disp_s1.ax_.set_title("Calibration Plot (Tuning Set)")
 Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
 
 ```{python}
+#| label: lab04-fit-calibration-s1
 cal_model_s1 = CalibratedClassifierCV(
     estimator = ag_model_s1,
     method='isotonic',
@@ -1254,6 +1258,7 @@ pre_cal_disp_s2.ax_.set_title("Calibration Plot (Tuning Set)")
 Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
 
 ```{python}
+#| label: lab04-fit-calibration-s2
 cal_model_s2 = CalibratedClassifierCV(
     estimator = ag_model_s2,
     method='isotonic',
@@ -1377,6 +1382,7 @@ ag_wrapper_s3 = AutoGluonSklearnWrapper(
 Fit the model using AutoGluon.
 
 ```{python}
+#| label: lab04-fit-autogluon-s3
 ag_model_s3 = ag_wrapper_s3.fit(X_train, y_train) 
 
 ag_model_s3.predictor.save()  # Save the predictor for later use
@@ -1452,6 +1458,7 @@ pre_cal_disp_s3.ax_.set_title("Calibration Plot (Tuning Set)")
 Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
 
 ```{python}
+#| label: lab04-fit-calibration-s3
 cal_model_s3 = CalibratedClassifierCV(
     estimator = ag_model_s3,
     method='isotonic',
@@ -1842,15 +1849,38 @@ if 'ag_model_s2' in locals() and ag_model_s2.is_fitted_:
         shap_explainer = shap.Explainer(lambda x: chosen_model_to_interpret.predict_proba(x)[:,1], shap_sample_data)
         shap_values_summary = shap_explainer(shap_sample_data)
 
+        max_display_features = min(10, shap_sample_data.shape[1])
+        max_abs_shap = float(np.max(np.abs(shap_values_summary.values)))
+
+        if max_abs_shap < 1e-4:
+            print(
+                "Note: the sampled SHAP values are numerically very small, so the beeswarm may appear tightly compressed around zero."
+            )
+
         print("SHAP Summary Plot (Beeswarm):")
-        shap.summary_plot(shap_values_summary, shap_sample_data, plot_type="beeswarm", show=False)
+        plt.close('all')
+        shap.plots.beeswarm(
+            shap_values_summary,
+            max_display=max_display_features,
+            plot_size=(10, 6),
+            alpha=0.9,
+            s=24,
+            show=False
+        )
+        plt.xlabel("SHAP value (impact on predicted fraud probability)")
         plt.title(f"SHAP Beeswarm Plot ({chosen_model_name})")
+        plt.tight_layout()
         plt.show()
+        plt.close('all')
 
         print("SHAP Feature Importance (Bar Plot based on mean absolute SHAP values):")
-        shap.summary_plot(shap_values_summary, shap_sample_data, plot_type="bar", show=False)
+        plt.close('all')
+        shap.plots.bar(shap_values_summary, max_display=max_display_features, show=False)
+        plt.gcf().set_size_inches(10, 6)
         plt.title(f"SHAP Bar Plot ({chosen_model_name})")
+        plt.tight_layout()
         plt.show()
+        plt.close('all')
 
         # SHAP Dependence Plots for top features
         print("SHAP Dependence Plots:")

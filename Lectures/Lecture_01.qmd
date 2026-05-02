@@ -32,6 +32,7 @@ William Chiu, FRM
 ## Model Lifecycle
 
 ```{mermaid}
+#| label: lecture01-model-lifecycle
 timeline
     1. Business Context : Understanding the Business Problem
                         : Converting a Business Problem to a ML Problem
@@ -167,6 +168,7 @@ timeline
 ## When You Pay Your Loans
 
 ```{dot}
+#| label: lecture01-credit-reporting-flow
 digraph {
     size="8,5"  // Sets overall graph size to 8 inches wide, 5 inches tall
     nodesep=1.0  // Increases horizontal spacing between nodes
@@ -190,6 +192,7 @@ digraph {
 ## When You Apply for a Loan
 
 ```{dot}
+#| label: lecture01-loan-application-flow
 digraph {
     size="8,5"  // Sets overall graph size to 8 inches wide, 5 inches tall
     nodesep=1.0  // Increases horizontal spacing between nodes
@@ -260,6 +263,7 @@ digraph {
 ## Prescreen Process
 
 ```{dot}
+#| label: lecture01-prescreen-process
 digraph {
     rankdir=TD; // Top-down
     size="8,5"; // Set graph aspect ratio
