@@ -1,0 +1,2535 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "---\n",
+        "title: \"Lab 01: Prescreening Model\"\n",
+        "format: \n",
+        "    html:\n",
+        "        toc: true\n",
+        "        code-fold: true\n",
+        "        code-tools: true\n",
+        "        code-line-numbers: true\n",
+        "        page-layout: full\n",
+        "number-sections: true\n",
+        "---\n",
+        "\n",
+        "# Import Python Libraries"
+      ],
+      "id": "ce6830cf"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-setup-imports\n",
+        "# System utilities\n",
+        "import os\n",
+        "import shutil\n",
+        "import random\n",
+        "import torch\n",
+        "import numpy as np\n",
+        "\n",
+        "# Data manipulation and visualization\n",
+        "import duckdb\n",
+        "import pandas as pd\n",
+        "import matplotlib.pyplot as plt\n",
+        "\n",
+        "# Machine learning - scikit-learn\n",
+        "from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin\n",
+        "from sklearn.utils.validation import check_is_fitted\n",
+        "from sklearn.model_selection import train_test_split\n",
+        "from sklearn.pipeline import Pipeline\n",
+        "from sklearn.preprocessing import FunctionTransformer, OrdinalEncoder\n",
+        "from sklearn.calibration import CalibrationDisplay, CalibratedClassifierCV\n",
+        "from sklearn.feature_selection import SelectKBest, SelectFromModel, SequentialFeatureSelector, mutual_info_classif\n",
+        "from sklearn.inspection import PartialDependenceDisplay\n",
+        "from sklearn.compose import make_column_transformer, make_column_selector\n",
+        "from sklearn.ensemble import ExtraTreesClassifier\n",
+        "from sklearn import set_config\n",
+        "# from sklearnex import patch_sklearn\n",
+        "\n",
+        "# Specialized ML libraries\n",
+        "from autogluon.tabular import TabularPredictor, TabularDataset\n",
+        "from ydata_profiling import ProfileReport\n",
+        "from scikitplot.metrics import plot_cumulative_gain, plot_lift_curve\n",
+        "from PyALE import ale"
+      ],
+      "id": "lab01-setup-imports",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Read Data\n",
+        "\n",
+        "Text and CSV files are common data formats in universities. However, in companies, data is often stored in databases (like SQL Server, PostgreSQL, Snowflake, or DataBricks).\n",
+        "\n",
+        "In the lab, we will use the `duckdb` library to process data as if we were using a database.\n",
+        "\n",
+        "The code loads two parquet files into tables:\n",
+        "\n",
+        "-   `prospects.parquet`: Contains data about potential clients.\n",
+        "-   `campaign_history.parquet`: Contains data about past prescreening campaigns."
+      ],
+      "id": "479083ae"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-read-prospects-data\n",
+        "tbl_prospects = duckdb.query(\"\"\"\n",
+        "    SELECT *\n",
+        "    FROM '../Data/cibil/prospects.parquet'\n",
+        "    \"\"\")\n",
+        "\n",
+        "tbl_campaign_history = duckdb.query(\"\"\"\n",
+        "    SELECT * \n",
+        "    FROM '../Data/cibil/campaign_history.parquet'\n",
+        "    \"\"\")"
+      ],
+      "id": "lab01-read-prospects-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Show the column names from `tbl_prospects` and refer to the data dictionary (`../Data/cibil/Data Dictionary.xlsx`) for column definitions."
+      ],
+      "id": "2d2294b5"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-meta-prospects\n",
+        "#| tbl-cap: Metadata for tbl_prospects\n",
+        "\n",
+        "duckdb.sql(\"\"\"\n",
+        "    SELECT column_name, column_type\n",
+        "    FROM\n",
+        "    (DESCRIBE SELECT * FROM tbl_prospects)\n",
+        "    \"\"\").show(max_rows=100)"
+      ],
+      "id": "tbl-meta-prospects",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Show the column names from `tbl_campaign_history`. The columns are defined as follows:\n",
+        "\n",
+        "-   `PROSPECTID`: Unique identifier for each potential client.\n",
+        "-   `CAMPAIGNID`: Unique identifier for each prescreening campaign. There are two historical campaigns and a current campaign (`campaign_id = '3'`).\n",
+        "-   `response_flag`: Indicates whether the prospect responded to the campaign (1 for yes, 0 for no). For `campaign_id = '3'`, the flag is `NULL`.\n",
+        "-   `direct_mail_flag`: Indicates whether the prospect was targeted in the campaign (Y for yes, N for no). For `campaign_id = '3'`, the flag is `NULL`."
+      ],
+      "id": "11992292"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-meta-campaigns\n",
+        "#| tbl-cap: Metadata for tbl_campaign_history\n",
+        "\n",
+        "duckdb.sql(\"\"\"\n",
+        "    SELECT column_name, column_type\n",
+        "    FROM\n",
+        "    (DESCRIBE SELECT * FROM tbl_campaign_history)\n",
+        "    \"\"\").show()"
+      ],
+      "id": "tbl-meta-campaigns",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Peek at the Tables\n",
+        "\n",
+        "## Data Checks\n",
+        "\n",
+        "Look at the first 5 rows of each table."
+      ],
+      "id": "8bc14a92"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-top5-prospects\n",
+        "#| tbl-cap: First 5 rows of tbl_prospects\n",
+        "\n",
+        "duckdb.sql(\"\"\"\n",
+        "    SELECT *\n",
+        "    FROM tbl_prospects\n",
+        "    LIMIT 5\n",
+        "\"\"\").show()"
+      ],
+      "id": "tbl-top5-prospects",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-top5-campaigns\n",
+        "#| tbl-cap: First 5 rows of tbl_campaign_history\n",
+        "\n",
+        "duckdb.sql(\"\"\"\n",
+        "    SELECT *\n",
+        "    FROM tbl_campaign_history\n",
+        "    LIMIT 5\n",
+        "\"\"\").show()"
+      ],
+      "id": "tbl-top5-campaigns",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Aggregate the `tbl_campaign_history` table to see how many prospects were targeted and responded to each campaign."
+      ],
+      "id": "0ebd881f"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-campaign-history\n",
+        "#| tbl-cap: Campaign History\n",
+        "\n",
+        "duckdb.sql(\"\"\"\n",
+        "    SELECT campaign_id, \n",
+        "            COUNT(*) AS num_prospects,\n",
+        "            SUM(CASE WHEN direct_mail_flag = 'Y'\n",
+        "            THEN 1 \n",
+        "            ELSE 0 END) AS num_direct_mails,\n",
+        "            SUM(CASE WHEN response_flag = 1 \n",
+        "            THEN 1 \n",
+        "            ELSE 0 END) AS num_responses\n",
+        "    FROM tbl_campaign_history\n",
+        "    GROUP BY campaign_id\n",
+        "    ORDER BY campaign_id\n",
+        "\"\"\").show()"
+      ],
+      "id": "tbl-campaign-history",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Q&A\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "In campaign 1, what percentage of prospects were sent direct mail?\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "In campaign 1, what was the response rate among prospects who were sent direct mail?\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "Suppose the average cost of sending direct mail is \\$7.00 per prospect. What was the total cost of campaign 1?\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "Suppose the average revenue from a response is \\$100 per client. What was the total revenue of campaign 1?\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "The return on investment (ROI) of the campaign is:\n",
+        "\n",
+        "$$ROI = \\frac{TotalRevenue - TotalCost}{TotalCost} \\times 100$$\n",
+        "\n",
+        "What was the ROI of campaign 1?\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "What was the ROI of campaign 2?\n",
+        ":::\n",
+        "\n",
+        "# Merge the Tables\n",
+        "\n",
+        "Merge the tables (`tbl_prospects` and `tbl_campaign_history`) to create a new table (`tbl_merged`) that contains all columns from both tables. Use a left join to keep all rows from `tbl_prospects`."
+      ],
+      "id": "64cf3289"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-merge-campaign-data\n",
+        "tbl_merged = duckdb.query(\"\"\"\n",
+        "    SELECT c.*, p.*\n",
+        "    FROM tbl_campaign_history AS c\n",
+        "    RIGHT JOIN tbl_prospects AS p\n",
+        "    ON p.prospectid = c.prospectid\n",
+        "    ORDER BY c.campaign_id, CAST(p.prospectid AS INT)\n",
+        "\"\"\")"
+      ],
+      "id": "lab01-merge-campaign-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Convert `tbl_merged` to a Pandas DataFrame and display the first 5 rows."
+      ],
+      "id": "05d0ebf2"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-convert-merged-dataframe\n",
+        "df_merged = tbl_merged.to_df()"
+      ],
+      "id": "lab01-convert-merged-dataframe",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-top5-merged\n",
+        "#| tbl-cap: First 5 rows of df_merged\n",
+        "\n",
+        "df_merged.head()"
+      ],
+      "id": "tbl-top5-merged",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Remove the `PROSPECTID_1` column from `df_merged`."
+      ],
+      "id": "a0258ea7"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-drop-duplicate-prospectid\n",
+        "df_merged = df_merged.drop(columns=['PROSPECTID_1'])"
+      ],
+      "id": "lab01-drop-duplicate-prospectid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check the shapes of each data frame to ensure no rows were lost during the merge."
+      ],
+      "id": "8122e8db"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-check-merged-shapes\n",
+        "display(tbl_prospects.shape)\n",
+        "\n",
+        "display(tbl_campaign_history.shape)\n",
+        "\n",
+        "display(df_merged.shape)"
+      ],
+      "id": "lab01-check-merged-shapes",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Split the Data\n",
+        "\n",
+        "Split the data by `campaign_id` into three separate DataFrames: `df_campaign_1`, `df_campaign_2`, and `df_campaign_3`."
+      ],
+      "id": "db18d948"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-filter-campaign1-data\n",
+        "df_campaign_1 = df_merged[df_merged['campaign_id'] == '1'].copy()\n",
+        "df_campaign_2 = df_merged[df_merged['campaign_id'] == '2'].copy()\n",
+        "df_campaign_3 = df_merged[df_merged['campaign_id'] == '3'].copy()"
+      ],
+      "id": "lab01-filter-campaign1-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "We will train the model only on `df_campaign_1`. We evaluate the model using `df_campaign_2` and `df_campaign_3`.\n",
+        "\n",
+        "Split `df_campaign_1` into `df_campaign_1_train` and `df_campaign_1_test` using a 70/30 split."
+      ],
+      "id": "6ee32598"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-split-campaign1-train-test\n",
+        "df_campaign_1_train, df_campaign_1_test = train_test_split(\n",
+        "    df_campaign_1,\n",
+        "    test_size=0.3,\n",
+        "    random_state=2025,\n",
+        "    stratify=df_campaign_1['response_flag']\n",
+        ")"
+      ],
+      "id": "lab01-split-campaign1-train-test",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-check-response-rates\n",
+        "display(f\"Train data response rate: {df_campaign_1_train['response_flag'].mean()*100:.3f}%\")\n",
+        "display(f\"Test data response rate: {df_campaign_1_test['response_flag'].mean()*100:.3f}%\")"
+      ],
+      "id": "lab01-check-response-rates",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Exploratory Data Analysis\n",
+        "\n",
+        "Use the `ydata_profiling` library to compare `df_campaign_1_train` and `df_campaign_1_test`."
+      ],
+      "id": "a096b4bf"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-sample-eda-data\n",
+        "p_frac = 0.1\n",
+        "\n",
+        "train_data_profile = ProfileReport(\n",
+        "            df_campaign_1_train.sample(frac=p_frac, random_state=2025), \n",
+        "            title=\"Train\",\n",
+        "            progress_bar=False,\n",
+        "            duplicates=None,\n",
+        "            interactions=None\n",
+        "            )\n",
+        "\n",
+        "test_data_profile = ProfileReport(\n",
+        "            df_campaign_1_test.sample(frac=p_frac, random_state=2025), \n",
+        "            title=\"Test\",\n",
+        "            progress_bar=False,\n",
+        "            duplicates=None,\n",
+        "            interactions=None\n",
+        "            )\n",
+        "\n",
+        "compare_profile = train_data_profile.compare(test_data_profile)\n",
+        "\n",
+        "compare_profile.to_file(\"Lab01_eda_report_ydata.html\")\n",
+        "\n",
+        "# compare_profile.to_notebook_iframe()"
+      ],
+      "id": "lab01-sample-eda-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Many of the columns contain a special value called `-99999`.\n",
+        "\n",
+        "# Replace -99999 with -1\n",
+        "\n",
+        "Replace `-99999` with `-1` in the `df_campaign_1_train` and `df_campaign_1_test` data frames.\n",
+        "\n",
+        "Leaving the special value untreated would *not* cause problems for the models, but would make the PDP and ALE plots difficult to interpret."
+      ],
+      "id": "1ef59f30"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-replace-sentinel-values\n",
+        "df_campaign_1_train = df_campaign_1_train.replace(-99999, -1)\n",
+        "df_campaign_1_test = df_campaign_1_test.replace(-99999, -1)"
+      ],
+      "id": "lab01-replace-sentinel-values",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-profile-training-data\n",
+        "train_data_profile_1 = ProfileReport(\n",
+        "            df_campaign_1_train.sample(frac=p_frac, random_state=2025), \n",
+        "            title=\"Train\",\n",
+        "            progress_bar=False,\n",
+        "            duplicates=None,\n",
+        "            interactions=None\n",
+        "            )\n",
+        "\n",
+        "test_data_profile_1 = ProfileReport(\n",
+        "            df_campaign_1_test.sample(frac=p_frac, random_state=2025), \n",
+        "            title=\"Test\",\n",
+        "            progress_bar=False,\n",
+        "            duplicates=None,\n",
+        "            interactions=None\n",
+        "            )\n",
+        "\n",
+        "compare_profile_1 = train_data_profile_1.compare(test_data_profile_1)\n",
+        "\n",
+        "compare_profile_1.to_file(\"Lab01_eda_report_ydata_1.html\")\n",
+        "\n",
+        "# compare_profile.to_notebook_iframe()"
+      ],
+      "id": "lab01-profile-training-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Subset the features\n",
+        "\n",
+        "The `df_campaign_1_train` and `df_campaign_1_test` data frames are very wide and the columns are highly collinear. We will subset the columns to make the data more manageable."
+      ],
+      "id": "3d5f1cc8"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-define-subset-features\n",
+        "subset_cols = ['CC_utilization', \n",
+        "        'PL_utilization', \n",
+        "        'last_prod_enq2', \n",
+        "        'PL_enq_L6m', \n",
+        "        'CC_enq_L6m',\n",
+        "        'response_flag']\n",
+        "\n",
+        "df_campaign_1_train_subset = df_campaign_1_train[subset_cols].copy()\n",
+        "\n",
+        "df_campaign_1_test_subset = df_campaign_1_test[subset_cols].copy()"
+      ],
+      "id": "lab01-define-subset-features",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Convert `last_prod_enq2` to a categorical variable."
+      ],
+      "id": "b95e177b"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-cast-subset-categories\n",
+        "df_campaign_1_train_subset['last_prod_enq2'] = df_campaign_1_train_subset['last_prod_enq2'].astype('category')\n",
+        "df_campaign_1_test_subset['last_prod_enq2'] = df_campaign_1_test_subset['last_prod_enq2'].astype('category')"
+      ],
+      "id": "lab01-cast-subset-categories",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "We will revisit the full data frames later in the course. For now, we will use the data frames with subsetted columns.\n",
+        "\n",
+        "# Supervised Learning\n",
+        "\n",
+        "Create a function that sets random seed values."
+      ],
+      "id": "b4b73dee"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-define-global-seed\n",
+        "def global_set_seed(seed_value=2025):\n",
+        "    random.seed(seed_value)\n",
+        "    np.random.seed(seed_value)\n",
+        "    torch.manual_seed(seed_value)"
+      ],
+      "id": "lab01-define-global-seed",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Create a scikit-learn compatible wrapper for `autogluon`."
+      ],
+      "id": "dfe590dc"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-define-autogluon-wrapper\n",
+        "class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):\n",
+        "    \"\"\"\n",
+        "    Scikit-learn compatible wrapper for AutoGluon TabularPredictor\n",
+        "    \n",
+        "    Inherits from scikit-learn's BaseEstimator and ClassifierMixin to provide\n",
+        "    full compatibility with scikit-learn tools like PartialDependenceDisplay().\n",
+        "    \n",
+        "    Parameters\n",
+        "    ----------\n",
+        "    label : str\n",
+        "        Name of the target column\n",
+        "\n",
+        "    **predictor_args : dict\n",
+        "        Additional arguments passed to TabularPredictor()\n",
+        "        (e.g., problem_type, eval_metric, path)\n",
+        "\n",
+        "    **fit_args : dict\n",
+        "        Additional arguments passed to TabularPredictor.fit() method\n",
+        "        (e.g., holdout_frac, presets, time_limit, excluded_model_types)\n",
+        "\n",
+        "\n",
+        "    Attributes\n",
+        "    ----------\n",
+        "    predictor : TabularPredictor\n",
+        "        The trained AutoGluon predictor\n",
+        "\n",
+        "    classes_ : ndarray\n",
+        "        Class labels (for classification tasks)\n",
+        "\n",
+        "    n_features_in_ : int\n",
+        "        Number of features seen during fit\n",
+        "\n",
+        "    feature_names_ : list\n",
+        "        Feature names inferred during fitting\n",
+        "\n",
+        "    is_fitted_ : bool\n",
+        "        Whether the estimator has been fitted\n",
+        "    \"\"\"\n",
+        "    \n",
+        "    def __init__(self, label, predictor_args=None, fit_args=None):\n",
+        "        self.label = label\n",
+        "        self.predictor_args = predictor_args if predictor_args else {}\n",
+        "        self.fit_args = fit_args if fit_args else {}\n",
+        "        self.predictor = None\n",
+        "        self.classes_ = None\n",
+        "        self.n_features_in_ = None\n",
+        "        self.feature_names_ = None\n",
+        "        self.is_fitted_ = False\n",
+        "\n",
+        "    def __sklearn_is_fitted__(self):\n",
+        "        \"\"\"Official scikit-learn API for checking fitted status\"\"\"\n",
+        "        return self.is_fitted_\n",
+        "\n",
+        "    def fit(self, X, y):\n",
+        "        \"\"\"\n",
+        "        Fit AutoGluon model using scikit-learn interface\n",
+        "        \n",
+        "        Parameters\n",
+        "        ----------\n",
+        "        X : {array-like, sparse matrix} of shape (n_samples, n_features)\n",
+        "            Training data\n",
+        "        y : array-like of shape (n_samples,)\n",
+        "            Target values\n",
+        "            \n",
+        "        Returns\n",
+        "        -------\n",
+        "        self : object\n",
+        "            Fitted estimator\n",
+        "        \"\"\"\n",
+        "        self._check_feature_names(X, reset=True)\n",
+        "        self._check_n_features(X, reset=True)\n",
+        "        \n",
+        "        # Convert to DataFrame with preserved feature names\n",
+        "        train_data = pd.DataFrame(X, columns=self.feature_names_)\n",
+        "        train_data[self.label] = y\n",
+        "        train_data = TabularDataset(train_data)\n",
+        "        \n",
+        "        # Initialize and fit AutoGluon predictor\n",
+        "        self.predictor = TabularPredictor(\n",
+        "            label=self.label, \n",
+        "            **self.predictor_args\n",
+        "        ).fit(train_data, **self.fit_args)\n",
+        "        \n",
+        "        # Store sklearn-specific attributes\n",
+        "        if self.predictor.problem_type in ['binary', 'multiclass']:\n",
+        "            # Convert class labels to a NumPy array\n",
+        "            self.classes_ = np.array(self.predictor.class_labels)\n",
+        "            \n",
+        "        self.is_fitted_ = True\n",
+        "\n",
+        "        return self\n",
+        "\n",
+        "    def predict(self, X):\n",
+        "        \"\"\"\n",
+        "        Make class predictions\n",
+        "        \n",
+        "        Parameters\n",
+        "        ----------\n",
+        "        X : {array-like, sparse matrix} of shape (n_samples, n_features)\n",
+        "            Input data\n",
+        "            \n",
+        "        Returns\n",
+        "        -------\n",
+        "        y_pred : ndarray of shape (n_samples,)\n",
+        "            Predicted class labels\n",
+        "        \"\"\"\n",
+        "        check_is_fitted(self)\n",
+        "        self._check_feature_names(X)\n",
+        "        self._check_n_features(X)\n",
+        "\n",
+        "        df = pd.DataFrame(X, columns=self.feature_names_)\n",
+        "        df = TabularDataset(df)\n",
+        "\n",
+        "        return self.predictor.predict(df).values\n",
+        "\n",
+        "    def predict_proba(self, X):\n",
+        "        \"\"\"\n",
+        "        Predict class probabilities\n",
+        "        \n",
+        "        Parameters\n",
+        "        ----------\n",
+        "        X : {array-like, sparse matrix} of shape (n_samples, n_features)\n",
+        "            Input data\n",
+        "            \n",
+        "        Returns\n",
+        "        -------\n",
+        "        proba : ndarray of shape (n_samples, n_classes)\n",
+        "            Class probabilities\n",
+        "        \"\"\"\n",
+        "        check_is_fitted(self)\n",
+        "        self._check_feature_names(X)\n",
+        "        self._check_n_features(X)\n",
+        "\n",
+        "        df = pd.DataFrame(X, columns=self.feature_names_)\n",
+        "        df = TabularDataset(df)\n",
+        "\n",
+        "        return self.predictor.predict_proba(df).values\n",
+        "\n",
+        "    def get_params(self, deep=True):\n",
+        "        \"\"\"Get parameters for this estimator\"\"\"\n",
+        "        return {\n",
+        "            'label': self.label,\n",
+        "            'predictor_args': self.predictor_args,\n",
+        "            'fit_args': self.fit_args\n",
+        "        }\n",
+        "\n",
+        "    def set_params(self, **params):\n",
+        "        \"\"\"Set parameters for this estimator\"\"\"\n",
+        "        for param, value in params.items():\n",
+        "            if param == 'label':\n",
+        "                self.label = value\n",
+        "            else:\n",
+        "                self.predictor_args[param] = value\n",
+        "        return self\n",
+        "\n",
+        "    def _check_n_features(self, X, reset=False):\n",
+        "        \"\"\"Validate number of features\"\"\"\n",
+        "        n_features = X.shape[1]\n",
+        "        if reset:\n",
+        "            self.n_features_in_ = n_features\n",
+        "        elif n_features != self.n_features_in_:\n",
+        "            raise ValueError(f\"Expected {self.n_features_in_} features, got {n_features}\")\n",
+        "\n",
+        "    def _check_feature_names(self, X, reset=False):\n",
+        "        \"\"\"Validate feature names (AutoGluon requirement)\"\"\"\n",
+        "        if reset:\n",
+        "            if isinstance(X, np.ndarray):\n",
+        "                self.feature_names_ = [f'feat_{i}' for i in range(X.shape[1])]\n",
+        "            else:\n",
+        "                self.feature_names_ = X.columns.tolist()\n",
+        "        elif hasattr(X, 'columns'):\n",
+        "            if list(X.columns) != self.feature_names_:\n",
+        "                raise ValueError(\"Feature names mismatch between fit and predict\")"
+      ],
+      "id": "lab01-define-autogluon-wrapper",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Use Intel-accelerated `sklearnex` to speed up the training process."
+      ],
+      "id": "5078955a"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-patch-sklearn\n",
+        "# patch_sklearn()"
+      ],
+      "id": "lab01-patch-sklearn",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Setup data frames for `autogluon`."
+      ],
+      "id": "2099d074"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-define-model-target\n",
+        "label = 'response_flag'\n",
+        "\n",
+        "train_data = TabularDataset(df_campaign_1_train_subset)\n",
+        "test_data = TabularDataset(df_campaign_1_test_subset)"
+      ],
+      "id": "lab01-define-model-target",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Remove the model folder if it already exists."
+      ],
+      "id": "c09a5661"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-setup-model-folder\n",
+        "model_folder = 'Lab01_ag_models_NoTransform'\n",
+        "\n",
+        "def remove_ag_folder(mdl_folder: str) -> None:\n",
+        "    \"\"\"\n",
+        "    Remove the AutoGluon model folder if it exists\n",
+        "    \"\"\"\n",
+        "    if os.path.exists(mdl_folder):\n",
+        "        shutil.rmtree(mdl_folder)\n",
+        "\n",
+        "remove_ag_folder(model_folder)"
+      ],
+      "id": "lab01-setup-model-folder",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "The code below trains multiple machine learning models using `autogluon` and evaluates them using the ROC AUC metric (on a validation set that is derived from `train_data`).\n",
+        "\n",
+        "Hyperparameter tuning is set to `medium_quality` to reduce compute time. The allotted training time is set to `180` seconds. In real-world situations, you should use a better preset (`good_quality`) and a longer training time (`3600`).\n",
+        "\n",
+        "Create a scikit-learn pipeline that replaces `-99999` with `-1` and trains `autogluon` models."
+      ],
+      "id": "92d68aac"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-define-replace-values\n",
+        "def replace_vals(X: pd.DataFrame) -> pd.DataFrame:\n",
+        "  return X.replace(-99999, -1)\n",
+        "\n",
+        "ag_model = Pipeline([\n",
+        "    ('replace_values', FunctionTransformer(replace_vals)),\n",
+        "    ('autogluon', AutoGluonSklearnWrapper(label=label,\n",
+        "                                    predictor_args={'problem_type': 'binary',\n",
+        "                                                    'eval_metric': 'roc_auc',\n",
+        "                                                    'path': model_folder},\n",
+        "                                    fit_args={'holdout_frac': 0.2,\n",
+        "                                                'excluded_model_types': ['KNN'],\n",
+        "                                                'presets': 'medium_quality',\n",
+        "                                                'time_limit': 180}))\n",
+        "])\n",
+        "\n",
+        "global_set_seed()\n",
+        "\n",
+        "ag_model.fit( X = train_data.drop(columns=[label]),\n",
+        "            y = train_data[label]\n",
+        "            )"
+      ],
+      "id": "lab01-define-replace-values",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "The attribute `ag_model.named_steps['autogluon'].predictor` contains the original fit object from `autogluon`.\n",
+        "\n",
+        "Generate a leaderboard to see the performance of each model on `test_data`."
+      ],
+      "id": "d6dbcc86"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-show-model-leaderboard\n",
+        "df_leaders = ag_model.named_steps['autogluon'].predictor.leaderboard(test_data)"
+      ],
+      "id": "lab01-show-model-leaderboard",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-ag-leaderboard\n",
+        "#| tbl-cap: Autogluon Leaderboard\n",
+        "\n",
+        "display(df_leaders)"
+      ],
+      "id": "tbl-ag-leaderboard",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Best Model\n",
+        "\n",
+        "Although `CatBoost` may not have the highest roc_auc score, the model generates very fast predictions with a very competitive roc_auc score.\n",
+        "\n",
+        "Set the best model to `CatBoost`."
+      ],
+      "id": "66f41de4"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-select-best-model\n",
+        "best_model_name = 'CatBoost'\n",
+        "ag_model.named_steps['autogluon'].predictor.set_model_best(best_model_name)"
+      ],
+      "id": "lab01-select-best-model",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Check Probability Calibration\n",
+        "\n",
+        "Measure how well the model scores align with the observed response rates in `test_data`."
+      ],
+      "id": "8b3e096e"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-enable-inline-matplotlib\n",
+        "%matplotlib inline\n",
+        "\n",
+        "cal_disp = CalibrationDisplay.from_estimator(\n",
+        "        estimator = ag_model,\n",
+        "        X = test_data.drop(columns=[label]),\n",
+        "        y = test_data[label],\n",
+        "        n_bins = 20,\n",
+        "        name = 'Uncalib_CatBoost',\n",
+        "        color = 'orange'\n",
+        "    )\n",
+        "\n",
+        "cal_disp.ax_.set_title(\"Calibration Plot\")"
+      ],
+      "id": "lab01-enable-inline-matplotlib",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Calibrate the model scores to the observed response rates in `df_campaign_2`.\n",
+        "\n",
+        "Calibration methods should avoid using the training data (due to the model scores being overfitted to the training data). The test data should be used for evaluation purposes only. Therefore, we will use `df_campaign_2` to calibrate the model.\n",
+        "\n",
+        "Set up the data frames from `df_campaign_2`."
+      ],
+      "id": "9e687e62"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-build-calibration-data\n",
+        "# Get the data ready\n",
+        "df_campaign_2_subset = df_campaign_2[subset_cols].copy()\n",
+        "df_campaign_2_subset['last_prod_enq2'] = df_campaign_2_subset['last_prod_enq2'].astype('category')\n",
+        "\n",
+        "# Prepare features and true labels\n",
+        "X_campaign2 = df_campaign_2_subset.drop(columns=[label])\n",
+        "y_campaign2 = df_campaign_2_subset[label]"
+      ],
+      "id": "lab01-build-calibration-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Calibrate the model scores using `df_campaign_2` and `CalibratedClassifierCV`."
+      ],
+      "id": "34831772"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-fit-calibration-model\n",
+        "cal_model = CalibratedClassifierCV(\n",
+        "    estimator = ag_model,\n",
+        "    method='isotonic',\n",
+        "    cv=\"prefit\" # Use the fitted model from ag_model\n",
+        ")\n",
+        "\n",
+        "global_set_seed()\n",
+        "\n",
+        "cal_model.fit(X = X_campaign2,\n",
+        "            y = y_campaign2)"
+      ],
+      "id": "lab01-fit-calibration-model",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-plot-calibration-curve\n",
+        "%matplotlib inline\n",
+        "\n",
+        "fig, ax = plt.subplots()\n",
+        "\n",
+        "for estimator, name, color in [(ag_model, 'Uncalib_CatBoost', 'orange'),\n",
+        "          (cal_model, 'Calib_CatBoost', 'blue')]:\n",
+        "\n",
+        "  CalibrationDisplay.from_estimator(\n",
+        "      estimator = estimator,\n",
+        "      X = test_data.drop(columns=[label]),\n",
+        "      y = test_data[label],\n",
+        "      n_bins = 20,\n",
+        "      name = name,\n",
+        "      color = color,\n",
+        "      ax = ax\n",
+        "    )\n",
+        "    \n",
+        "ax.set_title(\"Calibration Plot\")\n",
+        "plt.show()"
+      ],
+      "id": "lab01-plot-calibration-curve",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "The calibration plot shows that the uncalibrated model is better than the calibrated model.\n",
+        "\n",
+        "This occurred because CatBoost uses the `logloss` objective function when the model fits. The `logloss` function is called a proper scoring rule, which explicitly accounts for the calibration of the predicted probabilities.\n",
+        "\n",
+        "In other models, like `RandomForest`, the predicted probabilities are based on the purity of the leaf nodes (i.e., Gini). This is not a proper scoring rule and can lead to poorly calibrated probabilities.\n",
+        "\n",
+        "Going forward, we will use `ag_model` for predictions.\n",
+        "\n",
+        "# Permutation Feature Importance\n",
+        "\n",
+        "Using the best model, rank features from most important to least important.\n",
+        "\n",
+        "Permutation feature importance measures how model performance degrades when a feature is randomly shuffled. Using `test_data` avoids overfitting and provides a more reliable estimate of each feature's importance."
+      ],
+      "id": "8e063907"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-compute-permutation-importance\n",
+        "best_feature_importance = (ag_model\n",
+        "                            .named_steps['autogluon']\n",
+        "                            .predictor\n",
+        "                            .feature_importance(\n",
+        "                                    data = test_data, \n",
+        "                                    model = best_model_name,\n",
+        "                                    subsample_size = None)\n",
+        "                        )"
+      ],
+      "id": "lab01-compute-permutation-importance",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-perm-feature-importance\n",
+        "#| tbl-cap: Permutation Feature Importance\n",
+        "\n",
+        "display(best_feature_importance)"
+      ],
+      "id": "tbl-perm-feature-importance",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Partial Dependence Plots\n",
+        "\n",
+        "Create a function that generates partial dependence plots for all features."
+      ],
+      "id": "f5a116ff"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-define-pdp-helper\n",
+        "def show_pdp(wrappedAGModel: BaseEstimator,\n",
+        "            list_features: list,\n",
+        "            list_categ_features: list,\n",
+        "            df: pd.DataFrame,\n",
+        "            xGTzero: bool = False,\n",
+        "            sampSize: int = 40000) -> None:\n",
+        "\n",
+        "  for feature in list_features:\n",
+        "\n",
+        "    fig = plt.figure(figsize=(8, 4))\n",
+        "    ax = fig.add_subplot(111)\n",
+        "\n",
+        "    plt.rcParams.update({'font.size': 16})\n",
+        "\n",
+        "    disp = PartialDependenceDisplay.from_estimator(\n",
+        "        estimator = wrappedAGModel,\n",
+        "        X = df.sample(sampSize, random_state=2025),\n",
+        "        features = [feature],\n",
+        "        categorical_features = list_categ_features,\n",
+        "        method = 'brute',\n",
+        "        kind = \"average\",\n",
+        "        percentiles=(0.0001, 0.9999),\n",
+        "        grid_resolution=100,\n",
+        "        ax = ax,\n",
+        "        random_state=2025,\n",
+        "        n_jobs = -1\n",
+        "    )\n",
+        "\n",
+        "    ax.set_title(f\"Partial Dependence for {feature}\")\n",
+        "    \n",
+        "    # Set y-axis lower limit for all axes in the current figure\n",
+        "    for a in fig.get_axes():\n",
+        "      coordy = a.get_ylim()\n",
+        "      a.set_ylim(bottom=0, top=coordy[1]*1.1)\n",
+        "\n",
+        "    if xGTzero:\n",
+        "      # Set x-axis from 0 to the max\n",
+        "      for a in fig.get_axes():\n",
+        "        max_val = np.percentile(df[feature].values, 99.99)\n",
+        "        a.set_xlim(left=0, right=max_val)\n",
+        "\n",
+        "    plt.show()\n",
+        "    plt.close('all')  # Prevent figure overload"
+      ],
+      "id": "lab01-define-pdp-helper",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-list-predictor-features\n",
+        "# Get all features from ag_model.predictor\n",
+        "all_features = ag_model.named_steps['autogluon'].predictor.features()\n",
+        "\n",
+        "# Get categorical features from ag_model.predictor's feature metadata\n",
+        "categorical_features = ag_model.named_steps['autogluon'].predictor.feature_metadata.get_features(valid_raw_types=['category'])\n",
+        "\n",
+        "# Get numeric features from ag_model.predictor's feature metadata\n",
+        "numeric_features = ag_model.named_steps['autogluon'].predictor.feature_metadata.get_features(valid_raw_types=['int', 'float', 'int64', 'float64', 'int32', 'float32'])"
+      ],
+      "id": "lab01-list-predictor-features",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Use partial dependence plots (PDP) to describe the relationships between features and predictions.\n",
+        "\n",
+        "Unlike permutation feature importance, PDPs do not depend on the true labels. Instead, they show how the model's predictions change as the feature values change."
+      ],
+      "id": "93fe525c"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-plot-pdp-grid\n",
+        "%matplotlib inline\n",
+        "\n",
+        "show_pdp(wrappedAGModel = ag_model,\n",
+        "        list_features = all_features, \n",
+        "        list_categ_features = categorical_features, \n",
+        "        df = train_data.drop(columns=[label]),\n",
+        "        )"
+      ],
+      "id": "lab01-plot-pdp-grid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Q&A\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "In `train_data`, what is the maximum value of `CC_utilization`?\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "What would happen to the partial dependence plot if `train_data` included prospects with `CC_utilization` values greater than 100%?\n",
+        "\n",
+        "The partial dependence curve would likely \\_\\_\\_\\_\\_.\n",
+        "\n",
+        "Check your answer by creating a copy of `train_data` and then adding `0.50` to all `CC_utilization` values. Then create the PDP for `CC_utilization`.\n",
+        ":::\n",
+        "\n",
+        "## More PDP\n",
+        "\n",
+        "Zoom-in on the plots where the feature values are greater than or equal to 0."
+      ],
+      "id": "dfee42df"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-plot-pdp-single\n",
+        "%matplotlib inline\n",
+        "\n",
+        "show_pdp(wrappedAGModel = ag_model,\n",
+        "        list_features = numeric_features, \n",
+        "        list_categ_features = categorical_features, \n",
+        "        df = train_data.drop(columns=[label]), \n",
+        "        xGTzero = True)"
+      ],
+      "id": "lab01-plot-pdp-single",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Accumulated Local Effects Plots"
+      ],
+      "id": "29e6c60a"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-define-ale-helper\n",
+        "def show_ale(wrappedAGModel: BaseEstimator,\n",
+        "            list_features: list,\n",
+        "            df: pd.DataFrame,\n",
+        "            xGTzero: bool = False,\n",
+        "            sampSize: int = 40000) -> None:\n",
+        "\n",
+        "  def do_nothing(data):\n",
+        "    return data\n",
+        "\n",
+        "  for feature in list_features:\n",
+        "\n",
+        "    fig = plt.figure(figsize=(8, 4))\n",
+        "    ax = fig.add_subplot(111)\n",
+        "\n",
+        "    plt.rcParams.update({'font.size': 12})\n",
+        "\n",
+        "    ale_eff = ale(\n",
+        "                X = df.sample(sampSize, random_state=2025),\n",
+        "                model = wrappedAGModel,\n",
+        "                feature = [feature],\n",
+        "                include_CI = False,\n",
+        "                C=0.9999,\n",
+        "                grid_size=100,\n",
+        "                encode_fun=do_nothing,\n",
+        "                predictors=wrappedAGModel.named_steps['autogluon'].predictor.features(),\n",
+        "                fig=fig,\n",
+        "                ax=ax\n",
+        "                )\n",
+        "    \n",
+        "    if xGTzero:\n",
+        "        # Set x-axis from 0 to the max\n",
+        "        for a in fig.get_axes():\n",
+        "            max_val = np.percentile(df[feature].values, 99.99)\n",
+        "            a.set_xlim(left=0, right=max_val)\n",
+        "\n",
+        "    plt.show()\n",
+        "    plt.close('all')  # Prevent figure overload"
+      ],
+      "id": "lab01-define-ale-helper",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-plot-ale-cc-utilization\n",
+        "%matplotlib inline\n",
+        "\n",
+        "show_ale(wrappedAGModel = ag_model,\n",
+        "        list_features = all_features, \n",
+        "        df = train_data.drop(columns=[label]), \n",
+        "        xGTzero = False)"
+      ],
+      "id": "lab01-plot-ale-cc-utilization",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-plot-ale-revolving-balance\n",
+        "%matplotlib inline\n",
+        "\n",
+        "show_ale(wrappedAGModel = ag_model,\n",
+        "        list_features = numeric_features, \n",
+        "        df = train_data.drop(columns=[label]), \n",
+        "        xGTzero = True)"
+      ],
+      "id": "lab01-plot-ale-revolving-balance",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Model Evaluation\n",
+        "\n",
+        "Evaluate the model using `df_campaign_2`.\n",
+        "\n",
+        "We will bin the predicted probabilities into 5 bins. For each bin, calculate the bin size, number of responses, and response rate. Also calculate the cumulative number of responses and cumulative response rate. Also calculate gain and lift."
+      ],
+      "id": "c9bf5da4"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-predict-campaign2-probabilities\n",
+        "y_probas = ag_model.predict_proba(X_campaign2)"
+      ],
+      "id": "lab01-predict-campaign2-probabilities",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-build-evaluation-table\n",
+        "\n",
+        "# Create DataFrame with predictions and actual values\n",
+        "df_analysis = pd.DataFrame({\n",
+        "    'score': y_probas[:,1],\n",
+        "    label: y_campaign2\n",
+        "})\n",
+        "\n",
+        "# Create bins\n",
+        "df_analysis['bin'] = pd.qcut(df_analysis['score'], q=5, precision=5)\n",
+        "\n",
+        "# Group by bin and calculate metrics\n",
+        "df_metrics = (df_analysis\n",
+        "            .groupby('bin', observed=True)\n",
+        "            .agg({\n",
+        "                'score': ['mean', 'count'],\n",
+        "                label: ['sum', 'mean']\n",
+        "            })\n",
+        "            .sort_values('bin', ascending=False)\n",
+        "            .reset_index()\n",
+        "            )\n",
+        "\n",
+        "# Rename columns\n",
+        "df_metrics.columns = ['bin_name','avg_score','prospects', 'responses', 'response_rate']\n",
+        "\n",
+        "df_metrics['exp_responses'] = df_metrics['prospects'] * df_metrics['avg_score']\n",
+        "\n",
+        "# Calculate cumulative metrics\n",
+        "df_metrics['cum_prospects'] = df_metrics['prospects'].cumsum()\n",
+        "df_metrics['cum_responses'] = df_metrics['responses'].cumsum()\n",
+        "df_metrics['cum_response_rate'] = df_metrics['cum_responses'] / df_metrics['cum_prospects']\n",
+        "\n",
+        "# Calculate baseline\n",
+        "base_rate = np.mean(y_campaign2)\n",
+        "total_responses = df_metrics['responses'].sum()\n",
+        "\n",
+        "# Calculate gain and lift\n",
+        "df_metrics['gain'] = df_metrics['cum_responses'] / total_responses\n",
+        "df_metrics['lift'] = df_metrics['cum_response_rate'] / base_rate\n",
+        "\n",
+        "# Reorder columns in a more intuitive order\n",
+        "column_order = ['bin_name', 'avg_score',\n",
+        "                'prospects', 'exp_responses', 'responses', 'response_rate',\n",
+        "                'cum_prospects', 'cum_responses', 'cum_response_rate',\n",
+        "                'gain', 'lift']\n",
+        "df_metrics = df_metrics[column_order]"
+      ],
+      "id": "lab01-build-evaluation-table",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-metrics\n",
+        "#| tbl-cap: Gain and Lift Table\n",
+        "\n",
+        "display(df_metrics)"
+      ],
+      "id": "tbl-metrics",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Q&A\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "In the first bin, how were the `19,197` prospects selected?\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "In the first bin, `19,197` prospects were sent direct mail.\n",
+        "\n",
+        "In the first bin, we expected \\_\\_\\_\\_\\_ responses. The actual number of responses was \\_\\_\\_\\_\\_.\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "Instead of using your model to select `19,197` prospects, suppose you randomly selected `19,197` prospects. How many of them would you expect to respond?\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "Compare the following two campaign strategies:\n",
+        "\n",
+        "(1) Select `19,197` prospects based on the highest model scores. The actual number of responses is `a`.\n",
+        "\n",
+        "(2) Randomly select `19,197` prospects. The expected number of responses is `b`.\n",
+        "\n",
+        "The ratio $\\frac{a}{b}$ is \\_\\_\\_\\_\\_\\_. The value corresponds to the \\_\\_\\_\\_\\_\\_ in the first bin.\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "Suppose the average cost of sending direct mail is \\$7.00 per prospect and the average revenue from a response is \\$100 per client.\n",
+        "\n",
+        "The ROI of randomly selecting `19,197` prospects is: \\_\\_\\_\\_.\n",
+        "\n",
+        "The ROI of selecting `19,197` prospects based on the highest model scores is: \\_\\_\\_\\_.\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "Compare the following two campaign strategies:\n",
+        "\n",
+        "(1) Select `38,225` prospects based on the highest model scores. The actual number of responses is `a`.\n",
+        "\n",
+        "(2) Randomly select `38,225` prospects. The expected number of responses is `b`.\n",
+        "\n",
+        "The ratio $\\frac{a}{b}$ is \\_\\_\\_\\_\\_. The value corresponds to the \\_\\_\\_\\_\\_ in the \\_\\_\\_\\_\\_ bin.\n",
+        ":::\n",
+        "\n",
+        "### Question\n",
+        "\n",
+        "::: callout-note\n",
+        "Suppose the average cost of sending direct mail is \\$7.00 per prospect and the average revenue from a response is \\$100 per client.\n",
+        "\n",
+        "The ROI of randomly selecting `38,225` prospects is: \\_\\_\\_\\_.\n",
+        "\n",
+        "The ROI of selecting `38,225` prospects based on the highest model scores is: \\_\\_\\_\\_.\n",
+        ":::\n",
+        "\n",
+        "## Gain and Lift Plots"
+      ],
+      "id": "56ad8a88"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-plot-cumulative-gains\n",
+        "plt.figure(figsize=(8, 6))\n",
+        "plt.plot([0] + list(range(1, len(df_metrics) + 1)), [0] + list(df_metrics['gain']), marker='o', color='orange')\n",
+        "plt.plot([0, len(df_metrics)], [0, 1], '--', color='gray', alpha=0.5)\n",
+        "plt.xlabel('Bin (Highest to Lowest Probability)')\n",
+        "plt.ylabel('Gain')\n",
+        "plt.title('Gain Chart')\n",
+        "plt.xticks(range(len(df_metrics) + 1))\n",
+        "plt.grid(True)\n",
+        "plt.show()"
+      ],
+      "id": "lab01-plot-cumulative-gains",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-plot-cumulative-lift\n",
+        "plt.figure(figsize=(8, 6))\n",
+        "plt.plot(range(1, len(df_metrics) + 1), df_metrics['lift'], marker='o', color='blue')\n",
+        "plt.axhline(y=1, color='gray', linestyle='--', alpha=0.5)\n",
+        "plt.xlabel('Bin (Highest to Lowest Probability)')\n",
+        "plt.ylabel('Lift')\n",
+        "plt.title('Lift Chart')\n",
+        "plt.xticks(range(1, len(df_metrics) + 1))\n",
+        "plt.grid(True)\n",
+        "plt.show()"
+      ],
+      "id": "lab01-plot-cumulative-lift",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Gain and Lift Plots (Automated)"
+      ],
+      "id": "36e6d377"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-build-automated-gains\n",
+        "# Get probability predictions\n",
+        "y_probas = ag_model.predict_proba(X_campaign2)\n",
+        "\n",
+        "# Create cumulative gain plot\n",
+        "plt.figure(figsize=(8, 6))\n",
+        "\n",
+        "plot_cumulative_gain(y_campaign2, y_probas)\n",
+        "\n",
+        "plt.title('Cumulative Gains Plot - Campaign 2')\n",
+        "plt.grid(True)\n",
+        "plt.show()"
+      ],
+      "id": "lab01-build-automated-gains",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-build-automated-lift\n",
+        "# Create lift curve plot\n",
+        "plt.figure(figsize=(8, 6))\n",
+        "\n",
+        "plot_lift_curve(y_campaign2, y_probas)\n",
+        "\n",
+        "plt.title('Lift Curve - Campaign 2')\n",
+        "plt.grid(True)\n",
+        "plt.show()"
+      ],
+      "id": "lab01-build-automated-lift",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Pick a Threshold to Maximize F1 Score\n",
+        "\n",
+        "In campaign 3, we have a limited campaign budget. We want to maximize the number of responses while minimizing the number of prospects who are sent direct mail.\n",
+        "\n",
+        "One approach is to select a threshold that maximizes the F1 score.\n",
+        "\n",
+        "First, we check the F1 score for the default threshold of `0.5`."
+      ],
+      "id": "c1d82b10"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-score-f1-thresholds\n",
+        "df_leaders_f1 = (ag_model\n",
+        "            .named_steps['autogluon']\n",
+        "            .predictor\n",
+        "            .leaderboard(\n",
+        "                test_data, \n",
+        "                extra_metrics=['f1', 'precision', 'recall'])\n",
+        "            )"
+      ],
+      "id": "lab01-score-f1-thresholds",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-ag-leaderboard-f1\n",
+        "#| tbl-cap: Autogluon Leaderboard with F1 Score (Threshold = 0.5)\n",
+        "\n",
+        "display(df_leaders_f1)"
+      ],
+      "id": "tbl-ag-leaderboard-f1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "In order to avoid overfitting, we will use `df_campaign_2` to select the threshold that maximizes the F1 score."
+      ],
+      "id": "494fe8c2"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-select-best-threshold\n",
+        "best_threshold = (ag_model\n",
+        "                .named_steps['autogluon']\n",
+        "                .predictor\n",
+        "                .calibrate_decision_threshold(\n",
+        "                data = df_campaign_2,\n",
+        "                metric = 'f1',\n",
+        "                decision_thresholds = 100)\n",
+        "                )\n",
+        "\n",
+        "ag_model.named_steps['autogluon'].predictor.set_decision_threshold(best_threshold)"
+      ],
+      "id": "lab01-select-best-threshold",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Finally, we check the F1 score for the new threshold."
+      ],
+      "id": "24ca23fe"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-show-best-f1-results\n",
+        "df_leaders_f1_best = (ag_model\n",
+        "            .named_steps['autogluon']\n",
+        "            .predictor\n",
+        "            .leaderboard(\n",
+        "                test_data, \n",
+        "                extra_metrics=['f1', 'precision', 'recall'])\n",
+        "            )"
+      ],
+      "id": "lab01-show-best-f1-results",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-ag-leaderboard-f1-best\n",
+        "#| tbl-cap: Autogluon Leaderboard with F1 Score (Best Threshold)\n",
+        "\n",
+        "display(df_leaders_f1_best)"
+      ],
+      "id": "tbl-ag-leaderboard-f1-best",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Select Targets\n",
+        "\n",
+        "We randomly select `1,000` prospects as a control group. We will send direct mail to everyone in the control group. The control group gives us a baseline response rate."
+      ],
+      "id": "9a101d27"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-select-control-group\n",
+        "# Randomly select 1000 prospects for control group\n",
+        "df_campaign_3_control_group = df_campaign_3.sample(n=1000, random_state=2025)\n",
+        "\n",
+        "df_campaign_3_control_group['group_type'] = 'control'\n",
+        "df_campaign_3_control_group['direct_mail_flag'] = 'Y'"
+      ],
+      "id": "lab01-select-control-group",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Create `df_campaign_3_treatment` by removing the control group from `df_campaign_3`."
+      ],
+      "id": "c1bc58bc"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-define-treatment-group\n",
+        "df_campaign_3_treatment = df_campaign_3.drop(df_campaign_3_control_group.index)"
+      ],
+      "id": "lab01-define-treatment-group",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Then, we send direct mail to all the prospects in `df_campaign_3_treatment` that exceed the best threshold. We are assuming that the prospects in `df_campaign_3_treatment` meet the other campaign selection criteria that were determined by the risk, strategy, and legal teams."
+      ],
+      "id": "e0dd2b52"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-score-treatment-group\n",
+        "X_campaign3 = df_campaign_3_treatment[subset_cols].copy()\n",
+        "X_campaign3['last_prod_enq2'] = X_campaign3['last_prod_enq2'].astype('category')\n",
+        "\n",
+        "preds = ag_model.predict(X_campaign3.drop(columns=[label]))\n",
+        "\n",
+        "df_campaign_3_treatment['direct_mail_flag'] = np.where(preds == 1, 'Y', 'N')\n",
+        "\n",
+        "# Filter to only keep prospects that will receive direct mail\n",
+        "df_campaign_3_treatment_mail = df_campaign_3_treatment[df_campaign_3_treatment['direct_mail_flag'] == 'Y'].copy()\n",
+        "\n",
+        "df_campaign_3_treatment_mail['group_type'] = 'treatment'\n",
+        "\n",
+        "# Append rows from controls and treatment into a single data frame\n",
+        "keep_cols = ['PROSPECTID', 'campaign_id', 'group_type', 'direct_mail_flag']    \n",
+        "\n",
+        "df_campaign_3_selected = (pd.concat([\n",
+        "        df_campaign_3_control_group[keep_cols], \n",
+        "        df_campaign_3_treatment_mail[keep_cols]\n",
+        "        ],\n",
+        "    ignore_index=True)\n",
+        "    .reset_index(drop=True))"
+      ],
+      "id": "lab01-score-treatment-group",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Measure Campaign Effectiveness\n",
+        "\n",
+        "The file `campaign_eval.parquet` contains the results of the campaign. We will join the data set with df_campaign_3_selected to measure the effectiveness of the campaign."
+      ],
+      "id": "4fdbc583"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-build-campaign-eval-data\n",
+        "df_campaign_eval = duckdb.query(\"\"\"\n",
+        "    SELECT SELECTED.*, EVAL.response_flag\n",
+        "    FROM read_parquet('../Data/cibil/campaign_eval.parquet') AS EVAL\n",
+        "    INNER JOIN df_campaign_3_selected AS SELECTED\n",
+        "    ON EVAL.PROSPECTID = SELECTED.PROSPECTID\n",
+        "    ORDER BY SELECTED.group_type, SELECTED.PROSPECTID\n",
+        "\"\"\").to_df()"
+      ],
+      "id": "lab01-build-campaign-eval-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-campaign-top5-eval\n",
+        "#| tbl-cap: First 5 rows of df_campaign_eval\n",
+        "\n",
+        "df_campaign_eval.head()"
+      ],
+      "id": "tbl-campaign-top5-eval",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Summarize the results."
+      ],
+      "id": "cd0e3718"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-summarize-campaign-results\n",
+        "df_eval_agg = (df_campaign_eval\n",
+        "    .groupby(['group_type', 'direct_mail_flag'])\n",
+        "    .agg({\n",
+        "        'response_flag': ['count', 'sum', 'mean']\n",
+        "    })\n",
+        "    .reset_index()\n",
+        ")\n",
+        "\n",
+        "df_eval_agg.columns = ['group_type', 'direct_mail_flag', 'prospects', 'responses', 'response_rate']"
+      ],
+      "id": "lab01-summarize-campaign-results",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-campaign-agg\n",
+        "#| tbl-cap: Campaign Effectiveness\n",
+        "\n",
+        "display(df_eval_agg)"
+      ],
+      "id": "tbl-campaign-agg",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Measure Campaign ROI\n",
+        "\n",
+        "The treatment group has a much higher response rate than the control group. The ROI of the treatment group is also much higher than the ROI of the control group.\n",
+        "\n",
+        "The ROI calculation is based on the following assumptions:\n",
+        "\n",
+        "-   The average cost depends on whether the prospect was sent direct mail:\n",
+        "    -   Each prospect (regardless of whether they were sent direct mail) costs \\$1.00.\n",
+        "    -   Each prospect that was sent direct mail incurs an *additional* \\$6.00 cost.\n",
+        "-   The average revenue from a response is \\$100.00.\n",
+        "\n",
+        "In prior campaigns, the average cost was \\$7.00 per prospect because *all* prospects were sent direct mail. In this campaign, we are sending direct mail to only a subset of prospects."
+      ],
+      "id": "31a147ec"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-define-roi-function\n",
+        "def calc_ROI(num_mailed, \n",
+        "            num_responded, \n",
+        "            avg_mail_cost, \n",
+        "            avg_revenue, \n",
+        "            num_prospects, \n",
+        "            avg_prospect_cost):\n",
+        "    total_cost = (num_mailed * avg_mail_cost) + (num_prospects * avg_prospect_cost)\n",
+        "    total_revenue = num_responded * avg_revenue\n",
+        "    roi = (total_revenue - total_cost) / total_cost * 100\n",
+        "    return roi"
+      ],
+      "id": "lab01-define-roi-function",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-calculate-campaign-roi\n",
+        "roi_control = calc_ROI(num_mailed = 1000,\n",
+        "                        num_responded = 49, \n",
+        "                        avg_mail_cost = 6,\n",
+        "                        avg_revenue = 100,\n",
+        "                        num_prospects = 1000,\n",
+        "                        avg_prospect_cost = 1)\n",
+        "\n",
+        "roi_treatment = calc_ROI(num_mailed = 4338,\n",
+        "                        num_responded = 1625, \n",
+        "                        avg_mail_cost = 6,\n",
+        "                        avg_revenue = 100,\n",
+        "                        num_prospects = 95889 - 1000,\n",
+        "                        avg_prospect_cost = 1)\n",
+        "\n",
+        "print(f\"Control Group ROI: {roi_control:.2f}%\")\n",
+        "print(f\"Treatment Group ROI: {roi_treatment:.2f}%\")"
+      ],
+      "id": "lab01-calculate-campaign-roi",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Feature Reduction Methods\n",
+        "\n",
+        "Up until now, we used only a small subset of the features."
+      ],
+      "id": "97bdb643"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-display-subset-features\n",
+        "display(subset_cols)"
+      ],
+      "id": "lab01-display-subset-features",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "We will now widen the data frames to include more features, and explore feature reduction methods.\n",
+        "\n",
+        "We need to remove features that are protected by US law."
+      ],
+      "id": "d59a3385"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-define-protected-features\n",
+        "protected_features = ['MARITALSTATUS', 'AGE', 'GENDER']"
+      ],
+      "id": "lab01-define-protected-features",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-build-wide-training-data\n",
+        "train_data_wide = df_campaign_1_train.copy().drop(columns=protected_features)\n",
+        "test_data_wide = df_campaign_1_test.copy().drop(columns=protected_features)\n",
+        "\n",
+        "train_data_wide = TabularDataset(train_data_wide)\n",
+        "test_data_wide = TabularDataset(test_data_wide)"
+      ],
+      "id": "lab01-build-wide-training-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-campaign-1-train-full\n",
+        "#| tbl-cap: First 5 rows of train_data_wide\n",
+        "\n",
+        "\n",
+        "train_data_wide.head()"
+      ],
+      "id": "tbl-campaign-1-train-full",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-campaign-1-test-full\n",
+        "#| tbl-cap: First 5 rows of test_data_wide\n",
+        "\n",
+        "\n",
+        "test_data_wide.head()"
+      ],
+      "id": "tbl-campaign-1-test-full",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Filter-based Methods\n",
+        "\n",
+        "Filter-based methods select features by evaluating the relationship between each individual feature and the target outcome. The selected features are then fed into a machine learning algorithm like XGBoost. Filter-based methods:\n",
+        "\n",
+        "-   Rank features using statistical measures (correlation, mutual information, chi-square tests)\n",
+        "-   Select top-ranked features\n",
+        "-   Are computationally efficient\n",
+        "-   Consider each feature independently, potentially missing important feature interactions\n",
+        "\n",
+        "The chunk below creates a scikit-learn pipeline that uses `SelectKBest` to select the top 10 features based on mutual information. The top 10 features are then used to train an `autogluon` model."
+      ],
+      "id": "390f03c5"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-define-selectkbest-wrapper\n",
+        "class IndexPreservingSelectKBest(BaseEstimator, TransformerMixin):\n",
+        "    def __init__(self, score_func=mutual_info_classif, k=10):\n",
+        "        self.score_func = score_func\n",
+        "        self.k = k\n",
+        "        self.selector = SelectKBest(score_func=score_func, k=k)\n",
+        "        \n",
+        "    def fit(self, X, y=None):\n",
+        "        self.selector.fit(X, y)\n",
+        "        return self\n",
+        "        \n",
+        "    def transform(self, X):\n",
+        "        # Transform while preserving index\n",
+        "        Xt = self.selector.transform(X)\n",
+        "        return pd.DataFrame(Xt, index=X.index)"
+      ],
+      "id": "lab01-define-selectkbest-wrapper",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-fit-filter-method-model\n",
+        "# remove ag folder if exists\n",
+        "filter_model_folder = 'Lab01_ag_models_FilterMethod'\n",
+        "remove_ag_folder(filter_model_folder)\n",
+        "\n",
+        "# ensures that the output after is transformation is a data frame\n",
+        "set_config(transform_output=\"pandas\")\n",
+        "\n",
+        "ag_model_filter_method = Pipeline([\n",
+        "    ('replace_values', FunctionTransformer(replace_vals)),\n",
+        "    ('ordinal_encoder', make_column_transformer(\n",
+        "        (OrdinalEncoder(), make_column_selector(dtype_include=[\"object\", \"category\"])),\n",
+        "        remainder='passthrough'\n",
+        "    )),\n",
+        "    ('feature_selection', IndexPreservingSelectKBest(score_func=mutual_info_classif, k=10)),\n",
+        "    ('autogluon', AutoGluonSklearnWrapper(label=label,\n",
+        "                                    predictor_args={'problem_type': 'binary',\n",
+        "                                                    'eval_metric': 'roc_auc',\n",
+        "                                                    'path': filter_model_folder},\n",
+        "                                    fit_args={'holdout_frac': 0.2,\n",
+        "                                                'excluded_model_types': ['KNN', 'NN_TORCH'],\n",
+        "                                                'presets': 'medium_quality',\n",
+        "                                                'time_limit': 180}))\n",
+        "])\n",
+        "\n",
+        "global_set_seed()\n",
+        "\n",
+        "ag_model_filter_method.fit( X = train_data_wide.drop(\n",
+        "                    columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']),\n",
+        "            y = train_data_wide[label]\n",
+        "            )"
+      ],
+      "id": "lab01-fit-filter-method-model",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check leaderboard using the test set."
+      ],
+      "id": "58de0e0a"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-transform-filter-test-data\n",
+        "preprocessed_test_data = ag_model_filter_method[:-1].transform(test_data_wide)\n",
+        "\n",
+        "preprocessed_test_data[label] = test_data_wide[label]\n",
+        "\n",
+        "df_leaders_filter_method = ag_model_filter_method.named_steps['autogluon'].predictor.leaderboard(preprocessed_test_data)"
+      ],
+      "id": "lab01-transform-filter-test-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-ag-leaderboard-filter-method\n",
+        "#| tbl-cap: Autogluon Leaderboard (Filter-based Method)\n",
+        "\n",
+        "\n",
+        "display(df_leaders_filter_method)"
+      ],
+      "id": "tbl-ag-leaderboard-filter-method",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check permutation feature importance on the test set."
+      ],
+      "id": "bba5306d"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-compute-filter-importance\n",
+        "best_feature_importance_filter = (ag_model_filter_method\n",
+        "                            .named_steps['autogluon']\n",
+        "                            .predictor\n",
+        "                            .feature_importance(\n",
+        "                                    data = preprocessed_test_data, \n",
+        "                                    model = best_model_name,\n",
+        "                                    subsample_size = None)\n",
+        "                        )"
+      ],
+      "id": "lab01-compute-filter-importance",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-perm-feature-importance-filter-method\n",
+        "#| tbl-cap: Permutation Feature Importance (Filter-based Method)\n",
+        "\n",
+        "\n",
+        "display(best_feature_importance_filter)"
+      ],
+      "id": "tbl-perm-feature-importance-filter-method",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Embedded Methods\n",
+        "\n",
+        "Embedded methods integrate feature selection directly into the model training/fitting process:\n",
+        "\n",
+        "-   Select features while the model is being trained/fitted\n",
+        "-   Balance feature relevance with model performance\n",
+        "-   Have moderate computational cost\n",
+        "-   Examples: L1 regularization (Lasso), tree-based importance measures\n",
+        "\n",
+        "The chunk below creates a scikit-learn pipeline that uses `SelectFromModel` and the `ExtraTreesClassifier` to select the top features. The top features are then used to train an `autogluon` model."
+      ],
+      "id": "450c3dc4"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-fit-embedded-method-model\n",
+        "# remove ag folder if exists\n",
+        "embedded_model_folder = 'Lab01_ag_models_EmbeddedMethod'\n",
+        "remove_ag_folder(embedded_model_folder)\n",
+        "\n",
+        "ag_model_embedded_method = Pipeline([\n",
+        "    ('replace_values', FunctionTransformer(replace_vals)),\n",
+        "    ('ordinal_encoder', make_column_transformer(\n",
+        "        (OrdinalEncoder(), make_column_selector(dtype_include=[\"object\", \"category\"])),\n",
+        "        remainder='passthrough'\n",
+        "    )),\n",
+        "    ('feature_selection', SelectFromModel(\n",
+        "        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=-1),\n",
+        "        threshold=0.01\n",
+        "    )),\n",
+        "    ('autogluon', AutoGluonSklearnWrapper(label=label,\n",
+        "                                    predictor_args={'problem_type': 'binary',\n",
+        "                                                    'eval_metric': 'roc_auc',\n",
+        "                                                    'path': embedded_model_folder},\n",
+        "                                    fit_args={'holdout_frac': 0.2,\n",
+        "                                                'excluded_model_types': ['KNN', 'NN_TORCH'],\n",
+        "                                                'presets': 'medium_quality',\n",
+        "                                                'time_limit': 180}))\n",
+        "])\n",
+        "\n",
+        "global_set_seed()\n",
+        "\n",
+        "ag_model_embedded_method.fit( X = train_data_wide.drop(\n",
+        "                    columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']),\n",
+        "            y = train_data_wide[label]\n",
+        "            )"
+      ],
+      "id": "lab01-fit-embedded-method-model",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check leaderboard using the test set."
+      ],
+      "id": "e11b6366"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-transform-embedded-test-data\n",
+        "preprocessed_test_data_embedded = ag_model_embedded_method[:-1].transform(test_data_wide.drop(columns=[label]))\n",
+        "preprocessed_test_data_embedded[label] = test_data_wide[label]\n",
+        "\n",
+        "df_leaders_embedded_method = ag_model_embedded_method.named_steps['autogluon'].predictor.leaderboard(preprocessed_test_data_embedded)"
+      ],
+      "id": "lab01-transform-embedded-test-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-ag-leaderboard-embedded-method\n",
+        "#| tbl-cap: Autogluon Leaderboard (Embedded Method)\n",
+        "\n",
+        "\n",
+        "display(df_leaders_embedded_method)"
+      ],
+      "id": "tbl-ag-leaderboard-embedded-method",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check permutation feature importance on the test set."
+      ],
+      "id": "9426dc26"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-compute-embedded-importance\n",
+        "best_feature_importance_embedded = (ag_model_embedded_method\n",
+        "                            .named_steps['autogluon']\n",
+        "                            .predictor\n",
+        "                            .feature_importance(\n",
+        "                                    data = preprocessed_test_data_embedded, \n",
+        "                                    model = best_model_name,\n",
+        "                                    subsample_size = None)\n",
+        "                        )"
+      ],
+      "id": "lab01-compute-embedded-importance",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-perm-feature-importance-embedded-method\n",
+        "#| tbl-cap: Permutation Feature Importance (Embedded Method)\n",
+        "\n",
+        "\n",
+        "display(best_feature_importance_embedded)"
+      ],
+      "id": "tbl-perm-feature-importance-embedded-method",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Wrapper Methods\n",
+        "\n",
+        "Wrapper methods evaluate subsets of features by training models with different feature combinations using the same machine learning algorithm:\n",
+        "\n",
+        "-   Use the predictive performance of a model to evaluate feature subsets\n",
+        "-   Can capture feature interactions\n",
+        "-   Are computationally expensive\n",
+        "-   Examples: recursive feature elimination, forward/backward selection\n",
+        "\n",
+        "The chunk below creates a scikit-learn pipeline that uses forward selection (`SequentialFeatureSelector`) and `ExtraTreesClassifier` estimator to select the top features. The top features are then used to train an `autogluon` model."
+      ],
+      "id": "2231f1a6"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-fit-wrapper-method-model\n",
+        "# remove ag folder if exists\n",
+        "wrapper_model_folder = 'Lab01_ag_models_WrapperMethod'\n",
+        "remove_ag_folder(wrapper_model_folder)\n",
+        "\n",
+        "ag_model_wrapper_method = Pipeline([\n",
+        "    ('replace_values', FunctionTransformer(replace_vals)),\n",
+        "    ('ordinal_encoder', make_column_transformer(\n",
+        "        (OrdinalEncoder(), make_column_selector(dtype_include=[\"object\", \"category\"])),\n",
+        "        remainder='passthrough'\n",
+        "    )),\n",
+        "    ('feature_selection', SequentialFeatureSelector(\n",
+        "        ExtraTreesClassifier(random_state=2025, criterion='entropy', max_depth=3, n_jobs=-1),\n",
+        "    direction='forward',\n",
+        "    scoring='roc_auc',\n",
+        "    tol=0.005,\n",
+        "    n_jobs=-1\n",
+        "    )),\n",
+        "    ('autogluon', AutoGluonSklearnWrapper(label=label,\n",
+        "                                    predictor_args={'problem_type': 'binary',\n",
+        "                                                    'eval_metric': 'roc_auc',\n",
+        "                                                    'path': wrapper_model_folder},\n",
+        "                                    fit_args={'holdout_frac': 0.2,\n",
+        "                                                'excluded_model_types': ['KNN', 'NN_TORCH'],\n",
+        "                                                'presets': 'medium_quality',\n",
+        "                                                'time_limit': 180}))\n",
+        "])\n",
+        "\n",
+        "global_set_seed()\n",
+        "\n",
+        "ag_model_wrapper_method.fit(X = train_data_wide.drop(\n",
+        "                    columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']),\n",
+        "                        y = train_data_wide[label])"
+      ],
+      "id": "lab01-fit-wrapper-method-model",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check leaderboard using the test set."
+      ],
+      "id": "1fffd0b2"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-transform-wrapper-test-data\n",
+        "preprocessed_test_data_wrapper = ag_model_wrapper_method[:-1].transform(test_data_wide.drop(columns=[label] + ['PROSPECTID', 'campaign_id', 'direct_mail_flag']))\n",
+        "preprocessed_test_data_wrapper[label] = test_data_wide[label]\n",
+        "\n",
+        "df_leaders_wrapper_method = ag_model_wrapper_method.named_steps['autogluon'].predictor.leaderboard(preprocessed_test_data_wrapper)"
+      ],
+      "id": "lab01-transform-wrapper-test-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-ag-leaderboard-wrapper-method\n",
+        "#| tbl-cap: Autogluon Leaderboard (Wrapper Method)\n",
+        "\n",
+        "\n",
+        "display(df_leaders_wrapper_method)"
+      ],
+      "id": "tbl-ag-leaderboard-wrapper-method",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check permutation feature importance on the test set."
+      ],
+      "id": "694f8db0"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab01-compute-wrapper-importance\n",
+        "best_feature_importance_wrapper = (ag_model_wrapper_method\n",
+        "                            .named_steps['autogluon']\n",
+        "                            .predictor\n",
+        "                            .feature_importance(\n",
+        "                                    data = preprocessed_test_data_wrapper, \n",
+        "                                    model = best_model_name,\n",
+        "                                    subsample_size = None)\n",
+        "                        )"
+      ],
+      "id": "lab01-compute-wrapper-importance",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "tbl-number": true
+      },
+      "source": [
+        "#| label: tbl-perm-feature-importance-wrapper-method\n",
+        "#| tbl-cap: Permutation Feature Importance (Wrapper Method)\n",
+        "\n",
+        "\n",
+        "display(best_feature_importance_wrapper)"
+      ],
+      "id": "tbl-perm-feature-importance-wrapper-method",
+      "execution_count": null,
+      "outputs": []
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "name": "python3",
+      "language": "python",
+      "display_name": "Python 3 (ipykernel)",
+      "path": "/Users/williamchiu/miniforge3/envs/env_AutoGluon_202502/share/jupyter/kernels/python3"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+}
