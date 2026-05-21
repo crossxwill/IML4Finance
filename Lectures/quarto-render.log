@@ -1,0 +1,19 @@
+
+Starting python3 kernel...
+Unable to run notebook
+Traceback (most recent call last):
+  File "C:\Users\chiuw\AppData\Local\Programs\Quarto\share\jupyter\jupyter.py", line 264, in <module>
+    log_init(options["log"], options["debug"])
+  File "C:\Users\chiuw\AppData\Local\Programs\Quarto\share\jupyter\log.py", line 20, in log_init
+    file_handler = logging.FileHandler(log_file)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\chiuw\miniforge3\envs\env_AutoGluon_202502\Lib\logging\__init__.py", line 1181, in __init__
+    StreamHandler.__init__(self, self._open())
+                                 ^^^^^^^^^^^^
+  File "C:\Users\chiuw\miniforge3\envs\env_AutoGluon_202502\Lib\logging\__init__.py", line 1213, in _open
+    return open_func(self.baseFilename, self.mode,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: 'C:\\Users\\chiuw\\AppData\\Local\\quarto\\logs\\jupyter-kernel.log'
+
+(WARN) Error encountered when rendering files
+

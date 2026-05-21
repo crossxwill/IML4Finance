@@ -38,6 +38,8 @@ Cell 2/3 '{cell-label}'.....
    - PowerShell: append `; if ($LASTEXITCODE -eq 0) { echo "Render finished" }`
    - bash/sh: append `&& echo "Render finished"`
 - If the user says “render sequentially” or “low RAM”, render one file at a time (do not suggest parallel execution).
+- If a render fails, use the failing cell label and traceback to localize the issue to the specific chunk before making edits.
+- When the terminal appears stuck on one notebook cell, do not assume a hang immediately; first confirm whether the Python kernel or model-artifact directory is still active.
 
 ## Render a single `.qmd`
 
@@ -73,6 +75,17 @@ Instructions:
 3. If it fails, fix the current `.qmd`, then re-run the same command until it succeeds.
 4. Continue to the next `.qmd` only after the current one succeeds.
 5. The command succeeds when there are no error messages in the terminal and you see `Render finished`.
+
+## Debugging a failed render
+
+When Quarto reports a failing cell:
+1. Read the traceback and capture the chunk label (for example, `Cell 47/124: 'calibration-s2'`).
+2. Read only the nearby chunk in the `.qmd` plus one neighboring chunk that implements the same pattern.
+3. Form one local hypothesis about the failure from the exact traceback, such as an incomplete function call or a shadowed imported helper.
+4. Fix the smallest local defect first, then rerun the full single-file render.
+5. If the file contains repeated strategy/model sections, search for sibling chunks with the same structure before rerendering so the next copy does not fail later.
+
+Prefer local chunk comparisons over broad repo exploration; most render failures are plain code or markdown defects inside the current `.qmd`.
 
 ## Skill scope
 
@@ -119,6 +132,32 @@ conda activate <env_name>; $env:QUARTO_PYTHON = "<full-python-path>"; quarto ren
 ### Error: "PermissionDenied: Access is denied. (os error 5)" during cleanup
 
 Harmless cleanup error. Use `-ErrorAction SilentlyContinue` on `Remove-Item` commands to suppress it. Does not affect render output.
+
+### Symptom: render appears stuck on one cell for a long time
+
+This is common for notebook-backed `.qmd` files that train models or generate large reports. A terminal line such as:
+
+```text
+Cell 29/124: 'lab04-fit-autogluon-s1'...............
+```
+
+does not imply a hang by itself.
+
+Before treating it as stalled:
+1. Check whether the shell prompt has returned. If not, the render is still running.
+2. Check whether the Python kernel process is still alive and consuming CPU or memory.
+3. If the cell writes model artifacts, check whether files in the output directory are still getting fresh timestamps.
+
+If those checks show activity, keep waiting. Long AutoGluon or SHAP cells can legitimately run for many minutes.
+
+### Symptom: a late-cell failure after a long successful run
+
+Do not restart broad debugging. Use the exact failing cell and traceback to inspect the local chunk first.
+
+Common causes in `.qmd` code cells:
+- an incomplete function call or missing closing delimiter in one repeated chunk
+- a variable name that shadows an imported callable such as `display`
+- copying one strategy block and forgetting to finish or rename one line in the sibling block
 
 ### General pre-render checklist
 

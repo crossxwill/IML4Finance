@@ -1,0 +1,3726 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "---\n",
+        "title: \"Lab 04: Fraud Detection and Imbalanced Learning\"\n",
+        "format: \n",
+        "    html:\n",
+        "        toc: true\n",
+        "        code-fold: true\n",
+        "        code-tools: true\n",
+        "        code-line-numbers: true\n",
+        "        page-layout: full\n",
+        "number-sections: true\n",
+        "number-figures: true\n",
+        "number-tables: true\n",
+        "execute:\n",
+        "    warning: false\n",
+        "    message: false\n",
+        "bibliography: ../Lectures/references.bib\n",
+        "---\n",
+        "\n",
+        "# Overview\n",
+        "\n",
+        "The lab explores Python libraries for handling large datasets, feature engineering, and strategies for addressing imbalanced data in fraud detection.\n",
+        "\n",
+        "# Import Code\n",
+        "\n",
+        "The chunks below include all necessary Python libraries. Helper functions are imported from `course_utils.helpers`."
+      ],
+      "id": "4466d796"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab04-import-python-libraries\n",
+        "\n",
+        "# System utilities\n",
+        "import os\n",
+        "import shutil\n",
+        "import random\n",
+        "import sys\n",
+        "import warnings\n",
+        "import time\n",
+        "import gc\n",
+        "import psutil\n",
+        "import glob # For finding files\n",
+        "import time\n",
+        "from pathlib import Path\n",
+        "\n",
+        "sys.path.insert(0, str(Path.cwd().parent))\n",
+        "\n",
+        "CPU_LIMIT = max(1, (os.cpu_count() or 1) - 1)\n",
+        "os.environ['OMP_NUM_THREADS'] = str(CPU_LIMIT)\n",
+        "os.environ['OPENBLAS_NUM_THREADS'] = str(CPU_LIMIT)\n",
+        "os.environ['MKL_NUM_THREADS'] = str(CPU_LIMIT)\n",
+        "os.environ['VECLIB_MAXIMUM_THREADS'] = str(CPU_LIMIT)\n",
+        "os.environ['NUMEXPR_NUM_THREADS'] = str(CPU_LIMIT)\n",
+        "num_jobs = CPU_LIMIT\n",
+        "\n",
+        "# Data manipulation and visualization\n",
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "import polars as pl # Polars is a fast DataFrame library\n",
+        "import matplotlib.pyplot as plt\n",
+        "from IPython.display import display # Explicit import for display\n",
+        "import re\n",
+        "import duckdb\n",
+        "\n",
+        "# Machine learning - scikit-learn\n",
+        "from sklearn.model_selection import train_test_split\n",
+        "from sklearn.linear_model import LogisticRegression, LogisticRegressionCV\n",
+        "from sklearn.metrics import roc_auc_score, average_precision_score, f1_score, classification_report\n",
+        "from sklearn.pipeline import Pipeline\n",
+        "from sklearn.inspection import PartialDependenceDisplay\n",
+        "from sklearn.calibration import CalibratedClassifierCV, CalibrationDisplay # Added for probability calibration\n",
+        "from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin\n",
+        "from sklearn.utils.validation import check_is_fitted\n",
+        "from sklearn import set_config\n",
+        "\n",
+        "# Imbalanced-learn for resampling\n",
+        "from imblearn.pipeline import Pipeline as ImbPipeline\n",
+        "from imblearn.under_sampling import RandomUnderSampler\n",
+        "from imblearn.over_sampling import RandomOverSampler, SMOTE\n",
+        "\n",
+        "# Specialized ML libraries\n",
+        "from autogluon.tabular import TabularPredictor, TabularDataset\n",
+        "from ydata_profiling import ProfileReport\n",
+        "import shap\n",
+        "import dice_ml\n",
+        "from dice_ml.utils import helpers \n",
+        "import torch\n",
+        "torch.set_num_threads(num_jobs)\n",
+        "\n",
+        "# Helper functions from course_utils.helpers\n",
+        "from course_utils.helpers import (\n",
+        "    global_set_seed,\n",
+        "    remove_ag_folder,\n",
+        "    AutoGluonSklearnWrapper\n",
+        ")\n",
+        "\n",
+        "# Settings\n",
+        "pd.set_option('display.max_columns', 50)\n",
+        "pd.set_option('display.max_rows', 100)\n",
+        "warnings.filterwarnings('ignore', category=FutureWarning) # Suppress specific FutureWarnings\n",
+        "warnings.filterwarnings('ignore', category=UserWarning) # Suppress some UserWarnings from libraries\n",
+        "set_config(transform_output=\"pandas\") # Set sklearn output to pandas\n",
+        "\n",
+        "# Initialize global seed\n",
+        "global_set_seed(2025)"
+      ],
+      "id": "lab04-import-python-libraries",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Credit Card Fraud Detection\n",
+        "\n",
+        "Credit card fraud is a significant concern for financial institutions, merchants, and consumers. Understanding the types of fraud and how detection systems operate is crucial for developing effective machine learning models.\n",
+        "\n",
+        "## Card-present frauds\n",
+        "\n",
+        "-   Card-present (CP) fraud occurs when a transaction is made using a **physical credit card** that has been lost, stolen, counterfeited, or intercepted.\n",
+        "-   The legitimate cardholder is typically unaware of the fraudulent use until they notice unauthorized transactions on their statement or are alerted by their bank.\n",
+        "-   The key characteristic of CP fraud is that the **physical card** is used at the point of sale (e.g., a retail store, restaurant).\n",
+        "\n",
+        "## Card-not-present frauds\n",
+        "\n",
+        "-   Card-not-present (CNP) fraud occurs when credit card information (such as card number, expiry date, CVV) is used **without** the physical card being present.\n",
+        "-   This type of fraud is common in online purchases.\n",
+        "-   Fraudsters may obtain card details through data breaches, phishing scams, or malware.\n",
+        "-   CNP fraud has become increasingly prevalent with the growth of e-commerce.\n",
+        "\n",
+        "## Credit Card Fraud Detection Systems (CCFDS)\n",
+        "\n",
+        "-   **Credit Card Fraud Detection Systems (CCFDS)** are designed to identify and prevent fraudulent transactions in real-time or near real-time by analyzing transaction data (e.g., amount, location, time, customer behavior, terminal ID) using rules and machine learning models.\n",
+        "-   If a transaction is flagged as potentially fraudulent, the system may block the transaction, alert the cardholder (e.g., via SMS or app notification), or refer the case to human fraud analysts for review.\n",
+        "-   The primary goal of a CCFDS is to minimize financial losses from fraud while also reducing false positives (legitimate transactions incorrectly blocked), which can negatively impact customer experience.\n",
+        "-   CCFDS must balance detection accuracy, speed, and customer convenience, often operating under strict latency requirements to avoid disrupting normal transaction flows.\n",
+        "\n",
+        "## Class Imbalance in Fraud Detection\n",
+        "\n",
+        "Class imbalance occurs when one class (e.g., fraudulent transactions) is significantly smaller compared to another class (e.g., legitimate transactions).\n",
+        "\n",
+        "**Characteristics in Fraud Data**\n",
+        "\n",
+        "-   Rarity of Fraud: Fraudulent transactions are typically a small fraction (often $< 1\\%$, sometimes $< 0.1\\%$) of total transactions.\n",
+        "\n",
+        "-   Standard accuracy can be misleading; a naive model predicting \"no fraud\" for all transactions might appear highly accurate.\n",
+        "\n",
+        "**Impact of Sample Size**\n",
+        "\n",
+        "The difficulty of modeling depends on both the imbalance ratio (IR) and the absolute number of samples in the minority class (fraud) .\n",
+        "\n",
+        "A higher imbalance ratio (IR) indicates greater class imbalance: $$IR = \\frac{\\text{Number of samples in majority class}}{\\text{Number of samples in minority class}}$$\n",
+        "\n",
+        "The absolute number of samples in the minority class (fraud) also matters:\n",
+        "\n",
+        "-   **Large Datasets:** A low fraud rate (e.g., 0.1%) in a large dataset (e.g., 100 million transactions) can still yield enough fraud examples (e.g., 100,000) for effective modeling training and testing.\n",
+        "\n",
+        "-   **Small Datasets:** The same low fraud rate in a small dataset (e.g., 1,000 transactions) results in very few fraud examples (approximately 1 fraud case if the rate is 0.1%). This is often insufficient for reliable model training and evaluation.\n",
+        "\n",
+        "The lab assumes large imbalanced data sets.\n",
+        "\n",
+        "# Data Prep for Big Data\n",
+        "\n",
+        "-   Credit card transaction data involves a huge number of records, often millions or even billions, and new data arrives quickly.\n",
+        "-   Handling such large datasets efficiently is essential for fast analysis and model building.\n",
+        "-   Traditional tools like `pandas` can be slow and use a lot of memory with big data.\n",
+        "-   Modern libraries like `polars` and databases like `DuckDB` are designed to work faster and use memory more efficiently, making them better choices for large-scale data tasks.\n",
+        "\n",
+        "## Data Loading\n",
+        "\n",
+        "We will load all the parquet files found in the `Data/credit-card-fraud/simulated-data/` folder. Each parquet file contains credit card transactions for a single day.\n",
+        "\n",
+        "Some notes about the parquet file format:\n",
+        "\n",
+        "-   The parquet file format is widely used for tabular data.\n",
+        "-   Parquet is designed for efficient storage (small file sizes) and fast processing (quick reads).\n",
+        "-   Data frame libraries such as `pandas`, `polars`, and `DuckDB` support reading from and writing to parquet files.\n",
+        "-   One drawback of parquet files is the lack of human readability, unlike CSV files.\n",
+        "-   Writing a parquet file to disk is also slower than writing a CSV file.\n",
+        "\n",
+        "Read all the parquet files into a `polars` data frame and a `DuckDB` table."
+      ],
+      "id": "d03c708c"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: read-parquet-polars\n",
+        "\n",
+        "data_dir = \"../Data/credit-card-fraud/simulated-data/\"\n",
+        "\n",
+        "path_parquet_files = glob.glob(os.path.join(data_dir, \"*.parquet\"))\n",
+        "\n",
+        "df_fraud = pl.read_parquet(path_parquet_files)"
+      ],
+      "id": "read-parquet-polars",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: read-parquet-duckdb\n",
+        "\n",
+        "tbl_fraud = duckdb.query(f\"\"\"\n",
+        "    SELECT * \n",
+        "    FROM read_parquet({path_parquet_files})\n",
+        "    \"\"\")"
+      ],
+      "id": "read-parquet-duckdb",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: num-parquet-files\n",
+        "\n",
+        "print(len(path_parquet_files)) # Display the number of parquet files found"
+      ],
+      "id": "num-parquet-files",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Take a peek at the data."
+      ],
+      "id": "8e650278"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: peek-polars\n",
+        "\n",
+        "display(df_fraud.head(10))"
+      ],
+      "id": "peek-polars",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: peek-duckdb\n",
+        "\n",
+        "display(tbl_fraud.limit(10))"
+      ],
+      "id": "peek-duckdb",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Get column names and data types for both `polars` and `DuckDB`."
+      ],
+      "id": "226c092d"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: column-info-polars\n",
+        "\n",
+        "# Get schema as a dictionary\n",
+        "summary_df = pl.DataFrame({\n",
+        "    \"Column Name\": df_fraud.columns,\n",
+        "    \"Data Type\": [str(dtype) for dtype in df_fraud.dtypes]\n",
+        "})\n",
+        "\n",
+        "display(summary_df)"
+      ],
+      "id": "column-info-polars",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: column-info-duckdb\n",
+        "\n",
+        "duckdb.sql(\"\"\"\n",
+        "    SELECT column_name, column_type\n",
+        "    FROM\n",
+        "    (DESCRIBE SELECT * FROM tbl_fraud)\n",
+        "    \"\"\").show()"
+      ],
+      "id": "column-info-duckdb",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Read the same parquet files with `pandas` for comparison."
+      ],
+      "id": "9cd21bac"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab04-load-pandas-data\n",
+        "# Read all parquet files into a pandas DataFrame (only .parquet files)\n",
+        "\n",
+        "df_fraud_pd = pd.read_parquet(path_parquet_files)\n",
+        "\n",
+        "# Display the first few rows\n",
+        "display(df_fraud_pd.head())"
+      ],
+      "id": "lab04-load-pandas-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Data Frame Benchmarks\n",
+        "\n",
+        "Calculate the fraud rate per CUSTOMER_ID using `polars`, `DuckDB`, and `pandas`. Show the fraud rate only for customers with more than 10 transactions. This will help us compare the performance of these libraries on a common task."
+      ],
+      "id": "13d285de"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fraud-rate-polars-complex\n",
+        "\n",
+        "start_time = time.time()\n",
+        "\n",
+        "fraud_analysis_polars = (\n",
+        "    df_fraud\n",
+        "    .group_by(pl.col(\"CUSTOMER_ID\"))\n",
+        "    .agg(\n",
+        "        FRAUD_RATE = pl.col(\"TX_FRAUD\").mean(),  # FRAUD_RATE by CUSTOMER_ID\n",
+        "        TOTAL_FRAUDS = pl.col(\"TX_FRAUD\").sum(),\n",
+        "        AVG_AMOUNT = pl.col(\"TX_AMOUNT\").mean(),\n",
+        "        STD_AMOUNT = pl.col(\"TX_AMOUNT\").std(),\n",
+        "        P95_AMOUNT = pl.col(\"TX_AMOUNT\").quantile(0.95),\n",
+        "        MIN_AMOUNT = pl.col(\"TX_AMOUNT\").min(),\n",
+        "        MAX_AMOUNT = pl.col(\"TX_AMOUNT\").max(),\n",
+        "        TX_COUNT = pl.len(),\n",
+        "        FRAUD_VALUE = (pl.col(\"TX_AMOUNT\") * pl.col(\"TX_FRAUD\")).sum(),\n",
+        "        FIRST_TX = pl.col(\"TX_DATETIME\").min(),\n",
+        "        LAST_TX = pl.col(\"TX_DATETIME\").max()\n",
+        "    )\n",
+        "    .with_columns(\n",
+        "        AVG_FRAUD_AMOUNT = (pl.col(\"FRAUD_VALUE\") / pl.col(\"TX_COUNT\")),\n",
+        "        CUSTOMER_TENURE_DAYS = (pl.col(\"LAST_TX\") - pl.col(\"FIRST_TX\")).dt.total_days()\n",
+        "    )\n",
+        "    .filter(pl.col(\"TX_COUNT\") > 10)\n",
+        "    .sort(\"FRAUD_RATE\", descending=True)\n",
+        ")\n",
+        "\n",
+        "end_time = time.time()\n",
+        "print(f\"Polars fraud analysis completed in {end_time - start_time:.2f} seconds.\")"
+      ],
+      "id": "fraud-rate-polars-complex",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: print-polars-fraud-rate\n",
+        "\n",
+        "display(fraud_analysis_polars.head(10))"
+      ],
+      "id": "print-polars-fraud-rate",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fraud-rate-duckdb-complex\n",
+        "\n",
+        "start_time = time.time()\n",
+        "\n",
+        "fraud_analysis_duckdb = duckdb.query(\"\"\"\n",
+        "    WITH customer_stats AS (\n",
+        "        SELECT \n",
+        "            CUSTOMER_ID,\n",
+        "            AVG(TX_FRAUD) AS FRAUD_RATE,  -- FRAUD_RATE by CUSTOMER_ID\n",
+        "            SUM(TX_FRAUD) AS TOTAL_FRAUDS,\n",
+        "            AVG(TX_AMOUNT) AS AVG_AMOUNT,\n",
+        "            STDDEV(TX_AMOUNT) AS STD_AMOUNT,\n",
+        "            PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY TX_AMOUNT) AS P95_AMOUNT,\n",
+        "            MIN(TX_AMOUNT) AS MIN_AMOUNT,\n",
+        "            MAX(TX_AMOUNT) AS MAX_AMOUNT,\n",
+        "            COUNT(*) AS TX_COUNT,\n",
+        "            SUM(TX_AMOUNT * TX_FRAUD) AS FRAUD_VALUE,\n",
+        "            MIN(TX_DATETIME) AS FIRST_TX,\n",
+        "            MAX(TX_DATETIME) AS LAST_TX\n",
+        "        FROM tbl_fraud\n",
+        "        GROUP BY CUSTOMER_ID\n",
+        "        HAVING COUNT(*) > 10\n",
+        "    )\n",
+        "    SELECT *,\n",
+        "        FRAUD_VALUE / TX_COUNT AS AVG_FRAUD_AMOUNT,\n",
+        "        DATE_DIFF('day', FIRST_TX, LAST_TX) AS CUSTOMER_TENURE_DAYS\n",
+        "    FROM customer_stats\n",
+        "    ORDER BY FRAUD_RATE DESC\n",
+        "\"\"\")\n",
+        "\n",
+        "end_time = time.time()\n",
+        "print(f\"DuckDB fraud analysis completed in {end_time - start_time:.2f} seconds.\")"
+      ],
+      "id": "fraud-rate-duckdb-complex",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: print-duckdb-fraud-rate\n",
+        "\n",
+        "display(fraud_analysis_duckdb.limit(10))"
+      ],
+      "id": "print-duckdb-fraud-rate",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fraud-rate-pandas-complex\n",
+        "\n",
+        "start_time = time.time()\n",
+        "\n",
+        "df_fraud_pd['FRAUD_VALUE'] = df_fraud_pd['TX_AMOUNT'] * df_fraud_pd['TX_FRAUD']\n",
+        "\n",
+        "fraud_analysis_pandas = (\n",
+        "    df_fraud_pd\n",
+        "    .groupby(\"CUSTOMER_ID\", sort=False)\n",
+        "    .agg(\n",
+        "        FRAUD_RATE=('TX_FRAUD', 'mean'),  # FRAUD_RATE by CUSTOMER_ID\n",
+        "        TOTAL_FRAUDS=('TX_FRAUD', 'sum'),\n",
+        "        AVG_AMOUNT=('TX_AMOUNT', 'mean'),\n",
+        "        STD_AMOUNT=('TX_AMOUNT', 'std'),\n",
+        "        P95_AMOUNT=('TX_AMOUNT', lambda x: x.quantile(0.95)),\n",
+        "        MIN_AMOUNT=('TX_AMOUNT', 'min'),\n",
+        "        MAX_AMOUNT=('TX_AMOUNT', 'max'),\n",
+        "        TX_COUNT=('TX_FRAUD', 'size'),\n",
+        "        FRAUD_VALUE=('FRAUD_VALUE', 'sum'),\n",
+        "        FIRST_TX=('TX_DATETIME', 'min'),\n",
+        "        LAST_TX=('TX_DATETIME', 'max')\n",
+        "    )\n",
+        "    .reset_index()\n",
+        "    .query(\"TX_COUNT > 10\")\n",
+        "    .assign(\n",
+        "        AVG_FRAUD_AMOUNT=lambda x: x['FRAUD_VALUE'] / x['TX_COUNT'],\n",
+        "        CUSTOMER_TENURE_DAYS=lambda x: (x['LAST_TX'] - x['FIRST_TX']).dt.days\n",
+        "    )\n",
+        "    .sort_values(\"FRAUD_RATE\", ascending=False)\n",
+        ")\n",
+        "\n",
+        "end_time = time.time()\n",
+        "print(f\"Pandas fraud analysis completed in {end_time - start_time:.2f} seconds.\")"
+      ],
+      "id": "fraud-rate-pandas-complex",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: print-pandas-fraud-rate\n",
+        "\n",
+        "display(fraud_analysis_pandas.head(10))"
+      ],
+      "id": "print-pandas-fraud-rate",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Prequential Data Splitting (using Polars)\n",
+        "\n",
+        "To properly evaluate fraud detection models, we split the data **chronologically** into training, tuning (calibration), and test sets based on the `TX_DATETIME` column.\n",
+        "\n",
+        "Also known as out-of-time validation, prequential data splitting ensures that future transactions do not influence model training or validation.\n",
+        "\n",
+        "The lab splits the data into three sets:\n",
+        "\n",
+        "-   `df_train`: Transactions before `2018-06-30` (inclusive).\n",
+        "-   `df_tuning`: Transactions between `2018-07-01` (inclusive) and `2018-08-31` (inclusive).\n",
+        "-   `df_test`: Transactions after `2018-09-01` (inclusive)."
+      ],
+      "id": "f9acaa5b"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab04-split-data-polars\n",
+        "# Prequential data splitting using Polars\n",
+        "\n",
+        "def split_data(df: pl.DataFrame\n",
+        "            , type: str = \"train\") -> pl.DataFrame:\n",
+        "    \"\"\"\n",
+        "    Splits the data into train, tuning, and test sets based on TX_DATETIME.\n",
+        "    \"\"\"\n",
+        "    if type == \"train\":\n",
+        "        return df.filter(pl.col(\"TX_DATETIME\") <= pl.date(2018, 6, 30))\n",
+        "    elif type == \"tuning\":\n",
+        "        return df.filter((pl.col(\"TX_DATETIME\") >= pl.date(2018, 7, 1)) \n",
+        "                        & (pl.col(\"TX_DATETIME\") <= pl.date(2018, 8, 31)))\n",
+        "    elif type == \"test\":\n",
+        "        return df.filter(pl.col(\"TX_DATETIME\") >= pl.date(2018, 9, 1))\n",
+        "    else:\n",
+        "        raise ValueError(f\"Unknown split type: {type}\")\n",
+        "\n",
+        "# Split the data into train, tuning, and test sets\n",
+        "\n",
+        "# df_train: Transactions before 2018-06-30 (inclusive)\n",
+        "df_train = split_data(df_fraud, type=\"train\")\n",
+        "\n",
+        "# df_tuning: Transactions between 2018-07-01 (inclusive) and 2018-08-31 (inclusive)\n",
+        "df_tuning = split_data(df_fraud, type=\"tuning\")\n",
+        "\n",
+        "# df_test: Transactions after 2018-09-01 (inclusive)\n",
+        "df_test = split_data(df_fraud, type=\"test\")"
+      ],
+      "id": "lab04-split-data-polars",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: sample-sizes\n",
+        "\n",
+        "df_train.shape, df_tuning.shape, df_test.shape"
+      ],
+      "id": "sample-sizes",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# EDA: Compare `df_train` and `df_tuning`\n",
+        "\n",
+        "Unfortunately, the `ydata_profiling` library does not support polars data frames. The lab will randomly sample 10% of each data frame and then convert to pandas data frames for profiling. This is a workaround to allow us to compare the two datasets using the `ydata_profiling` library.\n",
+        "\n",
+        "For the data dictionary, please refer to Chapter 3 of @leborgne2022fraud."
+      ],
+      "id": "77f5642b"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: eda-train-tuning-comparison\n",
+        "\n",
+        "p_frac = 0.1\n",
+        "\n",
+        "train_data_profile = ProfileReport(\n",
+        "            df_train.sample(fraction=p_frac, seed=2025).to_pandas(), \n",
+        "            title=\"Train\",\n",
+        "            progress_bar=False,\n",
+        "            duplicates=None,\n",
+        "            interactions=None\n",
+        "            )\n",
+        "\n",
+        "tuning_data_profile = ProfileReport(\n",
+        "            df_tuning.sample(fraction=p_frac*2, seed=2025).to_pandas(), \n",
+        "            title=\"Tuning\",\n",
+        "            progress_bar=False,\n",
+        "            duplicates=None,\n",
+        "            interactions=None\n",
+        "            )\n",
+        "\n",
+        "compare_profile = train_data_profile.compare(tuning_data_profile)\n",
+        "\n",
+        "compare_profile.to_file(\"Lab04_eda_compare_train_tuning.html\")"
+      ],
+      "id": "eda-train-tuning-comparison",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Feature Engineering\n",
+        "\n",
+        "The section creates new features that enhance the effectiveness of fraud detection models.\n",
+        "\n",
+        "The feature engineering logic is based on Chapter 3 of @leborgne2022fraud, but has been adapted to use Polars expressions for improved speed and efficiency.\n",
+        "\n",
+        "## Polars Feature Functions\n",
+        "\n",
+        "We will create functions to generate the following features. Each function will take a Polars DataFrame as input and return a Polars DataFrame with the new feature(s) added.\n",
+        "\n",
+        "Date-related features:\n",
+        "\n",
+        "1.  TX_DURING_WEEKEND: whether the transaction occurred on a weekend (1 if weekend, 0 if weekday).\n",
+        "\n",
+        "2.  TX_DURING_NIGHT: whether the transaction occurred during the night (1 if night, 0 if day).\n",
+        "\n",
+        "Customer features:\n",
+        "\n",
+        "3.  CUSTOMER_ID_NB_TX_1DAY_WINDOW: number of transactions for the customer in the last 1 day.\n",
+        "\n",
+        "4.  CUSTOMER_ID_AVG_AMOUNT_1DAY_WINDOW: average transaction amount for the customer in the last 1 day.\n",
+        "\n",
+        "5.  CUSTOMER_ID_NB_TX_7DAY_WINDOW: number of transactions for the customer in the last 7 days.\n",
+        "\n",
+        "6.  CUSTOMER_ID_AVG_AMOUNT_7DAY_WINDOW: average transaction amount for the customer in the last 7 days.\n",
+        "\n",
+        "7.  CUSTOMER_ID_NB_TX_30DAY_WINDOW: number of transactions for the customer in the last 30 days.\n",
+        "\n",
+        "8.  CUSTOMER_ID_AVG_AMOUNT_30DAY_WINDOW: average transaction amount for the customer in the last 30 days.\n",
+        "\n",
+        "Terminal features:\n",
+        "\n",
+        "9.  TERMINAL_ID_NB_TX_1DAY_WINDOW: number of transactions for the terminal in the last 1 day. Lagged 7 days to account for a lag in fraud labeling.\n",
+        "\n",
+        "10. TERMINAL_ID_RISK_1DAY_WINDOW: proportion of **fraudulent** transactions for the terminal in the last 1 day. Lagged 7 days to account for a lag in fraud labeling.\n",
+        "\n",
+        "11. TERMINAL_ID_NB_TX_7DAY_WINDOW: number of transactions for the terminal in the last 7 days. Lagged 7 days to account for a lag in fraud labeling.\n",
+        "\n",
+        "12. TERMINAL_ID_RISK_7DAY_WINDOW: proportion of **fraudulent** transactions for the terminal in the last 7 days. Lagged 7 days to account for a lag in fraud labeling.\n",
+        "\n",
+        "13. TERMINAL_ID_NB_TX_30DAY_WINDOW: number of transactions for the terminal in the last 30 days. Lagged 7 days to account for a lag in fraud labeling.\n",
+        "\n",
+        "14. TERMINAL_ID_RISK_30DAY_WINDOW: proportion of **fraudulent** transactions for the terminal in the last 30 days. Lagged 7 days to account for a lag in fraud labeling.\n",
+        "\n",
+        "### Weekend Flag\n",
+        "\n",
+        "The feature indicates if a transaction occurred on a weekend."
+      ],
+      "id": "9b5dcd07"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-is-weekend\n",
+        "def fe_is_weekend(df: pl.DataFrame) -> pl.DataFrame:\n",
+        "    \"\"\"Adds IS_WEEKEND feature (1 if weekend, 0 if weekday).\"\"\"\n",
+        "    # Polars weekday(): Monday=1, Sunday=7. So, Saturday (6) or Sunday (7) are weekends.\n",
+        "    return df.with_columns(\n",
+        "        TX_DURING_WEEKEND = (pl.col(\"TX_DATETIME\").dt.weekday()\n",
+        "                                .is_in([6, 7])\n",
+        "                                .cast(pl.UInt8))\n",
+        "    )\n"
+      ],
+      "id": "feature-is-weekend",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "### Night Flag\n",
+        "\n",
+        "The feature indicates if a transaction occurred during the night (defined as between midnight and 6:00 AM)."
+      ],
+      "id": "a0a49d66"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-is-night\n",
+        "\n",
+        "def fe_is_night(df: pl.DataFrame) -> pl.DataFrame:\n",
+        "    \"\"\"Adds IS_NIGHT feature (1 if hour < 6, 0 otherwise).\"\"\"\n",
+        "    return df.with_columns(\n",
+        "        TX_DURING_NIGHT = pl.when(pl.col(\"TX_DATETIME\").dt.hour() < 6)\n",
+        "                            .then(1)\n",
+        "                            .otherwise(0)\n",
+        "                            .cast(pl.UInt8)\n",
+        "    )"
+      ],
+      "id": "feature-is-night",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "### Customer Features\n",
+        "\n",
+        "The features describe a customer's recent transaction count and average transaction amount over different rolling time windows (1, 7, and 30 days)."
+      ],
+      "id": "2e099118"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-customer-spending\n",
+        "def fe_customer_spending(df: pl.DataFrame, window_sizes_in_days=[1, 7, 30]) -> pl.DataFrame:\n",
+        "    \"\"\"\n",
+        "    Calculates customer spending features:\n",
+        "    - Count of transactions per customer over different window_sizes.\n",
+        "    - Average transaction amount per customer over different window_sizes.\n",
+        "    \"\"\"\n",
+        "\n",
+        "    df_int = (\n",
+        "        df\n",
+        "        .sort(pl.col(\"CUSTOMER_ID\"), pl.col(\"TX_DATETIME\")) # very important to sort\n",
+        "        .with_columns(\n",
+        "            pl.col(\"CUSTOMER_ID\").cast(pl.UInt64),\n",
+        "            pl.lit(1).alias(\"TX_COUNT\")\n",
+        "        )\n",
+        "    )\n",
+        "\n",
+        "    result_df = df_int\n",
+        "    for window in window_sizes_in_days:\n",
+        "        result_df = (\n",
+        "            result_df\n",
+        "            .with_columns(\n",
+        "                pl.col(\"TX_COUNT\")\n",
+        "                    .rolling_sum_by(by=pl.col(\"TX_DATETIME\")\n",
+        "                        , window_size=f\"{window}d\"\n",
+        "                        , closed=\"both\"\n",
+        "                        )\n",
+        "                    .over(\"CUSTOMER_ID\")\n",
+        "                .alias(f\"CID_NB_TX_{window}DAY_WINDOW\"),\n",
+        "\n",
+        "                pl.col(\"TX_AMOUNT\")\n",
+        "                    .rolling_mean_by(by=pl.col(\"TX_DATETIME\")\n",
+        "                        , window_size=f\"{window}d\"\n",
+        "                        , closed=\"both\"\n",
+        "                        )\n",
+        "                    .over(\"CUSTOMER_ID\")\n",
+        "                .alias(f\"CID_AVG_AMOUNT_{window}DAY_WINDOW\")\n",
+        "            )\n",
+        "        )\n",
+        "\n",
+        "    return result_df"
+      ],
+      "id": "feature-customer-spending",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "### Terminal Features\n",
+        "\n",
+        "The features describe a point-of-sale terminal's recent transactions count and the proportion of fraudulent transactions over several rolling time windows (1, 7, 30 days). A 7-day delay period is introduced because fraud labels are not be available immediately."
+      ],
+      "id": "b3476363"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-terminal-risk\n",
+        "def fe_terminal_risk(\n",
+        "    df: pl.DataFrame, \n",
+        "    delay_period_days: int = 7, \n",
+        "    window_sizes_in_days: list = [1, 7, 30]\n",
+        ") -> pl.DataFrame:\n",
+        "    \"\"\"\n",
+        "    Adds terminal risk features for various window sizes, considering a 7-day delay in fraud labeling.\n",
+        "    For each window, computes:\n",
+        "        - Number of transactions at the terminal in the window (lagged by delay_period_days)\n",
+        "        - Proportion of fraudulent transactions at the terminal in the window (lagged)\n",
+        "    \"\"\"\n",
+        "    # Sort by TERMINAL_ID and TX_DATETIME for correct rolling calculations\n",
+        "    df_int = (\n",
+        "        df\n",
+        "        .sort(pl.col(\"TERMINAL_ID\")\n",
+        "            , pl.col(\"TX_DATETIME\")\n",
+        "        )\n",
+        "        .with_columns(\n",
+        "            pl.col(\"TERMINAL_ID\").cast(pl.UInt64),\n",
+        "            pl.lit(1).alias(\"TX_COUNT\")\n",
+        "        )\n",
+        "    )\n",
+        "\n",
+        "    result_df = df_int\n",
+        "    for window in window_sizes_in_days:\n",
+        "\n",
+        "        full_offset = window + delay_period_days\n",
+        "\n",
+        "        # Rolling window with delay (offset)\n",
+        "        result_df = (\n",
+        "            result_df\n",
+        "            .with_columns(\n",
+        "                pl.col(\"TX_COUNT\")\n",
+        "                    .rolling_sum_by(\"TX_DATETIME\"\n",
+        "                        , window_size=f\"{window}d\"\n",
+        "                        , closed=\"both\"\n",
+        "                        )\n",
+        "                    .over(\"TERMINAL_ID\")\n",
+        "                .alias(f\"TID_NB_TX_{window}DAY_WINDOW\"),\n",
+        "\n",
+        "                pl.col(\"TX_COUNT\")\n",
+        "                    .rolling_sum_by(\"TX_DATETIME\"\n",
+        "                        , window_size=f\"{full_offset}d\"\n",
+        "                        , closed=\"both\"\n",
+        "                        )\n",
+        "                    .over(\"TERMINAL_ID\")\n",
+        "                .alias(f\"TID_NB_TX_{full_offset}DAY_WINDOW\"),\n",
+        "\n",
+        "\n",
+        "                pl.col(\"TX_FRAUD\")\n",
+        "                    .rolling_sum_by(\"TX_DATETIME\"\n",
+        "                        , window_size=f\"{window}d\"\n",
+        "                        , closed=\"both\"\n",
+        "                        )  \n",
+        "                    .over(\"TERMINAL_ID\")\n",
+        "                .alias(f\"TID_NB_FRAUD_{window}DAY_WINDOW\"),\n",
+        "\n",
+        "                pl.col(\"TX_FRAUD\")\n",
+        "                    .rolling_sum_by(\"TX_DATETIME\"\n",
+        "                        , window_size=f\"{full_offset}d\"\n",
+        "                        , closed=\"both\"\n",
+        "                        )  \n",
+        "                    .over(\"TERMINAL_ID\")\n",
+        "                .alias(f\"TID_NB_FRAUD_{full_offset}DAY_WINDOW\")\n",
+        "            )\n",
+        "\n",
+        "        )\n",
+        "\n",
+        "        # Compute risk (proportion of frauds)\n",
+        "        risk_col = f\"TID_RISK_{window}DAY_WINDOW\"\n",
+        "\n",
+        "        nb_tx_col = f\"TID_NB_TX_{window}DAY_WINDOW\"\n",
+        "        nb_fraud_col = f\"TID_NB_FRAUD_{window}DAY_WINDOW\"\n",
+        "\n",
+        "        nb_tx_col_fulloffset = f\"TID_NB_TX_{full_offset}DAY_WINDOW\"\n",
+        "        nb_fraud_col_fulloffset = f\"TID_NB_FRAUD_{full_offset}DAY_WINDOW\"\n",
+        "\n",
+        "        result_df = (\n",
+        "            result_df\n",
+        "            .with_columns(\n",
+        "                (pl.col(nb_tx_col_fulloffset) - pl.col(nb_tx_col)).alias(nb_tx_col),\n",
+        "                (pl.col(nb_fraud_col_fulloffset) - pl.col(nb_fraud_col)).alias(nb_fraud_col)\n",
+        "            )\n",
+        "            .select(pl.col(\"*\")\n",
+        "                .exclude([nb_tx_col_fulloffset, nb_fraud_col_fulloffset])\n",
+        "                )\n",
+        "            .with_columns(\n",
+        "                pl.when(pl.col(nb_tx_col) > 0)\n",
+        "                    .then(pl.col(nb_fraud_col) / (pl.col(nb_tx_col)))\n",
+        "                    .otherwise(0.0)\n",
+        "                .alias(risk_col)\n",
+        "            )\n",
+        "\n",
+        "        )\n",
+        "\n",
+        "        # Drop the intermediate fraud count column\n",
+        "        result_df = result_df.drop(nb_fraud_col)\n",
+        "\n",
+        "    return result_df"
+      ],
+      "id": "feature-terminal-risk",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Data Pipeline\n",
+        "\n",
+        "The function applies each data transformation step in sequence using the `pipe` method from Polars. This allows for a clean and readable feature engineering pipeline."
+      ],
+      "id": "5b1167e6"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-engineering-pipeline-function\n",
+        "\n",
+        "def polars_feature_pipeline(df: pl.DataFrame) -> pl.DataFrame:\n",
+        "    \"\"\"\n",
+        "    Apply all feature engineering steps in sequence using Polars pipe\n",
+        "    \"\"\"\n",
+        "    return (df.lazy()\n",
+        "            .pipe(fe_is_weekend)\n",
+        "            .pipe(fe_is_night)\n",
+        "            .pipe(fe_customer_spending\n",
+        "                ,window_sizes_in_days=[1, 7, 30])\n",
+        "            .pipe(fe_terminal_risk\n",
+        "                ,delay_period_days=7\n",
+        "                ,window_sizes_in_days=[1, 7, 30])\n",
+        "            ) "
+      ],
+      "id": "feature-engineering-pipeline-function",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Apply the data pipeline to `df_fraud` and then split the data into training and calibration sets."
+      ],
+      "id": "8ec07db8"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: apply-feature-engineering\n",
+        "\n",
+        "df_fraud_ft = polars_feature_pipeline(df_fraud).collect()\n",
+        "\n",
+        "df_train_ft = split_data(df_fraud_ft, type=\"train\")\n",
+        "df_tuning_ft = split_data(df_fraud_ft, type=\"tuning\")\n",
+        "df_test_ft = split_data(df_fraud_ft, type=\"test\")"
+      ],
+      "id": "apply-feature-engineering",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# EDA: Compare `df_train_ft` and `df_tuning_ft`"
+      ],
+      "id": "3a90c076"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: eda-train-tuning-comparison-ft\n",
+        "\n",
+        "p_frac = 0.1\n",
+        "\n",
+        "ft_train_data_profile = ProfileReport(\n",
+        "            df_train_ft.sample(fraction=p_frac, seed=2025).to_pandas(), \n",
+        "            title=\"Train-FT\",\n",
+        "            progress_bar=False,\n",
+        "            duplicates=None,\n",
+        "            interactions=None\n",
+        "            )\n",
+        "\n",
+        "ft_tuning_data_profile = ProfileReport(\n",
+        "            df_tuning_ft.sample(fraction=p_frac*2, seed=2025).to_pandas(), \n",
+        "            title=\"Tuning-FT\",\n",
+        "            progress_bar=False,\n",
+        "            duplicates=None,\n",
+        "            interactions=None\n",
+        "            )\n",
+        "\n",
+        "ft_compare_profile = ft_train_data_profile.compare(ft_tuning_data_profile)\n",
+        "\n",
+        "ft_compare_profile.to_file(\"Lab04_eda_compare_train_tuning_ft.html\")"
+      ],
+      "id": "eda-train-tuning-comparison-ft",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Modeling and Evaluation\n",
+        "\n",
+        "We now implement and compare four families of strategies for handling imbalanced data, progressing from simplest to most complex. Each strategy follows the same pipeline: train on the (possibly resampled) training set, check probability calibration, tune the decision threshold on the tuning set, and evaluate on the test set.\n",
+        "\n",
+        "## Data\n",
+        "\n",
+        "-   The target label is `TX_FRAUD`, which indicates whether a transaction is fraudulent (1) or not (0).\n",
+        "\n",
+        "-   The list of final features exclude features that are not relevant for modeling, such as IDs and datetime columns."
+      ],
+      "id": "d03acd88"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab04-define-modeling-features\n",
+        "\n",
+        "target_label = \"TX_FRAUD\"\n",
+        "\n",
+        "final_features = [\n",
+        "    'TX_AMOUNT',\n",
+        "    'TX_DURING_WEEKEND', \n",
+        "    'TX_DURING_NIGHT', \n",
+        "    'CID_NB_TX_1DAY_WINDOW',\n",
+        "    'CID_AVG_AMOUNT_1DAY_WINDOW', \n",
+        "    'CID_NB_TX_7DAY_WINDOW',\n",
+        "    'CID_AVG_AMOUNT_7DAY_WINDOW', \n",
+        "    'CID_NB_TX_30DAY_WINDOW',\n",
+        "    'CID_AVG_AMOUNT_30DAY_WINDOW', \n",
+        "    'TID_NB_TX_1DAY_WINDOW',\n",
+        "    'TID_RISK_1DAY_WINDOW', \n",
+        "    'TID_NB_TX_7DAY_WINDOW',\n",
+        "    'TID_RISK_7DAY_WINDOW', \n",
+        "    'TID_NB_TX_30DAY_WINDOW',\n",
+        "    'TID_RISK_30DAY_WINDOW'\n",
+        "]"
+      ],
+      "id": "lab04-define-modeling-features",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Setup features data frame and target series for training, tuning, and test sets. The data frames are converted to pandas data frames for compatibility with AutoGluon."
+      ],
+      "id": "a3aaac13"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab04-prepare-training-data\n",
+        "X_train = df_train_ft[final_features].to_pandas()\n",
+        "y_train = df_train_ft[target_label].to_pandas()\n",
+        "\n",
+        "X_tuning = df_tuning_ft[final_features].to_pandas()\n",
+        "y_tuning = df_tuning_ft[target_label].to_pandas()\n",
+        "\n",
+        "X_test = df_test_ft[final_features].to_pandas()\n",
+        "y_test = df_test_ft[target_label].to_pandas()\n",
+        "\n",
+        "comparison_results = []"
+      ],
+      "id": "lab04-prepare-training-data",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "## Do-Nothing Approach\n",
+        "\n",
+        "**Rationale:**\n",
+        "\n",
+        "-   Class imbalance is an inherent characteristic of the data that reflects the true state of the world.\n",
+        "-   Modifying the data (e.g., through resampling) distorts reality.\n",
+        "-   Many modern machine learning estimators are relatively insensitive to class imbalance if configured and evaluated appropriately, including:\n",
+        "    -   Tree-based ensembles (LightGBM, XGBoost, CatBoost)\n",
+        "    -   Neural networks\n",
+        "-   Under the do-nothing approach, class imbalance is a \"key feature\" of the data rather than a bug/defect that needs to be fixed.\n",
+        "\n",
+        "**Process:**\n",
+        "\n",
+        "1.  Train multiple estimators on the original, imbalanced dataset.\n",
+        "2.  Select the best model with the lowest **log loss** on the test set.\n",
+        "3.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.\n",
+        "4.  Select the optimal decision threshold.\n",
+        "5.  Evaluate the performance of the calibrated model and the optimal threshold on the test set.\n",
+        "\n",
+        "Setup AutoGluon parameters."
+      ],
+      "id": "6f1bd5c9"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: setup-autogluon-do-nothing\n",
+        "\n",
+        "strategy_name_1 = \"1. Do Nothing\"\n",
+        "model_folder_s1 = \"./Lab04_ag_models_s1_do_nothing\"\n",
+        "remove_ag_folder(model_folder_s1)\n",
+        "\n",
+        "predictor_args_s1 = {\n",
+        "    'problem_type': 'binary',\n",
+        "    'eval_metric': 'log_loss', \n",
+        "    'path': model_folder_s1\n",
+        "}\n",
+        "\n",
+        "fit_args_s1 = {'holdout_frac': 0.2,\n",
+        "            'excluded_model_types': ['KNN'],\n",
+        "            'presets': 'medium_quality',\n",
+        "            'time_limit': 180}\n",
+        "\n",
+        "ag_wrapper_s1 = AutoGluonSklearnWrapper(\n",
+        "    label=target_label,\n",
+        "    predictor_args=predictor_args_s1,\n",
+        "    fit_args=fit_args_s1,\n",
+        "    n_jobs=num_jobs\n",
+        ")"
+      ],
+      "id": "setup-autogluon-do-nothing",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Fit the model using AutoGluon."
+      ],
+      "id": "d6233351"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab04-fit-autogluon-s1\n",
+        "ag_model_s1 = ag_wrapper_s1.fit(X_train, y_train)\n",
+        "\n",
+        "ag_model_s1.predictor.save()  # Save the predictor for later use"
+      ],
+      "id": "lab04-fit-autogluon-s1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Access the AutoGluon predictor object."
+      ],
+      "id": "d3af4749"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: access-autogluon-predictor-s1\n",
+        "\n",
+        "ag_model_s1_predictor = ag_model_s1.predictor"
+      ],
+      "id": "access-autogluon-predictor-s1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check the leaderboard."
+      ],
+      "id": "64aad2c0"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: leaderboard-s1\n",
+        "leaderboard_s1 = ag_model_s1_predictor.leaderboard(\n",
+        "    df_tuning_ft.to_pandas()\n",
+        "    , extra_metrics=['average_precision', 'f1']\n",
+        ")\n",
+        "display(leaderboard_s1)"
+      ],
+      "id": "leaderboard-s1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Prefer CatBoost due to inference speed and performance when it is available."
+      ],
+      "id": "e8f7b57f"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: set-best-model-s1\n",
+        "\n",
+        "available_models_s1 = ag_model_s1_predictor.model_names()\n",
+        "selected_best_model_s1 = 'CatBoost' if 'CatBoost' in available_models_s1 else ag_model_s1_predictor.model_best\n",
+        "\n",
+        "ag_model_s1_predictor.set_model_best(selected_best_model_s1)\n",
+        "\n",
+        "ag_model_s1.predictor.save()  # Save the predictor for later use"
+      ],
+      "id": "set-best-model-s1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check feature importance."
+      ],
+      "id": "03d6abd1"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-importance-s1\n",
+        "\n",
+        "feature_importance_s1 = ag_model_s1_predictor.feature_importance(\n",
+        "    df_tuning_ft.to_pandas(),\n",
+        "    subsample_size = None,\n",
+        "    num_shuffle_sets = 5\n",
+        ")\n",
+        "\n",
+        "display(feature_importance_s1)"
+      ],
+      "id": "feature-importance-s1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check probability calibration using the tuning set."
+      ],
+      "id": "750bc716"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-s1\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "pre_cal_disp_s1 = CalibrationDisplay.from_estimator(\n",
+        "        estimator = ag_model_s1,\n",
+        "        X = X_tuning,\n",
+        "        y = y_tuning,\n",
+        "        n_bins = 20,\n",
+        "        name = 'Pre-Calib Curve: Do Nothing Strategy',\n",
+        "        color = 'orange'\n",
+        "    )\n",
+        "\n",
+        "pre_cal_disp_s1.ax_.set_title(\"Calibration Plot (Tuning Set)\")"
+      ],
+      "id": "calibration-s1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set."
+      ],
+      "id": "3e71382b"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab04-fit-calibration-s1\n",
+        "cal_model_s1 = CalibratedClassifierCV(\n",
+        "    estimator = ag_model_s1,\n",
+        "    method='isotonic',\n",
+        "    cv=\"prefit\" # Use the fitted model from ag_model\n",
+        ")\n",
+        "\n",
+        "global_set_seed()\n",
+        "\n",
+        "cal_model_s1.fit(X = X_tuning,\n",
+        "            y = y_tuning)"
+      ],
+      "id": "lab04-fit-calibration-s1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Since the isotonic regression model was fitted on the tuning set, we can no longer use the tuning set for calibration evaluation. We will use the test set for calibration evaluation."
+      ],
+      "id": "87cd7686"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-s1-test\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "fig, ax = plt.subplots()\n",
+        "\n",
+        "for estimator, name, color in [(ag_model_s1, 'Uncalib_CatBoost', 'orange'),\n",
+        "          (cal_model_s1, 'Calib_CatBoost', 'blue')]:\n",
+        "\n",
+        "  CalibrationDisplay.from_estimator(\n",
+        "      estimator = estimator,\n",
+        "      X = X_test,\n",
+        "      y = y_test,\n",
+        "      n_bins = 20,\n",
+        "      name = name,\n",
+        "      color = color,\n",
+        "      ax = ax\n",
+        "    )\n",
+        "    \n",
+        "ax.set_title(\"Calibration Plot (Test Set)\")\n",
+        "plt.show()"
+      ],
+      "id": "calibration-s1-test",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.\n",
+        "\n",
+        "Evaluate the original decision threshold of 0.5 on the test set."
+      ],
+      "id": "7ed50617"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-default-threshold-s1\n",
+        "\n",
+        "leaderboard_s1_default = ag_model_s1_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "\n",
+        "display(leaderboard_s1_default)"
+      ],
+      "id": "evaluate-default-threshold-s1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score."
+      ],
+      "id": "fff40328"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: threshold-tuning-s1\n",
+        "\n",
+        "best_threshold_s1 = (ag_model_s1_predictor\n",
+        "                .calibrate_decision_threshold(\n",
+        "                data = df_tuning_ft.to_pandas(),\n",
+        "                metric = 'f1',\n",
+        "                decision_thresholds = 200)\n",
+        "                )\n",
+        "\n",
+        "ag_model_s1_predictor.set_decision_threshold(best_threshold_s1)\n",
+        "\n",
+        "ag_model_s1_predictor.save()  # Save the predictor with the new threshold"
+      ],
+      "id": "threshold-tuning-s1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Use the test set to evaluate the effectiveness of the decision threshold."
+      ],
+      "id": "f185def3"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-threshold-s1\n",
+        "\n",
+        "leaderboard_s1_optimized = ag_model_s1_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "\n",
+        "display(leaderboard_s1_optimized)"
+      ],
+      "id": "evaluate-threshold-s1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score."
+      ],
+      "id": "2ac1bca1"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: append-results-s1\n",
+        "\n",
+        "comparison_results.append({\n",
+        "    \"Strategy\": strategy_name_1,\n",
+        "    \"Test ROC-AUC\": leaderboard_s1_optimized.loc[leaderboard_s1_optimized['model'] == selected_best_model_s1, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s1_optimized.columns else None,\n",
+        "    \"Test PR-AUC\": leaderboard_s1_optimized.loc[leaderboard_s1_optimized['model'] == selected_best_model_s1, 'score_test'].values[0],\n",
+        "    \"Test F1 (Optimized)\": leaderboard_s1_optimized.loc[leaderboard_s1_optimized['model'] == selected_best_model_s1, 'f1'].values[0],\n",
+        "    \"Optimized Threshold\": best_threshold_s1,\n",
+        "    \"Calibration Note\": \"Uncalibrated model used; calibration did not improve on test set.\"\n",
+        "})"
+      ],
+      "id": "append-results-s1",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "The do-nothing approach used log loss, which treats all misclassifications equally. For highly imbalanced data, a metric that focuses on the minority class may produce better results.\n",
+        "\n",
+        "## Class-Sensitive Evaluation Approach\n",
+        "\n",
+        "**Rationale:**\n",
+        "\n",
+        "-   In fraud detection, the positive class (fraud) is much rarer than the negative class (legitimate transactions).\n",
+        "-   **ROC-AUC** is a common binary classification metric, but it can be misleading when classes are highly imbalanced:\n",
+        "    -   ROC plots the True Positive Rate (TPR, recall) against the False Positive Rate (FPR) at different decision thresholds.\n",
+        "    -   FPR is calculated as $\\frac{\\text{False Positives}}{\\text{All Actual Negatives}}$. When the negative class is very large, even a substantial number of false positives may result in a low FPR, making the ROC curve appear optimistic.\n",
+        "    -   ROC-AUC can appear reasonably high even for models that perform poorly on the minority class, because high accuracy on the majority class can mask deficiencies in minority class detection.\n",
+        "-   **Precision-Recall (PR) curves** are more informative for imbalanced data:\n",
+        "    -   The PR curve plots Precision ($\\frac{\\text{TP}}{\\text{TP} + \\text{FP}}$) against Recall ($\\frac{\\text{TP}}{\\text{TP} + \\text{FN}}$).\n",
+        "    -   Precision directly measures how many of the predicted frauds are actually fraud, which is critical when investigating alerts.\n",
+        "    -   PR curves do not account for true negatives, making them more sensitive to the model's performance on the minority class.\n",
+        "-   **PR-AUC** (Area Under the PR Curve, also called Average Precision or AP) summarizes the PR curve in a single number.\n",
+        "    -   A high PR-AUC means the model can achieve both high precision and high recall for fraud detection.\n",
+        "    -   The baseline (random classifier) PR-AUC equals the prevalence of the positive class, making it easier to assess model quality.\n",
+        "\n",
+        "**Process:**\n",
+        "\n",
+        "1.  Train multiple estimators on the original, imbalanced dataset.\n",
+        "2.  Select the best model with the highest **average precision** on the test set.\n",
+        "3.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.\n",
+        "4.  Select the optimal decision threshold.\n",
+        "5.  Evaluate the performance of the calibrated model and the optimal threshold on the test set.\n",
+        "\n",
+        "Setup AutoGluon parameters."
+      ],
+      "id": "6bf0f4ae"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: setup-autogluon-class-sensitive-evaluation\n",
+        "\n",
+        "strategy_name_2 = \"2. Class Sensitive Evaluation\"\n",
+        "model_folder_s2 = \"./Lab04_ag_models_s2_class_sensitive\"\n",
+        "remove_ag_folder(model_folder_s2)\n",
+        "\n",
+        "predictor_args_s2 = {\n",
+        "    'problem_type': 'binary',\n",
+        "    'eval_metric': 'average_precision', \n",
+        "    'path': model_folder_s2\n",
+        "}\n",
+        "\n",
+        "fit_args_s2 = {'holdout_frac': 0.2,\n",
+        "            'excluded_model_types': ['KNN'],\n",
+        "            'presets': 'medium_quality',\n",
+        "            'time_limit': 180}\n",
+        "\n",
+        "ag_wrapper_s2 = AutoGluonSklearnWrapper(\n",
+        "    label=target_label,\n",
+        "    predictor_args=predictor_args_s2,\n",
+        "    fit_args=fit_args_s2,\n",
+        "    n_jobs=num_jobs\n",
+        ")"
+      ],
+      "id": "setup-autogluon-class-sensitive-evaluation",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Fit the model using AutoGluon."
+      ],
+      "id": "130e9e5f"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fit-autogluon-class-sensitive-evaluation\n",
+        "ag_model_s2 = ag_wrapper_s2.fit(X_train, y_train)\n",
+        "\n",
+        "ag_model_s2.predictor.save()  # Save the predictor for later use"
+      ],
+      "id": "fit-autogluon-class-sensitive-evaluation",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Access the AutoGluon predictor object."
+      ],
+      "id": "9dcddec2"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: access-autogluon-predictor-s2\n",
+        "\n",
+        "ag_model_s2_predictor = ag_model_s2.predictor"
+      ],
+      "id": "access-autogluon-predictor-s2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check the leaderboard."
+      ],
+      "id": "23414880"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: leaderboard-s2\n",
+        "leaderboard_s2 = ag_model_s2_predictor.leaderboard(\n",
+        "    df_tuning_ft.to_pandas()\n",
+        "    , extra_metrics=['average_precision', 'f1']\n",
+        ")\n",
+        "display(leaderboard_s2)"
+      ],
+      "id": "leaderboard-s2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Prefer CatBoost due to inference speed and performance when it is available."
+      ],
+      "id": "4c002f28"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: set-best-model-s2\n",
+        "\n",
+        "available_models_s2 = ag_model_s2_predictor.model_names()\n",
+        "selected_best_model_s2 = 'CatBoost' if 'CatBoost' in available_models_s2 else ag_model_s2_predictor.model_best\n",
+        "\n",
+        "ag_model_s2_predictor.set_model_best(selected_best_model_s2)\n",
+        "\n",
+        "ag_model_s2.predictor.save()  # Save the predictor for later use"
+      ],
+      "id": "set-best-model-s2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check feature importance."
+      ],
+      "id": "25b61deb"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-importance-s2\n",
+        "\n",
+        "feature_importance_s2 = ag_model_s2_predictor.feature_importance(\n",
+        "    df_tuning_ft.to_pandas(),\n",
+        "    subsample_size = None,\n",
+        "    num_shuffle_sets = 5\n",
+        ")\n",
+        "\n",
+        "display(feature_importance_s2)"
+      ],
+      "id": "feature-importance-s2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check probability calibration using the tuning set."
+      ],
+      "id": "dae67d96"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-s2\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "pre_cal_disp_s2 = CalibrationDisplay.from_estimator(\n",
+        "        estimator = ag_model_s2,\n",
+        "        X = X_tuning,\n",
+        "        y = y_tuning,\n",
+        "        n_bins = 20,\n",
+        "        name = 'Pre-Calib Curve: Class-Sensitive Strategy',\n",
+        "    color = 'orange'\n",
+        "    )\n",
+        "\n",
+        "pre_cal_disp_s2.ax_.set_title(\"Calibration Plot (Tuning Set)\")"
+      ],
+      "id": "calibration-s2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set."
+      ],
+      "id": "17dae2b3"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab04-fit-calibration-s2\n",
+        "cal_model_s2 = CalibratedClassifierCV(\n",
+        "    estimator = ag_model_s2,\n",
+        "    method='isotonic',\n",
+        "    cv=\"prefit\" # Use the fitted model from ag_model\n",
+        ")\n",
+        "\n",
+        "global_set_seed()\n",
+        "\n",
+        "cal_model_s2.fit(X = X_tuning,\n",
+        "            y = y_tuning)"
+      ],
+      "id": "lab04-fit-calibration-s2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Since the isotonic regression model was fitted on the tuning set, we can no longer use the tuning set for calibration evaluation. We will use the test set for calibration evaluation."
+      ],
+      "id": "1746355c"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-s2-test\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "fig, ax = plt.subplots()\n",
+        "\n",
+        "for estimator, name, color in [(ag_model_s2, 'Uncalib_CatBoost', 'orange'),\n",
+        "          (cal_model_s2, 'Calib_CatBoost', 'blue')]:\n",
+        "\n",
+        "  CalibrationDisplay.from_estimator(\n",
+        "      estimator = estimator,\n",
+        "      X = X_test,\n",
+        "      y = y_test,\n",
+        "      n_bins = 20,\n",
+        "      name = name,\n",
+        "      color = color,\n",
+        "      ax = ax\n",
+        "    )\n",
+        "    \n",
+        "ax.set_title(\"Calibration Plot (Test Set)\")\n",
+        "plt.show()"
+      ],
+      "id": "calibration-s2-test",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.\n",
+        "\n",
+        "Evaluate the original decision threshold of 0.5 on the test set."
+      ],
+      "id": "73bf93e7"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-default-threshold-s2\n",
+        "\n",
+        "leaderboard_s2_default = ag_model_s2_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "\n",
+        "display(leaderboard_s2_default)"
+      ],
+      "id": "evaluate-default-threshold-s2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score."
+      ],
+      "id": "9f275cdf"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: threshold-tuning-s2\n",
+        "\n",
+        "best_threshold_s2 = (ag_model_s2_predictor\n",
+        "                .calibrate_decision_threshold(\n",
+        "                data = df_tuning_ft.to_pandas(),\n",
+        "                metric = 'f1',\n",
+        "                decision_thresholds = 200)\n",
+        "                )\n",
+        "\n",
+        "ag_model_s2_predictor.set_decision_threshold(best_threshold_s2)\n",
+        "\n",
+        "ag_model_s2_predictor.save()  # Save the predictor with the new threshold"
+      ],
+      "id": "threshold-tuning-s2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Use the test set to evaluate the effectiveness of the decision threshold."
+      ],
+      "id": "1acf1895"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-threshold-s2\n",
+        "\n",
+        "leaderboard_s2_optimized = ag_model_s2_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "\n",
+        "display(leaderboard_s2_optimized)"
+      ],
+      "id": "evaluate-threshold-s2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score."
+      ],
+      "id": "5d4aca30"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: append-results-s2\n",
+        "\n",
+        "comparison_results.append({\n",
+        "    \"Strategy\": strategy_name_2,\n",
+        "    \"Test ROC-AUC\": leaderboard_s2_optimized.loc[leaderboard_s2_optimized['model'] == selected_best_model_s2, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s2_optimized.columns else None,\n",
+        "    \"Test PR-AUC\": leaderboard_s2_optimized.loc[leaderboard_s2_optimized['model'] == selected_best_model_s2, 'score_test'].values[0],\n",
+        "    \"Test F1 (Optimized)\": leaderboard_s2_optimized.loc[leaderboard_s2_optimized['model'] == selected_best_model_s2, 'f1'].values[0],\n",
+        "    \"Optimized Threshold\": best_threshold_s2,\n",
+        "    \"Calibration Note\": \"Uncalibrated model used; calibration did not improve on test set.\"\n",
+        "})"
+      ],
+      "id": "append-results-s2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Changing the evaluation metric improved model selection, but the training process itself still treats all samples equally. Next, we explicitly tell the model that fraud cases matter more by assigning higher weights to the minority class.\n",
+        "\n",
+        "## Cost-Sensitive Learning Approach\n",
+        "\n",
+        "**Rationale:**\n",
+        "\n",
+        "-   Cost-sensitive learning assigns different costs to classification errors.\n",
+        "-   In fraud detection, failing to detect a fraudulent transaction (a false negative) is typically much more costly than incorrectly flagging a legitimate transaction as fraudulent (a false positive).\n",
+        "-   By incorporating these costs, the model is encouraged to pay more attention to the minority (fraud) class.\n",
+        "\n",
+        "**Implementation Detail:**\n",
+        "\n",
+        "-   One common way to implement cost-sensitive learning is by using sample weights:\n",
+        "    -   Instances from the minority class are given higher weights.\n",
+        "    -   Instances from the majority class are given lower weights.\n",
+        "    -   The weights are inversely proportional to class frequencies.\n",
+        "-   AutoGluon provides a convenient way to do this:\n",
+        "    -   Set the `sample_weight` argument in `predictor_args` to the special string `\"balance_weight\"`.\n",
+        "    -   This automatically calculates and applies appropriate weights to balance the classes during training.\n",
+        "-   Sample weights are not needed for the test set evaluation.\n",
+        "\n",
+        "**Process:**\n",
+        "\n",
+        "1.  Specify sample weights for each observation in the training set by setting `sample_weight` to `\"balance_weight\"`.\n",
+        "2.  Train multiple estimators on the original, imbalanced dataset.\n",
+        "3.  Select the best model with the highest **average precision** on the test set.\n",
+        "4.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.\n",
+        "5.  Select the optimal decision threshold.\n",
+        "6.  Evaluate the performance of the calibrated model and the optimal threshold on the test set.\n",
+        "\n",
+        "Setup AutoGluon parameters."
+      ],
+      "id": "9c718253"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: setup-autogluon-cost-sensitive\n",
+        "\n",
+        "strategy_name_3 = \"3. Cost Sensitive Learning\"\n",
+        "model_folder_s3 = \"./Lab04_ag_models_s3_cost_sensitive\"\n",
+        "remove_ag_folder(model_folder_s3)\n",
+        "\n",
+        "predictor_args_s3 = {\n",
+        "    'problem_type': 'binary',\n",
+        "    'eval_metric': 'average_precision', \n",
+        "    'path': model_folder_s3,\n",
+        "    'sample_weight': 'balance_weight' # Use balance weights for cost-sensitive learning\n",
+        "}\n",
+        "\n",
+        "fit_args_s3 = {'holdout_frac': 0.2,\n",
+        "            'excluded_model_types': ['KNN'],\n",
+        "            'presets': 'medium_quality',\n",
+        "            'time_limit': 180}  \n",
+        "\n",
+        "ag_wrapper_s3 = AutoGluonSklearnWrapper(\n",
+        "    label=target_label,\n",
+        "    predictor_args=predictor_args_s3,\n",
+        "    fit_args=fit_args_s3,\n",
+        "    n_jobs=num_jobs\n",
+        ")"
+      ],
+      "id": "setup-autogluon-cost-sensitive",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Fit the model using AutoGluon."
+      ],
+      "id": "d6875e81"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab04-fit-autogluon-s3\n",
+        "ag_model_s3 = ag_wrapper_s3.fit(X_train, y_train) \n",
+        "\n",
+        "ag_model_s3.predictor.save()  # Save the predictor for later use"
+      ],
+      "id": "lab04-fit-autogluon-s3",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Access the AutoGluon predictor object."
+      ],
+      "id": "1a61cd34"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: access-autogluon-predictor-s3\n",
+        "\n",
+        "ag_model_s3_predictor = ag_model_s3.predictor"
+      ],
+      "id": "access-autogluon-predictor-s3",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check the leaderboard."
+      ],
+      "id": "b5306d05"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: leaderboard-s3\n",
+        "leaderboard_s3 = ag_model_s3_predictor.leaderboard(\n",
+        "    df_tuning_ft.to_pandas()\n",
+        "    , extra_metrics=['average_precision', 'f1']\n",
+        ")\n",
+        "display(leaderboard_s3)"
+      ],
+      "id": "leaderboard-s3",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Prefer CatBoost due to inference speed and performance when it is available."
+      ],
+      "id": "905fae53"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: set-best-model-s3\n",
+        "\n",
+        "available_models_s3 = ag_model_s3_predictor.model_names()\n",
+        "selected_best_model_s3 = 'CatBoost' if 'CatBoost' in available_models_s3 else ag_model_s3_predictor.model_best\n",
+        "\n",
+        "ag_model_s3_predictor.set_model_best(selected_best_model_s3)\n",
+        "\n",
+        "ag_model_s3.predictor.save()  # Save the predictor for later use"
+      ],
+      "id": "set-best-model-s3",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check feature importance."
+      ],
+      "id": "a2b34004"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-importance-s3\n",
+        "\n",
+        "feature_importance_s3 = ag_model_s3_predictor.feature_importance(\n",
+        "    df_tuning_ft.to_pandas(),\n",
+        "    subsample_size = None,\n",
+        "    num_shuffle_sets = 5\n",
+        ")\n",
+        "\n",
+        "display(feature_importance_s3)"
+      ],
+      "id": "feature-importance-s3",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Check probability calibration using the tuning set."
+      ],
+      "id": "52af98fe"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-s3\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "pre_cal_disp_s3 = CalibrationDisplay.from_estimator(\n",
+        "        estimator = ag_model_s3,\n",
+        "        X = X_tuning,\n",
+        "        y = y_tuning,\n",
+        "        n_bins = 20,\n",
+        "        name = 'Pre-Calib Curve: Cost-Sensitive Strategy',\n",
+        "    color = 'orange'\n",
+        "    )\n",
+        "\n",
+        "pre_cal_disp_s3.ax_.set_title(\"Calibration Plot (Tuning Set)\")"
+      ],
+      "id": "calibration-s3",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set."
+      ],
+      "id": "3148e382"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: lab04-fit-calibration-s3\n",
+        "cal_model_s3 = CalibratedClassifierCV(\n",
+        "    estimator = ag_model_s3,\n",
+        "    method='isotonic',\n",
+        "    cv=\"prefit\" # Use the fitted model from ag_model\n",
+        ")\n",
+        "\n",
+        "global_set_seed()\n",
+        "\n",
+        "cal_model_s3.fit(X = X_tuning,\n",
+        "            y = y_tuning)"
+      ],
+      "id": "lab04-fit-calibration-s3",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Since the isotonic regression model was fitted on the tuning set, we can no longer use the tuning set for calibration evaluation. We will use the test set for calibration evaluation."
+      ],
+      "id": "9461586d"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-s3-test\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "fig, ax = plt.subplots()\n",
+        "\n",
+        "for estimator, name, color in [(ag_model_s3, 'Uncalib_CatBoost', 'orange'),\n",
+        "          (cal_model_s3, 'Calib_CatBoost', 'blue')]:\n",
+        "\n",
+        "  CalibrationDisplay.from_estimator(\n",
+        "      estimator = estimator,\n",
+        "      X = X_test,\n",
+        "      y = y_test,\n",
+        "      n_bins = 20,\n",
+        "      name = name,\n",
+        "      color = color,\n",
+        "      ax = ax\n",
+        "    )\n",
+        "    \n",
+        "ax.set_title(\"Calibration Plot (Test Set)\")\n",
+        "plt.show()"
+      ],
+      "id": "calibration-s3-test",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.\n",
+        "\n",
+        "Evaluate the original decision threshold of 0.5 on the test set."
+      ],
+      "id": "014cf6e9"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-default-threshold-s3\n",
+        "\n",
+        "leaderboard_s3_default = ag_model_s3_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "\n",
+        "display(leaderboard_s3_default)"
+      ],
+      "id": "evaluate-default-threshold-s3",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score."
+      ],
+      "id": "f1142171"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: threshold-tuning-s3\n",
+        "\n",
+        "best_threshold_s3 = (ag_model_s3_predictor\n",
+        "                .calibrate_decision_threshold(\n",
+        "                data = df_tuning_ft.to_pandas(),\n",
+        "                metric = 'f1',\n",
+        "                decision_thresholds = 200)\n",
+        "                )\n",
+        "\n",
+        "ag_model_s3_predictor.set_decision_threshold(best_threshold_s3)\n",
+        "\n",
+        "ag_model_s3_predictor.save()  # Save the predictor with the new threshold"
+      ],
+      "id": "threshold-tuning-s3",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Use the test set to evaluate the effectiveness of the decision threshold."
+      ],
+      "id": "6aa34a15"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-threshold-s3\n",
+        "\n",
+        "leaderboard_s3_optimized = ag_model_s3_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "\n",
+        "display(leaderboard_s3_optimized)"
+      ],
+      "id": "evaluate-threshold-s3",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score."
+      ],
+      "id": "6725d1d0"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: append-results-s3\n",
+        "\n",
+        "comparison_results.append({\n",
+        "    \"Strategy\": strategy_name_3,\n",
+        "    \"Test ROC-AUC\": leaderboard_s3_optimized.loc[leaderboard_s3_optimized['model'] == selected_best_model_s3, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s3_optimized.columns else None,\n",
+        "    \"Test PR-AUC\": leaderboard_s3_optimized.loc[leaderboard_s3_optimized['model'] == selected_best_model_s3, 'score_test'].values[0],\n",
+        "    \"Test F1 (Optimized)\": leaderboard_s3_optimized.loc[leaderboard_s3_optimized['model'] == selected_best_model_s3, 'f1'].values[0],\n",
+        "    \"Optimized Threshold\": best_threshold_s3,\n",
+        "    \"Calibration Note\": \"Uncalibrated model used; calibration did not improve on test set.\"\n",
+        "})"
+      ],
+      "id": "append-results-s3",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "So far we've kept the training data unchanged and adjusted either the evaluation metric or the sample weights. The final family of strategies directly modifies the training data itself to create a more balanced class distribution.\n",
+        "\n",
+        "## Resampling Approach\n",
+        "\n",
+        "**Rationale:**\n",
+        "\n",
+        "-   Class-based resampling techniques modify the training data's class distribution to create a more balanced dataset.\n",
+        "-   Resampling is performed **only** on the training data.\n",
+        "-   The tuning and test sets remain in their original, imbalanced form to reflect reality (i.e., fraud is rare).\n",
+        "\n",
+        "**Common Resampling Schemes:**\n",
+        "\n",
+        "-   **Random Undersampling (RUS):** Randomly remove instances from the majority class until the dataset is more balanced. This can lead to loss of information from the majority class. However, the scheme substantially reduces the dataset size, which can be beneficial for training speed and memory usage.\n",
+        "-   **Random Oversampling (ROS):** Randomly duplicate instances from the minority class. This can lead to overfitting on the minority class examples.\n",
+        "-   **SMOTE (Synthetic Minority Over-sampling Technique):** Creates synthetic samples for the minority class by interpolating between actual minority instances. This can help to create a more diverse set of minority examples than simple oversampling.\n",
+        "-   **Hybrid Methods:** Combine oversampling and undersampling. For example, first apply SMOTE to generate synthetic samples for the minority class, then apply random undersampling to the majority class.\n",
+        "\n",
+        "**Process:**\n",
+        "\n",
+        "1.  Use RUS, ROS, SMOTE, or hybrid to create a **balanced** training set.\n",
+        "2.  Train multiple estimators on the **balanced** training set.\n",
+        "3.  Select the best model with the highest **average precision** on the test set (which is imbalanced).\n",
+        "4.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.\n",
+        "5.  Select the optimal decision threshold.\n",
+        "6.  Evaluate the performance of the calibrated model and the optimal threshold on the test set (which is imbalanced).\n",
+        "\n",
+        "### Random Undersampling (RUS)\n",
+        "\n",
+        "Randomly remove instances from the majority class to balance the training set."
+      ],
+      "id": "2a76b4c2"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: resampling-rus-prep\n",
+        "\n",
+        "rus = RandomUnderSampler(random_state=2025)\n",
+        "X_train_rus, y_train_rus = rus.fit_resample(X_train, y_train)\n",
+        "print(f\"RUS training data shape: {X_train_rus.shape}\")\n",
+        "print(f\"RUS target distribution:\\n{y_train_rus.value_counts(normalize=True)}\")"
+      ],
+      "id": "resampling-rus-prep",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: setup-autogluon-rus\n",
+        "\n",
+        "strategy_name_4a = \"4a. RUS\"\n",
+        "model_folder_s4a = \"./Lab04_ag_models_s4_rus\"\n",
+        "remove_ag_folder(model_folder_s4a)\n",
+        "\n",
+        "predictor_args_s4a = {\n",
+        "    'problem_type': 'binary',\n",
+        "    'eval_metric': 'average_precision',\n",
+        "    'path': model_folder_s4a\n",
+        "}\n",
+        "\n",
+        "fit_args_s4a = {'holdout_frac': 0.2,\n",
+        "            'excluded_model_types': ['KNN'],\n",
+        "            'presets': 'medium_quality',\n",
+        "            'time_limit': 180}\n",
+        "\n",
+        "ag_wrapper_s4a = AutoGluonSklearnWrapper(\n",
+        "    label=target_label,\n",
+        "    predictor_args=predictor_args_s4a,\n",
+        "    fit_args=fit_args_s4a,\n",
+        "    n_jobs=num_jobs\n",
+        ")"
+      ],
+      "id": "setup-autogluon-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fit-autogluon-rus\n",
+        "\n",
+        "ag_model_s4a = ag_wrapper_s4a.fit(X_train_rus, y_train_rus)\n",
+        "ag_model_s4a.predictor.save()"
+      ],
+      "id": "fit-autogluon-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: access-predictor-rus\n",
+        "\n",
+        "ag_model_s4a_predictor = ag_model_s4a.predictor"
+      ],
+      "id": "access-predictor-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: leaderboard-rus\n",
+        "\n",
+        "leaderboard_s4a = ag_model_s4a_predictor.leaderboard(\n",
+        "    df_tuning_ft.to_pandas()\n",
+        "    , extra_metrics=['average_precision', 'f1']\n",
+        ")\n",
+        "display(leaderboard_s4a)"
+      ],
+      "id": "leaderboard-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: set-best-model-rus\n",
+        "\n",
+        "available_models_s4a = ag_model_s4a_predictor.model_names()\n",
+        "selected_best_model_s4a = 'CatBoost' if 'CatBoost' in available_models_s4a else ag_model_s4a_predictor.model_best\n",
+        "ag_model_s4a_predictor.set_model_best(selected_best_model_s4a)\n",
+        "ag_model_s4a.predictor.save()"
+      ],
+      "id": "set-best-model-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-importance-rus\n",
+        "\n",
+        "feature_importance_s4a = ag_model_s4a_predictor.feature_importance(\n",
+        "    df_tuning_ft.to_pandas(),\n",
+        "    subsample_size = None,\n",
+        "    num_shuffle_sets = 5\n",
+        ")\n",
+        "display(feature_importance_s4a)"
+      ],
+      "id": "feature-importance-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-rus\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "pre_cal_disp_s4a = CalibrationDisplay.from_estimator(\n",
+        "        estimator = ag_model_s4a,\n",
+        "        X = X_tuning,\n",
+        "        y = y_tuning,\n",
+        "        n_bins = 20,\n",
+        "        name = 'Pre-Calib Curve: RUS Strategy',\n",
+        "        color = 'orange'\n",
+        "    )\n",
+        "pre_cal_disp_s4a.ax_.set_title(\"Calibration Plot (Tuning Set) - RUS\")"
+      ],
+      "id": "calibration-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fit-calibration-rus\n",
+        "\n",
+        "cal_model_s4a = CalibratedClassifierCV(\n",
+        "    estimator = ag_model_s4a,\n",
+        "    method='isotonic',\n",
+        "    cv=\"prefit\"\n",
+        ")\n",
+        "global_set_seed()\n",
+        "cal_model_s4a.fit(X = X_tuning, y = y_tuning)"
+      ],
+      "id": "fit-calibration-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-rus-test\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "fig, ax = plt.subplots()\n",
+        "for estimator, name, color in [(ag_model_s4a, 'Uncalib_CatBoost', 'orange'),\n",
+        "          (cal_model_s4a, 'Calib_CatBoost', 'blue')]:\n",
+        "  CalibrationDisplay.from_estimator(\n",
+        "      estimator = estimator,\n",
+        "      X = X_test,\n",
+        "      y = y_test,\n",
+        "      n_bins = 20,\n",
+        "      name = name,\n",
+        "      color = color,\n",
+        "      ax = ax\n",
+        "    )\n",
+        "ax.set_title(\"Calibration Plot (Test Set) - RUS\")\n",
+        "plt.show()"
+      ],
+      "id": "calibration-rus-test",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-default-threshold-rus\n",
+        "\n",
+        "leaderboard_s4a_default = ag_model_s4a_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "display(leaderboard_s4a_default)"
+      ],
+      "id": "evaluate-default-threshold-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: threshold-tuning-rus\n",
+        "\n",
+        "best_threshold_s4a = (ag_model_s4a_predictor\n",
+        "                .calibrate_decision_threshold(\n",
+        "                data = df_tuning_ft.to_pandas(),\n",
+        "                metric = 'f1',\n",
+        "                decision_thresholds = 200)\n",
+        "                )\n",
+        "ag_model_s4a_predictor.set_decision_threshold(best_threshold_s4a)\n",
+        "ag_model_s4a_predictor.save()"
+      ],
+      "id": "threshold-tuning-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-threshold-rus\n",
+        "\n",
+        "leaderboard_s4a_optimized = ag_model_s4a_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "display(leaderboard_s4a_optimized)"
+      ],
+      "id": "evaluate-threshold-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: append-results-rus\n",
+        "\n",
+        "comparison_results.append({\n",
+        "    \"Strategy\": strategy_name_4a,\n",
+        "    \"Test ROC-AUC\": leaderboard_s4a_optimized.loc[leaderboard_s4a_optimized['model'] == selected_best_model_s4a, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s4a_optimized.columns else None,\n",
+        "    \"Test PR-AUC\": leaderboard_s4a_optimized.loc[leaderboard_s4a_optimized['model'] == selected_best_model_s4a, 'score_test'].values[0],\n",
+        "    \"Test F1 (Optimized)\": leaderboard_s4a_optimized.loc[leaderboard_s4a_optimized['model'] == selected_best_model_s4a, 'f1'].values[0],\n",
+        "    \"Optimized Threshold\": best_threshold_s4a,\n",
+        "    \"Calibration Note\": \"Uncalibrated model used; calibration did not improve on test set.\"\n",
+        "})"
+      ],
+      "id": "append-results-rus",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "### Random Oversampling (ROS)\n",
+        "\n",
+        "Randomly duplicate instances from the minority class to balance the training set."
+      ],
+      "id": "5ff34af2"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: resampling-ros-prep\n",
+        "\n",
+        "ros = RandomOverSampler(random_state=2025)\n",
+        "X_train_ros, y_train_ros = ros.fit_resample(X_train, y_train)\n",
+        "print(f\"ROS training data shape: {X_train_ros.shape}\")\n",
+        "print(f\"ROS target distribution:\\n{y_train_ros.value_counts(normalize=True)}\")"
+      ],
+      "id": "resampling-ros-prep",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: setup-autogluon-ros\n",
+        "\n",
+        "strategy_name_4b = \"4b. ROS\"\n",
+        "model_folder_s4b = \"./Lab04_ag_models_s4_ros\"\n",
+        "remove_ag_folder(model_folder_s4b)\n",
+        "\n",
+        "predictor_args_s4b = {\n",
+        "    'problem_type': 'binary',\n",
+        "    'eval_metric': 'average_precision',\n",
+        "    'path': model_folder_s4b\n",
+        "}\n",
+        "\n",
+        "fit_args_s4b = {'holdout_frac': 0.2,\n",
+        "            'excluded_model_types': ['KNN'],\n",
+        "            'presets': 'medium_quality',\n",
+        "            'time_limit': 180}\n",
+        "\n",
+        "ag_wrapper_s4b = AutoGluonSklearnWrapper(\n",
+        "    label=target_label,\n",
+        "    predictor_args=predictor_args_s4b,\n",
+        "    fit_args=fit_args_s4b,\n",
+        "    n_jobs=num_jobs\n",
+        ")"
+      ],
+      "id": "setup-autogluon-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fit-autogluon-ros\n",
+        "\n",
+        "ag_model_s4b = ag_wrapper_s4b.fit(X_train_ros, y_train_ros)\n",
+        "ag_model_s4b.predictor.save()"
+      ],
+      "id": "fit-autogluon-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: access-predictor-ros\n",
+        "\n",
+        "ag_model_s4b_predictor = ag_model_s4b.predictor"
+      ],
+      "id": "access-predictor-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: leaderboard-ros\n",
+        "\n",
+        "leaderboard_s4b = ag_model_s4b_predictor.leaderboard(\n",
+        "    df_tuning_ft.to_pandas()\n",
+        "    , extra_metrics=['average_precision', 'f1']\n",
+        ")\n",
+        "display(leaderboard_s4b)"
+      ],
+      "id": "leaderboard-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: set-best-model-ros\n",
+        "\n",
+        "available_models_s4b = ag_model_s4b_predictor.model_names()\n",
+        "selected_best_model_s4b = 'CatBoost' if 'CatBoost' in available_models_s4b else ag_model_s4b_predictor.model_best\n",
+        "ag_model_s4b_predictor.set_model_best(selected_best_model_s4b)\n",
+        "ag_model_s4b.predictor.save()"
+      ],
+      "id": "set-best-model-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-importance-ros\n",
+        "\n",
+        "feature_importance_s4b = ag_model_s4b_predictor.feature_importance(\n",
+        "    df_tuning_ft.to_pandas(),\n",
+        "    subsample_size = None,\n",
+        "    num_shuffle_sets = 5\n",
+        ")\n",
+        "display(feature_importance_s4b)"
+      ],
+      "id": "feature-importance-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-ros\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "pre_cal_disp_s4b = CalibrationDisplay.from_estimator(\n",
+        "        estimator = ag_model_s4b,\n",
+        "        X = X_tuning,\n",
+        "        y = y_tuning,\n",
+        "        n_bins = 20,\n",
+        "        name = 'Pre-Calib Curve: ROS Strategy',\n",
+        "        color = 'orange'\n",
+        "    )\n",
+        "pre_cal_disp_s4b.ax_.set_title(\"Calibration Plot (Tuning Set) - ROS\")"
+      ],
+      "id": "calibration-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fit-calibration-ros\n",
+        "\n",
+        "cal_model_s4b = CalibratedClassifierCV(\n",
+        "    estimator = ag_model_s4b,\n",
+        "    method='isotonic',\n",
+        "    cv=\"prefit\"\n",
+        ")\n",
+        "global_set_seed()\n",
+        "cal_model_s4b.fit(X = X_tuning, y = y_tuning)"
+      ],
+      "id": "fit-calibration-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-ros-test\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "fig, ax = plt.subplots()\n",
+        "for estimator, name, color in [(ag_model_s4b, 'Uncalib_CatBoost', 'orange'),\n",
+        "          (cal_model_s4b, 'Calib_CatBoost', 'blue')]:\n",
+        "  CalibrationDisplay.from_estimator(\n",
+        "      estimator = estimator,\n",
+        "      X = X_test,\n",
+        "      y = y_test,\n",
+        "      n_bins = 20,\n",
+        "      name = name,\n",
+        "      color = color,\n",
+        "      ax = ax\n",
+        "    )\n",
+        "ax.set_title(\"Calibration Plot (Test Set) - ROS\")\n",
+        "plt.show()"
+      ],
+      "id": "calibration-ros-test",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-default-threshold-ros\n",
+        "\n",
+        "leaderboard_s4b_default = ag_model_s4b_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "display(leaderboard_s4b_default)"
+      ],
+      "id": "evaluate-default-threshold-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: threshold-tuning-ros\n",
+        "\n",
+        "best_threshold_s4b = (ag_model_s4b_predictor\n",
+        "                .calibrate_decision_threshold(\n",
+        "                data = df_tuning_ft.to_pandas(),\n",
+        "                metric = 'f1',\n",
+        "                decision_thresholds = 200)\n",
+        "                )\n",
+        "ag_model_s4b_predictor.set_decision_threshold(best_threshold_s4b)\n",
+        "ag_model_s4b_predictor.save()"
+      ],
+      "id": "threshold-tuning-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-threshold-ros\n",
+        "\n",
+        "leaderboard_s4b_optimized = ag_model_s4b_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "display(leaderboard_s4b_optimized)"
+      ],
+      "id": "evaluate-threshold-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: append-results-ros\n",
+        "\n",
+        "comparison_results.append({\n",
+        "    \"Strategy\": strategy_name_4b,\n",
+        "    \"Test ROC-AUC\": leaderboard_s4b_optimized.loc[leaderboard_s4b_optimized['model'] == selected_best_model_s4b, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s4b_optimized.columns else None,\n",
+        "    \"Test PR-AUC\": leaderboard_s4b_optimized.loc[leaderboard_s4b_optimized['model'] == selected_best_model_s4b, 'score_test'].values[0],\n",
+        "    \"Test F1 (Optimized)\": leaderboard_s4b_optimized.loc[leaderboard_s4b_optimized['model'] == selected_best_model_s4b, 'f1'].values[0],\n",
+        "    \"Optimized Threshold\": best_threshold_s4b,\n",
+        "    \"Calibration Note\": \"Uncalibrated model used; calibration did not improve on test set.\"\n",
+        "})"
+      ],
+      "id": "append-results-ros",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "### SMOTE (Synthetic Minority Over-sampling Technique)\n",
+        "\n",
+        "Create synthetic samples for the minority class by interpolating between actual minority instances."
+      ],
+      "id": "2b3887b6"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: resampling-smote-prep\n",
+        "\n",
+        "minority_class_count = y_train.value_counts().min()\n",
+        "k_neighbors_smote = min(5, max(1, minority_class_count - 1))\n",
+        "if minority_class_count <= 1:\n",
+        "    print(\"Minority class count is too low for SMOTE. Using original data as fallback.\")\n",
+        "    X_train_smote, y_train_smote = X_train.copy(), y_train.copy()\n",
+        "else:\n",
+        "    smote = SMOTE(random_state=2025, k_neighbors=k_neighbors_smote)\n",
+        "    X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)\n",
+        "    print(f\"SMOTE training data shape: {X_train_smote.shape}\")\n",
+        "    print(f\"SMOTE target distribution:\\n{y_train_smote.value_counts(normalize=True)}\")"
+      ],
+      "id": "resampling-smote-prep",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: setup-autogluon-smote\n",
+        "\n",
+        "strategy_name_4c = \"4c. SMOTE\"\n",
+        "model_folder_s4c = \"./Lab04_ag_models_s4_smote\"\n",
+        "remove_ag_folder(model_folder_s4c)\n",
+        "\n",
+        "predictor_args_s4c = {\n",
+        "    'problem_type': 'binary',\n",
+        "    'eval_metric': 'average_precision',\n",
+        "    'path': model_folder_s4c\n",
+        "}\n",
+        "\n",
+        "fit_args_s4c = {'holdout_frac': 0.2,\n",
+        "            'excluded_model_types': ['KNN'],\n",
+        "            'presets': 'medium_quality',\n",
+        "            'time_limit': 180}\n",
+        "\n",
+        "ag_wrapper_s4c = AutoGluonSklearnWrapper(\n",
+        "    label=target_label,\n",
+        "    predictor_args=predictor_args_s4c,\n",
+        "    fit_args=fit_args_s4c,\n",
+        "    n_jobs=num_jobs\n",
+        ")"
+      ],
+      "id": "setup-autogluon-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fit-autogluon-smote\n",
+        "\n",
+        "ag_model_s4c = ag_wrapper_s4c.fit(X_train_smote, y_train_smote)\n",
+        "ag_model_s4c.predictor.save()"
+      ],
+      "id": "fit-autogluon-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: access-predictor-smote\n",
+        "\n",
+        "ag_model_s4c_predictor = ag_model_s4c.predictor"
+      ],
+      "id": "access-predictor-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: leaderboard-smote\n",
+        "\n",
+        "leaderboard_s4c = ag_model_s4c_predictor.leaderboard(\n",
+        "    df_tuning_ft.to_pandas()\n",
+        "    , extra_metrics=['average_precision', 'f1']\n",
+        ")\n",
+        "display(leaderboard_s4c)"
+      ],
+      "id": "leaderboard-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: set-best-model-smote\n",
+        "\n",
+        "available_models_s4c = ag_model_s4c_predictor.model_names()\n",
+        "selected_best_model_s4c = 'CatBoost' if 'CatBoost' in available_models_s4c else ag_model_s4c_predictor.model_best\n",
+        "ag_model_s4c_predictor.set_model_best(selected_best_model_s4c)\n",
+        "ag_model_s4c.predictor.save()"
+      ],
+      "id": "set-best-model-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-importance-smote\n",
+        "\n",
+        "feature_importance_s4c = ag_model_s4c_predictor.feature_importance(\n",
+        "    df_tuning_ft.to_pandas(),\n",
+        "    subsample_size = None,\n",
+        "    num_shuffle_sets = 5\n",
+        ")\n",
+        "display(feature_importance_s4c)"
+      ],
+      "id": "feature-importance-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-smote\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "pre_cal_disp_s4c = CalibrationDisplay.from_estimator(\n",
+        "        estimator = ag_model_s4c,\n",
+        "        X = X_tuning,\n",
+        "        y = y_tuning,\n",
+        "        n_bins = 20,\n",
+        "        name = 'Pre-Calib Curve: SMOTE Strategy',\n",
+        "        color = 'orange'\n",
+        "    )\n",
+        "pre_cal_disp_s4c.ax_.set_title(\"Calibration Plot (Tuning Set) - SMOTE\")"
+      ],
+      "id": "calibration-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fit-calibration-smote\n",
+        "\n",
+        "cal_model_s4c = CalibratedClassifierCV(\n",
+        "    estimator = ag_model_s4c,\n",
+        "    method='isotonic',\n",
+        "    cv=\"prefit\"\n",
+        ")\n",
+        "global_set_seed()\n",
+        "cal_model_s4c.fit(X = X_tuning, y = y_tuning)"
+      ],
+      "id": "fit-calibration-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-smote-test\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "fig, ax = plt.subplots()\n",
+        "for estimator, name, color in [(ag_model_s4c, 'Uncalib_CatBoost', 'orange'),\n",
+        "          (cal_model_s4c, 'Calib_CatBoost', 'blue')]:\n",
+        "  CalibrationDisplay.from_estimator(\n",
+        "      estimator = estimator,\n",
+        "      X = X_test,\n",
+        "      y = y_test,\n",
+        "      n_bins = 20,\n",
+        "      name = name,\n",
+        "      color = color,\n",
+        "      ax = ax\n",
+        "    )\n",
+        "ax.set_title(\"Calibration Plot (Test Set) - SMOTE\")\n",
+        "plt.show()"
+      ],
+      "id": "calibration-smote-test",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-default-threshold-smote\n",
+        "\n",
+        "leaderboard_s4c_default = ag_model_s4c_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "display(leaderboard_s4c_default)"
+      ],
+      "id": "evaluate-default-threshold-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: threshold-tuning-smote\n",
+        "\n",
+        "best_threshold_s4c = (ag_model_s4c_predictor\n",
+        "                .calibrate_decision_threshold(\n",
+        "                data = df_tuning_ft.to_pandas(),\n",
+        "                metric = 'f1',\n",
+        "                decision_thresholds = 200)\n",
+        "                )\n",
+        "ag_model_s4c_predictor.set_decision_threshold(best_threshold_s4c)\n",
+        "ag_model_s4c_predictor.save()"
+      ],
+      "id": "threshold-tuning-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-threshold-smote\n",
+        "\n",
+        "leaderboard_s4c_optimized = ag_model_s4c_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "display(leaderboard_s4c_optimized)"
+      ],
+      "id": "evaluate-threshold-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: append-results-smote\n",
+        "\n",
+        "comparison_results.append({\n",
+        "    \"Strategy\": strategy_name_4c,\n",
+        "    \"Test ROC-AUC\": leaderboard_s4c_optimized.loc[leaderboard_s4c_optimized['model'] == selected_best_model_s4c, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s4c_optimized.columns else None,\n",
+        "    \"Test PR-AUC\": leaderboard_s4c_optimized.loc[leaderboard_s4c_optimized['model'] == selected_best_model_s4c, 'score_test'].values[0],\n",
+        "    \"Test F1 (Optimized)\": leaderboard_s4c_optimized.loc[leaderboard_s4c_optimized['model'] == selected_best_model_s4c, 'f1'].values[0],\n",
+        "    \"Optimized Threshold\": best_threshold_s4c,\n",
+        "    \"Calibration Note\": \"Uncalibrated model used; calibration did not improve on test set.\"\n",
+        "})"
+      ],
+      "id": "append-results-smote",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "### Hybrid: SMOTE + RUS\n",
+        "\n",
+        "First apply SMOTE to generate synthetic minority samples, then apply random undersampling to the majority class."
+      ],
+      "id": "308a7e51"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: resampling-hybrid-prep\n",
+        "\n",
+        "minority_class_count = y_train.value_counts().min()\n",
+        "if minority_class_count <= 1:\n",
+        "    print(\"Minority class count is too low for SMOTE. Using original data as fallback.\")\n",
+        "    X_train_hybrid, y_train_hybrid = X_train.copy(), y_train.copy()\n",
+        "else:\n",
+        "    k_neighbors_hybrid = min(5, max(1, minority_class_count - 1))\n",
+        "    # Use partial balancing: SMOTE to 0.5 (50% of majority), then RUS to 0.8 (80% majority-to-minority ratio).\n",
+        "    # This avoids the extreme overfitting of full SMOTE and the information loss of full RUS.\n",
+        "    smote_hybrid = SMOTE(random_state=2025, k_neighbors=k_neighbors_hybrid, sampling_strategy=0.5)\n",
+        "    X_train_smote_temp, y_train_smote_temp = smote_hybrid.fit_resample(X_train, y_train)\n",
+        "    rus_hybrid = RandomUnderSampler(random_state=2025, sampling_strategy=0.8)\n",
+        "    X_train_hybrid, y_train_hybrid = rus_hybrid.fit_resample(X_train_smote_temp, y_train_smote_temp)\n",
+        "    print(f\"Hybrid training data shape: {X_train_hybrid.shape}\")\n",
+        "    print(f\"Hybrid target distribution:\\n{y_train_hybrid.value_counts(normalize=True)}\")"
+      ],
+      "id": "resampling-hybrid-prep",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: setup-autogluon-hybrid\n",
+        "\n",
+        "strategy_name_4d = \"4d. Hybrid (SMOTE+RUS)\"\n",
+        "model_folder_s4d = \"./Lab04_ag_models_s4_hybrid\"\n",
+        "remove_ag_folder(model_folder_s4d)\n",
+        "\n",
+        "predictor_args_s4d = {\n",
+        "    'problem_type': 'binary',\n",
+        "    'eval_metric': 'average_precision',\n",
+        "    'path': model_folder_s4d\n",
+        "}\n",
+        "\n",
+        "fit_args_s4d = {'holdout_frac': 0.2,\n",
+        "            'excluded_model_types': ['KNN'],\n",
+        "            'presets': 'medium_quality',\n",
+        "            'time_limit': 180}\n",
+        "\n",
+        "ag_wrapper_s4d = AutoGluonSklearnWrapper(\n",
+        "    label=target_label,\n",
+        "    predictor_args=predictor_args_s4d,\n",
+        "    fit_args=fit_args_s4d,\n",
+        "    n_jobs=num_jobs\n",
+        ")"
+      ],
+      "id": "setup-autogluon-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fit-autogluon-hybrid\n",
+        "\n",
+        "ag_model_s4d = ag_wrapper_s4d.fit(X_train_hybrid, y_train_hybrid)\n",
+        "ag_model_s4d.predictor.save()"
+      ],
+      "id": "fit-autogluon-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: access-predictor-hybrid\n",
+        "\n",
+        "ag_model_s4d_predictor = ag_model_s4d.predictor"
+      ],
+      "id": "access-predictor-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: leaderboard-hybrid\n",
+        "\n",
+        "leaderboard_s4d = ag_model_s4d_predictor.leaderboard(\n",
+        "    df_tuning_ft.to_pandas()\n",
+        "    , extra_metrics=['average_precision', 'f1']\n",
+        ")\n",
+        "display(leaderboard_s4d)"
+      ],
+      "id": "leaderboard-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: set-best-model-hybrid\n",
+        "\n",
+        "available_models_s4d = ag_model_s4d_predictor.model_names()\n",
+        "selected_best_model_s4d = 'CatBoost' if 'CatBoost' in available_models_s4d else ag_model_s4d_predictor.model_best\n",
+        "ag_model_s4d_predictor.set_model_best(selected_best_model_s4d)\n",
+        "ag_model_s4d.predictor.save()"
+      ],
+      "id": "set-best-model-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: feature-importance-hybrid\n",
+        "\n",
+        "feature_importance_s4d = ag_model_s4d_predictor.feature_importance(\n",
+        "    df_tuning_ft.to_pandas(),\n",
+        "    subsample_size = None,\n",
+        "    num_shuffle_sets = 5\n",
+        ")\n",
+        "display(feature_importance_s4d)"
+      ],
+      "id": "feature-importance-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-hybrid\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "pre_cal_disp_s4d = CalibrationDisplay.from_estimator(\n",
+        "        estimator = ag_model_s4d,\n",
+        "        X = X_tuning,\n",
+        "        y = y_tuning,\n",
+        "        n_bins = 20,\n",
+        "        name = 'Pre-Calib Curve: Hybrid Strategy',\n",
+        "        color = 'orange'\n",
+        "    )\n",
+        "pre_cal_disp_s4d.ax_.set_title(\"Calibration Plot (Tuning Set) - Hybrid\")"
+      ],
+      "id": "calibration-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: fit-calibration-hybrid\n",
+        "\n",
+        "cal_model_s4d = CalibratedClassifierCV(\n",
+        "    estimator = ag_model_s4d,\n",
+        "    method='isotonic',\n",
+        "    cv=\"prefit\"\n",
+        ")\n",
+        "global_set_seed()\n",
+        "cal_model_s4d.fit(X = X_tuning, y = y_tuning)"
+      ],
+      "id": "fit-calibration-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: calibration-hybrid-test\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "fig, ax = plt.subplots()\n",
+        "for estimator, name, color in [(ag_model_s4d, 'Uncalib_CatBoost', 'orange'),\n",
+        "          (cal_model_s4d, 'Calib_CatBoost', 'blue')]:\n",
+        "  CalibrationDisplay.from_estimator(\n",
+        "      estimator = estimator,\n",
+        "      X = X_test,\n",
+        "      y = y_test,\n",
+        "      n_bins = 20,\n",
+        "      name = name,\n",
+        "      color = color,\n",
+        "      ax = ax\n",
+        "    )\n",
+        "ax.set_title(\"Calibration Plot (Test Set) - Hybrid\")\n",
+        "plt.show()"
+      ],
+      "id": "calibration-hybrid-test",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-default-threshold-hybrid\n",
+        "\n",
+        "leaderboard_s4d_default = ag_model_s4d_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "display(leaderboard_s4d_default)"
+      ],
+      "id": "evaluate-default-threshold-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: threshold-tuning-hybrid\n",
+        "\n",
+        "best_threshold_s4d = (ag_model_s4d_predictor\n",
+        "                .calibrate_decision_threshold(\n",
+        "                data = df_tuning_ft.to_pandas(),\n",
+        "                metric = 'f1',\n",
+        "                decision_thresholds = 200)\n",
+        "                )\n",
+        "ag_model_s4d_predictor.set_decision_threshold(best_threshold_s4d)\n",
+        "ag_model_s4d_predictor.save()"
+      ],
+      "id": "threshold-tuning-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: evaluate-threshold-hybrid\n",
+        "\n",
+        "leaderboard_s4d_optimized = ag_model_s4d_predictor.leaderboard(\n",
+        "    df_test_ft.to_pandas()\n",
+        "    , extra_metrics=['f1']\n",
+        ")\n",
+        "display(leaderboard_s4d_optimized)"
+      ],
+      "id": "evaluate-threshold-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: append-results-hybrid\n",
+        "\n",
+        "comparison_results.append({\n",
+        "    \"Strategy\": strategy_name_4d,\n",
+        "    \"Test ROC-AUC\": leaderboard_s4d_optimized.loc[leaderboard_s4d_optimized['model'] == selected_best_model_s4d, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s4d_optimized.columns else None,\n",
+        "    \"Test PR-AUC\": leaderboard_s4d_optimized.loc[leaderboard_s4d_optimized['model'] == selected_best_model_s4d, 'score_test'].values[0],\n",
+        "    \"Test F1 (Optimized)\": leaderboard_s4d_optimized.loc[leaderboard_s4d_optimized['model'] == selected_best_model_s4d, 'f1'].values[0],\n",
+        "    \"Optimized Threshold\": best_threshold_s4d,\n",
+        "    \"Calibration Note\": \"Uncalibrated model used; calibration did not improve on test set.\"\n",
+        "})"
+      ],
+      "id": "append-results-hybrid",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "After running all strategies, we compile the results into a summary table to compare their effectiveness."
+      ],
+      "id": "a9c2029c"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: tbl-comparison-summary\n",
+        "#| tbl-cap: Comparison of Imbalance Handling Strategies\n",
+        "\n",
+        "if comparison_results:\n",
+        "    summary_df = pd.DataFrame(comparison_results)\n",
+        "    display(summary_df)\n",
+        "else:\n",
+        "    print(\"No modeling results to display in the summary table.\")"
+      ],
+      "id": "tbl-comparison-summary",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "### Interpreting the Best Model\n",
+        "\n",
+        "We select the best-performing model from the comparison results (by highest Test F1 score) and perform interpretability analysis on it."
+      ],
+      "id": "1cb49983"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: interpret-best-model\n",
+        "\n",
+        "# Dynamically select the best model from comparison_results\n",
+        "if comparison_results:\n",
+        "    summary_df = pd.DataFrame(comparison_results)\n",
+        "    best_row = summary_df.loc[summary_df['Test F1 (Optimized)'].idxmax()]\n",
+        "    best_strategy = best_row['Strategy']\n",
+        "    print(f\"Best strategy by F1-score: {best_strategy}\")\n",
+        "    \n",
+        "    # Build a registry of available fitted models (dict-based, safer than eval())\n",
+        "    model_registry = {}\n",
+        "    for var_name, strategy_key, display_name in [\n",
+        "        ('ag_model_s1', \"1. Do Nothing\", \"Strategy 1 (Do Nothing)\"),\n",
+        "        ('ag_model_s2', \"2. Class Sensitive Evaluation\", \"Strategy 2 (Class-Sensitive)\"),\n",
+        "        ('ag_model_s3', \"3. Cost Sensitive Learning\", \"Strategy 3 (Cost-Sensitive)\"),\n",
+        "        ('ag_model_s4a', \"4a. RUS\", \"Strategy 4a (RUS)\"),\n",
+        "        ('ag_model_s4b', \"4b. ROS\", \"Strategy 4b (ROS)\"),\n",
+        "        ('ag_model_s4c', \"4c. SMOTE\", \"Strategy 4c (SMOTE)\"),\n",
+        "        ('ag_model_s4d', \"4d. Hybrid (SMOTE+RUS)\", \"Strategy 4d (Hybrid)\"),\n",
+        "    ]:\n",
+        "        if var_name in locals() and locals()[var_name].is_fitted_:\n",
+        "            model_registry[strategy_key] = (locals()[var_name], display_name)\n",
+        "    \n",
+        "    if best_strategy in model_registry:\n",
+        "        chosen_model_to_interpret, chosen_model_name = model_registry[best_strategy]\n",
+        "    else:\n",
+        "        # Fallback to Strategy 2 if the best isn't available\n",
+        "        print(f\"Best model ({best_strategy}) not available. Falling back to Strategy 2.\")\n",
+        "        chosen_model_to_interpret = ag_model_s2\n",
+        "        chosen_model_name = \"Strategy 2 (Class-Sensitive) - Fallback\"\n",
+        "    \n",
+        "    print(f\" Interpreting: {chosen_model_name} \")\n",
+        "\n",
+        "    # 1. Permutation Feature Importance\n",
+        "    print(\"\\nCalculating Permutation Feature Importance...\")\n",
+        "    X_test_with_label = X_test.copy()\n",
+        "    X_test_with_label['TX_FRAUD'] = y_test\n",
+        "    \n",
+        "    pfi = chosen_model_to_interpret.predictor.feature_importance(data=X_test_with_label, silent=True)\n",
+        "    pfi_df = pfi.reset_index().rename(columns={'index': 'feature', 0: 'importance'})\n",
+        "    print(\"Permutation Feature Importance (Test Set):\")\n",
+        "    display(pfi_df)\n",
+        "\n",
+        "    # 2. Partial Dependence Plots (PDP) / Individual Conditional Expectation (ICE)\n",
+        "    print(\"\\nGenerating PDP/ICE plots...\")\n",
+        "    pdp_ice_sample_data = X_train.sample(min(1000, len(X_train)), random_state=2025) \n",
+        "    \n",
+        "    try:\n",
+        "        pdp_features = chosen_model_to_interpret.predictor.features()\n",
+        "        if len(pdp_features) > 5:\n",
+        "            pdp_features_to_plot = pfi_df['feature'].head(5).tolist()\n",
+        "        else:\n",
+        "            pdp_features_to_plot = pdp_features\n",
+        "            \n",
+        "        cat_features_metadata = chosen_model_to_interpret.predictor.feature_metadata\n",
+        "        categorical_for_pdp = [f for f in pdp_features_to_plot if cat_features_metadata.get_feature_type_raw(f) == 'category']\n",
+        "\n",
+        "        for feature_to_plot in pdp_features_to_plot:\n",
+        "            print(f\"PDP/ICE for feature: {feature_to_plot}\")\n",
+        "            try:\n",
+        "                PartialDependenceDisplay.from_estimator(\n",
+        "                    chosen_model_to_interpret, \n",
+        "                    pdp_ice_sample_data, \n",
+        "                    features=[feature_to_plot],\n",
+        "                    categorical_features=[feature_to_plot] if feature_to_plot in categorical_for_pdp else None,\n",
+        "                    kind='both',\n",
+        "                    subsample=50,\n",
+        "                    random_state=2025,\n",
+        "                    pd_line_kw={\"color\": \"red\", \"linestyle\": \"--\", \"linewidth\": 2},\n",
+        "                    ice_lines_kw={\"color\": \"lightblue\", \"alpha\": 0.5, \"linewidth\": 0.5}\n",
+        "                )\n",
+        "                plt.title(f\"PDP and ICE for {feature_to_plot} ({chosen_model_name})\")\n",
+        "                plt.grid(True)\n",
+        "                plt.show()\n",
+        "            except Exception as e_pdp:\n",
+        "                print(f\"  Could not generate PDP/ICE for {feature_to_plot}: {e_pdp}\")\n",
+        "\n",
+        "    except Exception as e:\n",
+        "        print(f\"Could not generate PDP/ICE plots: {e}\")\n",
+        "\n",
+        "    # 3. SHAP Values (using a sample of test data for SHAP summary)\n",
+        "    print(\"\\nCalculating SHAP values for summary plots...\")\n",
+        "    if len(X_test) > 200:\n",
+        "        shap_sample_data = X_test.sample(200, random_state=2025)\n",
+        "    else:\n",
+        "        shap_sample_data = X_test\n",
+        "\n",
+        "    try:\n",
+        "        shap_explainer = shap.Explainer(lambda x: chosen_model_to_interpret.predict_proba(x)[:,1], shap_sample_data)\n",
+        "        shap_values_summary = shap_explainer(shap_sample_data)\n",
+        "\n",
+        "        max_display_features = min(10, shap_sample_data.shape[1])\n",
+        "        max_abs_shap = float(np.max(np.abs(shap_values_summary.values)))\n",
+        "\n",
+        "        if max_abs_shap < 1e-4:\n",
+        "            print(\n",
+        "                \"Note: the sampled SHAP values are numerically very small, so the beeswarm may appear tightly compressed around zero.\"\n",
+        "            )\n",
+        "\n",
+        "        print(\"SHAP Summary Plot (Beeswarm):\")\n",
+        "        plt.close('all')\n",
+        "        shap.plots.beeswarm(\n",
+        "            shap_values_summary,\n",
+        "            max_display=max_display_features,\n",
+        "            plot_size=(10, 6),\n",
+        "            alpha=0.9,\n",
+        "            s=24,\n",
+        "            show=False\n",
+        "        )\n",
+        "        plt.xlabel(\"SHAP value (impact on predicted fraud probability)\")\n",
+        "        plt.title(f\"SHAP Beeswarm Plot ({chosen_model_name})\")\n",
+        "        plt.tight_layout()\n",
+        "        plt.show()\n",
+        "        plt.close('all')\n",
+        "\n",
+        "        print(\"SHAP Feature Importance (Bar Plot based on mean absolute SHAP values):\")\n",
+        "        plt.close('all')\n",
+        "        shap.plots.bar(shap_values_summary, max_display=max_display_features, show=False)\n",
+        "        plt.gcf().set_size_inches(10, 6)\n",
+        "        plt.title(f\"SHAP Bar Plot ({chosen_model_name})\")\n",
+        "        plt.tight_layout()\n",
+        "        plt.show()\n",
+        "        plt.close('all')\n",
+        "\n",
+        "        print(\"SHAP Dependence Plots:\")\n",
+        "        top_shap_features = pfi_df['feature'].head(min(5, len(pfi_df))).tolist()\n",
+        "        for feature_shap_dep in top_shap_features:\n",
+        "            if feature_shap_dep in shap_sample_data.columns:\n",
+        "                print(f\"  Dependence plot for {feature_shap_dep}\")\n",
+        "                shap.dependence_plot(feature_shap_dep, shap_values_summary.values, shap_sample_data, show=False)\n",
+        "                plt.title(f\"SHAP Dependence Plot for {feature_shap_dep} ({chosen_model_name})\")\n",
+        "                plt.show()\n",
+        "            else:\n",
+        "                 print(f\"  Skipping SHAP dependence for {feature_shap_dep} as it is not in shap_sample_data columns.\")\n",
+        "\n",
+        "    except Exception as e_shap:\n",
+        "        print(f\"Could not generate SHAP plots: {e_shap}\")\n",
+        "else:\n",
+        "    print(\"No comparison results available. Skipping interpretation.\")"
+      ],
+      "id": "interpret-best-model",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "### Resampling-Correction for Logistic Regression\n",
+        "\n",
+        "When a logistic regression is trained on resampled data, the resampling changes the class prior seen by the model. If the resampling is only class-based (for example, random undersampling or random oversampling) and does not otherwise change the conditional feature distributions $P(X \\mid Y=1)$ and $P(X \\mid Y=0)$, the slope coefficients can still be used, but the intercept must be shifted back to the original training-set class prior.\n",
+        "\n",
+        "Let\n",
+        "\n",
+        "-   $\\hat p_\\text{pop}$ = `phat_pop`, the fraud rate in the overall training set before resampling.\n",
+        "-   $\\hat p_\\text{resampled}$ = `phat_resampled`, the fraud rate in the training set after resampling.\n",
+        "-   $\\widehat{\\alpha}_\\text{resampled}$ = `intercept_hat_resampled`, the intercept from a logistic regression trained on the resampled data.\n",
+        "-   $\\widehat{\\beta}_\\text{resampled}$ = the slope vector from the same resampled logistic regression.\n",
+        "\n",
+        "The fitted log-odds from the resampled model are\n",
+        "\n",
+        "$$\n",
+        "\\widehat{\\text{logodds}}_\\text{resampled}(x)\n",
+        "=\n",
+        "\\widehat{\\alpha}_\\text{resampled}\n",
+        "+\n",
+        "x^\\top \\widehat{\\beta}_\\text{resampled}.\n",
+        "$$\n",
+        "\n",
+        "Under class-based resampling,\n",
+        "\n",
+        "$$\n",
+        "\\text{odds}_\\text{pop}(x)\n",
+        "=\n",
+        "\\text{odds}_\\text{resampled}(x)\n",
+        "\\cdot\n",
+        "\\frac{\\hat p_\\text{pop}/(1-\\hat p_\\text{pop})}\n",
+        "     {\\hat p_\\text{resampled}/(1-\\hat p_\\text{resampled})}.\n",
+        "$$\n",
+        "\n",
+        "Taking logs gives the corrected log-odds:\n",
+        "\n",
+        "$$\n",
+        "\\widehat{\\text{logodds}}_\\text{corrected}(x)\n",
+        "=\n",
+        "\\widehat{\\text{logodds}}_\\text{resampled}(x)\n",
+        "+\n",
+        "\\log\\left(\\frac{\\hat p_\\text{pop}}{1-\\hat p_\\text{pop}}\\right)\n",
+        "-\n",
+        "\\log\\left(\\frac{\\hat p_\\text{resampled}}{1-\\hat p_\\text{resampled}}\\right).\n",
+        "$$\n",
+        "\n",
+        "Equivalently, only the intercept changes:\n",
+        "\n",
+        "$$\n",
+        "\\widehat{\\alpha}_\\text{corrected}\n",
+        "=\n",
+        "\\widehat{\\alpha}_\\text{resampled}\n",
+        "+\n",
+        "\\operatorname{logit}(\\hat p_\\text{pop})\n",
+        "-\n",
+        "\\operatorname{logit}(\\hat p_\\text{resampled}),\n",
+        "\\qquad\n",
+        "\\widehat{\\beta}_\\text{corrected}\n",
+        "=\n",
+        "\\widehat{\\beta}_\\text{resampled}.\n",
+        "$$\n",
+        "\n",
+        "The corrected fitted probability is\n",
+        "\n",
+        "$$\n",
+        "\\widehat{P}_\\text{corrected}(Y=1 \\mid X=x)\n",
+        "=\n",
+        "\\frac{1}{1+\\exp\\{-\\widehat{\\text{logodds}}_\\text{corrected}(x)\\}}.\n",
+        "$$\n",
+        "\n",
+        "For fraud data, $\\hat p_\\text{pop}$ is usually much smaller than $\\hat p_\\text{resampled}$. Therefore the correction term is usually negative, lowering the intercept and pulling predicted probabilities back toward the true population fraud rate."
+      ],
+      "id": "5524dc45"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| label: resampling-logistic-intercept-correction\n",
+        "\n",
+        "%matplotlib inline\n",
+        "\n",
+        "def logit(p):\n",
+        "    p = np.clip(p, 1e-12, 1 - 1e-12)\n",
+        "    return np.log(p / (1 - p))\n",
+        "\n",
+        "# Example: correct the intercept of a logistic regression trained on the RUS data.\n",
+        "# The same formula applies to any class-based resampled logistic regression.\n",
+        "logistic_rus = LogisticRegression(max_iter=1000, solver=\"lbfgs\")\n",
+        "logistic_rus.fit(X_train_rus, y_train_rus)\n",
+        "\n",
+        "phat_pop = y_train.mean()\n",
+        "phat_resampled = y_train_rus.mean()\n",
+        "intercept_hat_resampled = logistic_rus.intercept_[0]\n",
+        "\n",
+        "intercept_correction = logit(phat_pop) - logit(phat_resampled)\n",
+        "intercept_hat_corrected = intercept_hat_resampled + intercept_correction\n",
+        "\n",
+        "# decision_function uses the resampled intercept. Add the same intercept correction\n",
+        "# to get log-odds on the original training-set class-prior scale.\n",
+        "logodds_hat_resampled = logistic_rus.decision_function(X_test)\n",
+        "logodds_hat_corrected = logodds_hat_resampled + intercept_correction\n",
+        "phat_uncorrected = logistic_rus.predict_proba(X_test)[:, 1]\n",
+        "phat_corrected = 1 / (1 + np.exp(-logodds_hat_corrected))\n",
+        "\n",
+        "display(pd.DataFrame({\n",
+        "    \"phat_pop\": [phat_pop],\n",
+        "    \"phat_resampled\": [phat_resampled],\n",
+        "    \"intercept_hat_resampled\": [intercept_hat_resampled],\n",
+        "    \"intercept_correction\": [intercept_correction],\n",
+        "    \"intercept_hat_corrected\": [intercept_hat_corrected],\n",
+        "    \"mean_uncorrected_test_probability\": [phat_uncorrected.mean()],\n",
+        "    \"mean_corrected_test_probability\": [phat_corrected.mean()]\n",
+        "}))\n",
+        "\n",
+        "fig, ax = plt.subplots(figsize=(7, 6))\n",
+        "CalibrationDisplay.from_predictions(\n",
+        "    y_true=y_test,\n",
+        "    y_prob=phat_uncorrected,\n",
+        "    n_bins=20,\n",
+        "    name=\"Without correction\",\n",
+        "    color=\"orange\",\n",
+        "    ax=ax\n",
+        ")\n",
+        "CalibrationDisplay.from_predictions(\n",
+        "    y_true=y_test,\n",
+        "    y_prob=phat_corrected,\n",
+        "    n_bins=20,\n",
+        "    name=\"With intercept correction\",\n",
+        "    color=\"blue\",\n",
+        "    ax=ax\n",
+        ")\n",
+        "ax.set_title(\"Calibration Plot (Test Set) - Logistic RUS Intercept Correction\")\n",
+        "plt.show()"
+      ],
+      "id": "resampling-logistic-intercept-correction",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "This correction fixes the prior shift induced by class-based resampling. It is not a substitute for checking calibration on an untouched tuning or test set, and it is exact only when resampling changes class frequencies without otherwise changing $P(X \\mid Y)$. For SMOTE or feature-dependent sampling, treat the same intercept shift as an approximation and validate calibration.\n",
+        "\n",
+        "\n",
+        "\n",
+        "# Key Conclusions and Recommendations\n",
+        "\n",
+        "This lab explored several common strategies for handling class imbalance in the context of credit card fraud detection. We compared: 1. Doing nothing (training on original imbalanced data). 2. Using a class-sensitive evaluation metric (PR-AUC / `average_precision`) for model selection. 3. Employing cost-sensitive learning via `sample_weight='balance_weight'`. 4. Applying class-based resampling (RUS, ROS, SMOTE, and Hybrid) to the training data.\n",
+        "\n",
+        "**Hypothetical Findings & Discussion:**\n",
+        "\n",
+        "(Students should replace this with their actual findings based on the lab execution. The following is a general discussion based on common outcomes in such scenarios.)\n",
+        "\n",
+        "-   **Strategy 1 (Do Nothing with ROC-AUC):** While simple, relying solely on ROC-AUC for model selection in highly imbalanced scenarios can be misleading. The model might achieve a high ROC-AUC by correctly classifying the vast majority of legitimate transactions, yet still perform poorly on identifying fraud. The F1-score after threshold tuning is the more critical indicator here.\n",
+        "\n",
+        "-   **Strategy 2 (PR-AUC Metric):** Using PR-AUC (`average_precision`) as the primary evaluation metric often leads to models that are better at distinguishing the minority (fraud) class. This is because PR-AUC focuses on the trade-off between precision and recall, which is more relevant when the number of true negatives is very large. The F1-score obtained after threshold tuning on this model is usually a strong contender.\n",
+        "\n",
+        "-   **Strategy 3 (Cost-Sensitive Learning with `balance_weight`):** This approach directly tells the learning algorithm to pay more attention to the minority class by up-weighting its instances. It often yields good performance, comparable to or sometimes better than just using PR-AUC, especially in terms of recall for the fraud class. The `balance_weight` option in AutoGluon is a convenient way to implement this.\n",
+        "\n",
+        "-   **Strategy 4 (Resampling — RUS, ROS, SMOTE, Hybrid):** While resampling techniques aim to provide the model with more balanced training data, they come with significant caveats:\n",
+        "\n",
+        "    -   **RUS (Random Undersampling):** Reduces training time and memory usage by discarding majority-class samples, but risks losing valuable information from the majority class.\n",
+        "    -   **ROS (Random Oversampling):** Simple to implement but can lead to overfitting on duplicated minority examples.\n",
+        "    -   **SMOTE:** Creates synthetic minority samples via interpolation, offering more diversity than ROS, but can still overfit and almost invariably destroys probability calibration.\n",
+        "    -   **Hybrid (SMOTE + RUS):** Combines the benefits of both approaches but adds pipeline complexity and still requires explicit recalibration.\n",
+        "    -   **Probability Calibration:** All resampling methods distort the predicted probabilities. An explicit recalibration step (e.g., Isotonic Regression or Platt Scaling) on a non-resampled tuning set is crucial if reliable probabilities are needed.\n",
+        "    -   **Performance:** In practice, despite their intuitive appeal, resampling methods do not always outperform strategies like using PR-AUC and/or cost-sensitive learning, especially when considering the F1-score on an unadulterated test set and the reliability of probabilities.\n",
+        "\n",
+        "**General Recommendations:**\n",
+        "\n",
+        "1.  **Prioritize Class-Sensitive Metrics:** For imbalanced fraud detection, always prioritize metrics like PR-AUC (`average_precision`), F1-score, precision, and recall over simple accuracy or ROC-AUC for final model assessment and selection. AutoGluon makes it easy to specify `eval_metric='average_precision'`.\n",
+        "\n",
+        "2.  **Consider Cost-Sensitive Learning:** Techniques like `sample_weight='balance_weight'` are often effective and less prone to distorting probabilities compared to aggressive resampling. This is generally a robust approach.\n",
+        "\n",
+        "3.  **Be Cautious with Resampling:** Do not manipulate training data (e.g., via RUS, ROS, SMOTE) solely because it is imbalanced or \"difficult to model.\" Such methods can introduce their own problems:\n",
+        "\n",
+        "    -   **Loss of Information (RUS):** Undersampling can discard valuable data from the majority class.\n",
+        "    -   **Overfitting (ROS, SMOTE):** Oversampling can lead to models that are too specific to the (potentially synthetic) minority samples.\n",
+        "    -   **Destroyed Probability Calibration:** This is a major issue, especially if the model outputs are used for more than just binary classification (e.g., risk scoring, estimating expected fraud rates).\n",
+        "    -   **Increased Complexity:** More complex pipelines can be harder to maintain, understand, and debug.\n",
+        "\n",
+        "4.  **Probability Calibration is Crucial:** If the model's predicted probabilities are used for downstream tasks like estimating 'expected frauds per day,' 'expected fraud value,' or for any decision-making that relies on the magnitude of the probability (not just its rank), then accurate probability calibration is essential. Models trained on heavily resampled data often require a separate, explicit calibration step on a non-resampled tuning set.\n",
+        "\n",
+        "5.  **Threshold Tuning is Key:** Regardless of the imbalance strategy, always use a dedicated tuning set to find an optimal decision threshold that aligns with business objectives (e.g., maximizing F1-score, or balancing precision and recall according to specific cost considerations).\n",
+        "\n",
+        "6.  **Domain Knowledge & Feature Engineering:** Robust feature engineering, informed by domain knowledge, often provides more significant and reliable gains than complex imbalance handling techniques alone.\n",
+        "\n",
+        "**Further Reading:**\n",
+        "\n",
+        "For a deeper dive into practical fraud detection and the nuances of handling imbalanced data, students are highly encouraged to explore the **Fraud Detection Handbook**: <https://fraud-detection-handbook.github.io/fraud-detection-handbook/Foreword.html>\n",
+        "\n",
+        "This handbook provides extensive insights into various aspects of fraud detection, including data preprocessing, feature engineering, model selection, and dealing with challenges like class imbalance and concept drift."
+      ],
+      "id": "01c942f7"
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "name": "python3",
+      "language": "python",
+      "display_name": "Python 3 (ipykernel)",
+      "path": "C:\\Users\\chiuw\\miniforge3\\envs\\env_AutoGluon_202502\\share\\jupyter\\kernels\\python3"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+}

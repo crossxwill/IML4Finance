@@ -84,6 +84,8 @@ plt.plot([1, 2, 3])
 ```
 ````
 
+When editing executable chunks, remember that Quarto will run them exactly as written. Small Python defects inside one chunk can fail a full render late in the document.
+
 ### Cross-References
 Use `@fig-`, `@tbl-`, `@sec-` prefixes for cross-references:
 
@@ -100,6 +102,20 @@ See @sec-methods for methodology.
 3. **Maintain consistent indentation** in nested lists and code chunks
 4. **Use proper Quarto chunk options** with `#|` syntax for execution control
 5. **Test rendering** after edits to ensure code blocks display correctly
+6. **When fixing one repeated code chunk, check sibling chunks with the same structure** so a later copy does not fail on the next render pass
+7. **Avoid shadowing imported helpers inside notebook-style code** - for example, do not reuse names like `display`, `list`, or `dict` for loop variables if those callables are used later in the same chunk
+8. **For executable Python chunks, do a cheap local syntax check when practical** before starting a long full-document render
+
+## Code-Chunk Safety Checks
+
+When editing `.qmd` files with executable Python chunks:
+
+1. Verify that any opened function call, list, dict, or parenthesized expression is fully closed before the closing code fence.
+2. If a chunk was copied from a nearby section, compare it against the sibling chunk to catch truncated lines or missed renames.
+3. Watch for local variable names that overwrite imported helpers such as `display` from `IPython.display`.
+4. If the document is long-running, validate the edited snippet with a cheap syntax compile or a very narrow check before rerendering the entire file.
+
+These checks are especially important in teaching labs and notebooks where the same modeling/calibration block is repeated across multiple strategies.
 
 ## File Extensions Reference
 

@@ -16,6 +16,7 @@ dependencies:
   - jupyter=1.1.1
   - pandas=2.2.3
   - numpy=1.26.4
+  - statsmodels
   - imbalanced-learn=0.13.0
   - sqlalchemy=2.0.45
   - eli5=0.13.0

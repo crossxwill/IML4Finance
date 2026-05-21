@@ -1,5 +1,6 @@
 {
     "python.useEnvironmentsExtension": true,
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
     "python-envs.pythonProjects": [
         {
             "path": ".",
