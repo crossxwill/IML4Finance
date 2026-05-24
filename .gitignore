@@ -17,3 +17,5 @@ Lectures/kgb_model/*
 course_utils/__pycache__/*
 *.pyc
 *.quarto_ipynb
+course_utils/__pycache__/*
+course_utils/__pycache__/helpers.cpython-311.pyc

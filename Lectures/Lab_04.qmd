@@ -18,7 +18,7 @@ bibliography: ../Lectures/references.bib
 
 # Overview
 
-The lab explores Python libraries for handling large datasets, feature engineering, and strategies for addressing imbalanced data in fraud detection.
+This lab has three jobs: load a large transaction dataset efficiently, build fraud-oriented features from transaction history, and compare practical responses to extreme class imbalance.
 
 For details, students are highly encouraged to read **[Fraud Detection Handbook](https://fraud-detection-handbook.github.io/fraud-detection-handbook/Foreword.html)**.
 
@@ -109,13 +109,13 @@ global_set_seed(2025)
 
 # Credit Card Fraud Detection
 
-Credit card fraud is a significant concern for financial institutions, merchants, and consumers. Understanding the types of fraud and how detection systems operate is crucial for developing effective machine learning models.
+Fraud modeling is hard for a practical reason: the transactions you care about are rare, the losses can be large, and many legitimate transactions also look irregular in the raw data. Travel, holiday spending, or an unusually large purchase can resemble fraud unless the model has enough context to tell the difference.
 
 ## Card-present frauds
 
 -   Card-present (CP) fraud occurs when a transaction is made using a **physical credit card** that has been lost, stolen, counterfeited, or intercepted.
 -   The legitimate cardholder is typically unaware of the fraudulent use until they notice unauthorized transactions on their statement or are alerted by their bank.
--   The key characteristic of CP fraud is that the **physical card** is used at the point of sale (e.g., a retail store, restaurant).
+-   What makes CP fraud distinct is that the **physical card** is used at the point of sale (e.g., a retail store or restaurant).
 
 ## Card-not-present frauds
 
@@ -126,41 +126,41 @@ Credit card fraud is a significant concern for financial institutions, merchants
 
 ## Credit Card Fraud Detection Systems (CCFDS)
 
--   **Credit Card Fraud Detection Systems (CCFDS)** are designed to identify and prevent fraudulent transactions in real-time or near real-time by analyzing transaction data (e.g., amount, location, time, customer behavior, terminal ID) using rules and machine learning models.
--   If a transaction is flagged as potentially fraudulent, the system may block the transaction, alert the cardholder (e.g., via SMS or app notification), or refer the case to human fraud analysts for review.
--   The primary goal of a CCFDS is to minimize financial losses from fraud while also reducing false positives (legitimate transactions incorrectly blocked), which can negatively impact customer experience.
--   CCFDS must balance detection accuracy, speed, and customer convenience, often operating under strict latency requirements to avoid disrupting normal transaction flows.
+-   **Credit Card Fraud Detection Systems (CCFDS)** score transactions in real-time or near real-time using signals such as amount, merchant or terminal history, timing, location, and recent customer activity.
+-   If the risk score is high enough, the system may decline the payment, ask the cardholder to confirm it, or route the case to a fraud analyst.
+-   The tradeoff is simple to describe and hard to manage: every missed fraud loses money, while every false positive interrupts a legitimate customer.
+-   Those decisions usually have to be made under tight latency limits, so the system has to be fast enough for the payment flow and accurate enough to justify intervention.
 
 ## Class Imbalance in Fraud Detection
 
-Class imbalance occurs when one class (e.g., fraudulent transactions) is significantly smaller compared to another class (e.g., legitimate transactions).
+Fraud is rare in most transaction streams. The harder issue is that the non-fraud class is not clean or homogeneous: it includes routine purchases, travel spending, seasonal spikes, emergency purchases, and other behavior that is unusual but still legitimate.
 
 **Characteristics in Fraud Data**
 
--   Rarity of Fraud: Fraudulent transactions are typically a small fraction (often $< 1\%$, sometimes $< 0.1\%$) of total transactions.
+-   Rarity of Fraud: Fraudulent transactions are usually a small fraction (often $< 1\%$, sometimes $< 0.1\%$) of total transactions.
 
--   Standard accuracy can be misleading; a naive model predicting "no fraud" for all transactions might appear highly accurate.
+-   Standard accuracy can be misleading; a model that predicts "no fraud" for every transaction can still look excellent on accuracy alone.
 
 **Impact of Sample Size**
 
-The difficulty of modeling depends on both the imbalance ratio (IR) and the absolute number of samples in the minority class (fraud) .
+The difficulty of modeling depends on both the imbalance ratio (IR) and the absolute number of fraud cases.
 
 A higher imbalance ratio (IR) indicates greater class imbalance: $$IR = \frac{\text{Number of samples in majority class}}{\text{Number of samples in minority class}}$$
 
 The absolute number of samples in the minority class (fraud) also matters:
 
--   **Large Datasets:** A low fraud rate (e.g., 0.1%) in a large dataset (e.g., 100 million transactions) can still yield enough fraud examples (e.g., 100,000) for effective modeling training and testing.
+-   **Large Datasets:** A low fraud rate (e.g., 0.1%) in a large dataset (e.g., 100 million transactions) can still yield enough fraud examples (e.g., 100,000) to train and test a model sensibly.
 
--   **Small Datasets:** The same low fraud rate in a small dataset (e.g., 1,000 transactions) results in very few fraud examples (approximately 1 fraud case if the rate is 0.1%). This is often insufficient for reliable model training and evaluation.
+-   **Small Datasets:** The same low fraud rate in a small dataset (e.g., 1,000 transactions) leaves you with very few fraud examples (approximately 1 fraud case if the rate is 0.1%). That is usually not enough for reliable training or evaluation.
 
-The lab assumes large imbalanced data sets.
+In the rest of the lab, assume a large dataset with enough fraud cases to fit models, but still with the severe class imbalance seen in production.
 
 # Data Prep for Big Data
 
--   Credit card transaction data involves a huge number of records, often millions or even billions, and new data arrives quickly.
--   Handling such large datasets efficiently is essential for fast analysis and model building.
--   Traditional tools like `pandas` can be slow and use a lot of memory with big data.
--   Modern libraries like `polars` and databases like `DuckDB` are designed to work faster and use memory more efficiently, making them better choices for large-scale data tasks.
+-   The simulated data is stored one day per parquet file, which is close to how transaction feeds are often archived in practice.
+-   Once the table reaches millions of rows, slow scans and group-bys become the bottleneck.
+-   `pandas` is still useful for inspection and model interfaces, but it is not the best default for every heavy data step in this lab.
+-   That is why the workflow leans on `polars` and `DuckDB`: they read parquet well and handle large aggregations more comfortably.
 
 ## Data Loading
 
@@ -481,9 +481,9 @@ compare_profile.to_file("Lab04_eda_compare_train_tuning.html")
 
 # Feature Engineering
 
-The section creates new features that enhance the effectiveness of fraud detection models.
+Single transactions do not carry enough context on their own. Fraud detection gets stronger once the model can see what the customer and the terminal have been doing over the last 1, 7, and 30 days.
 
-The feature engineering logic is based on Chapter 3 of @leborgne2022fraud, but has been adapted to use Polars expressions for improved speed and efficiency.
+The feature set follows Chapter 3 of @leborgne2022fraud, but the implementation is rewritten with Polars expressions so the rolling-window calculations stay practical on a larger dataset.
 
 ## Polars Feature Functions
 
@@ -779,7 +779,9 @@ ft_compare_profile.to_file("Lab04_eda_compare_train_tuning_ft.html")
 
 # Modeling and Evaluation
 
-We now implement and compare four families of strategies for handling imbalanced data, progressing from simplest to most complex. Each strategy follows the same pipeline: train on the (possibly resampled) training set, check probability calibration, tune the decision threshold on the tuning set, and evaluate on the test set.
+From this point on, we keep the feature set fixed and change one imbalance-handling choice at a time. That makes it easier to see whether performance changes come from the metric, the weighting scheme, or the resampling method rather than from the rest of the pipeline.
+
+For every strategy, we follow the same routine: fit on the training set, inspect calibration, tune a decision threshold on the tuning set, and evaluate on the untouched test set.
 
 ## Data
 
@@ -918,12 +920,12 @@ def append_running_metric_summary(rows: list[dict]) -> None:
 
 **Rationale:**
 
--   Class imbalance is an inherent characteristic of the data that reflects the true state of the world.
--   Modifying the data (e.g., through resampling) distorts reality.
--   Many modern machine learning estimators are relatively insensitive to class imbalance if configured and evaluated appropriately, including:
+-   The observed class imbalance is part of the business problem, not automatically a defect in the data.
+-   Before changing the data, it is worth asking how far a strong learner can get with the original base rate.
+-   Many modern machine learning estimators can still rank rare fraud cases reasonably well if the features are informative and the evaluation setup is sensible, including:
     -   Tree-based ensembles (LightGBM, XGBoost, CatBoost)
     -   Neural networks
--   Under the do-nothing approach, class imbalance is a "key feature" of the data rather than a bug/defect that needs to be fixed.
+-   This baseline matters because it tells us whether later imbalance-handling tricks are actually helping or just making the workflow more complicated.
 
 **Process:**
 
@@ -985,7 +987,7 @@ Check the leaderboard.
 #| tbl-cap: "Model leaderboard - Do Nothing"
 leaderboard_s1 = ag_model_s1_predictor.leaderboard(
     df_tuning_ft.to_pandas()
-    , extra_metrics=['average_precision', 'f1']
+    , extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
 display(leaderboard_s1)
 ```
@@ -1098,7 +1100,7 @@ Evaluate the original decision threshold of 0.5 on the test set.
 
 leaderboard_s1_default = ag_model_s1_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 
 display(leaderboard_s1_default)
@@ -1130,7 +1132,7 @@ Use the test set to evaluate the effectiveness of the decision threshold.
 
 leaderboard_s1_optimized = ag_model_s1_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 
 display(leaderboard_s1_optimized)
@@ -1151,7 +1153,7 @@ comparison_results.append({
 })
 ```
 
-The do-nothing approach used log loss, which treats all misclassifications equally. For highly imbalanced data, a metric that focuses on the minority class may produce better results.
+Log loss gives us a clean baseline because it rewards probability quality over the whole score distribution. In a fraud workflow, though, the business often cares most about the small slice of transactions that might actually be investigated.
 
 ```{python}
 #| label: tbl-running-summary-s1
@@ -1185,27 +1187,35 @@ append_running_metric_summary(
 **Rationale:**
 
 -   In fraud detection, the positive class (fraud) is much rarer than the negative class (legitimate transactions).
--   **ROC-AUC** is a common binary classification metric, but it can be misleading when classes are highly imbalanced:
+-   **ROC-AUC** is still a useful broad, threshold-free ranking and discrimination diagnostic:
+    -   ROC-AUC summarizes how well the model ranks fraud above legitimate transactions across all possible decision thresholds.
+    -   It is familiar, easy to benchmark, and helpful for comparing broad ranking quality across challenger models.
+    -   However, it should not be the primary or sole success metric in highly imbalanced fraud detection.
     -   ROC plots the True Positive Rate (TPR, recall) against the False Positive Rate (FPR) at different decision thresholds.
-    -   FPR is calculated as $\frac{\text{False Positives}}{\text{All Actual Negatives}}$. When the negative class is very large, even a substantial number of false positives may result in a low FPR, making the ROC curve appear optimistic.
-    -   ROC-AUC can appear reasonably high even for models that perform poorly on the minority class, because high accuracy on the majority class can mask deficiencies in minority class detection.
--   **Precision-Recall (PR) curves** are more informative for imbalanced data:
+    -   FPR is calculated as $\frac{\text{False Positives}}{\text{All Actual Negatives}}$. When the legitimate class is very large, even a low FPR can still correspond to an operationally unacceptable number of false alerts.
+-   **Precision-Recall (PR) curves** are often better aligned with rare-event fraud operations:
     -   The PR curve plots Precision ($\frac{\text{TP}}{\text{TP} + \text{FP}}$) against Recall ($\frac{\text{TP}}{\text{TP} + \text{FN}}$).
     -   Precision directly measures how many of the predicted frauds are actually fraud, which is critical when investigating alerts.
     -   PR curves do not account for true negatives, making them more sensitive to the model's performance on the minority class.
 -   **PR-AUC** (Area Under the PR Curve, also called Average Precision or AP) summarizes the PR curve in a single number.
     -   A high PR-AUC means the model can achieve both high precision and high recall for fraud detection.
     -   The baseline (random classifier) PR-AUC equals the prevalence of the positive class, making it easier to assess model quality.
+-   **Operational metrics** still matter for deployment:
+    -   Precision at top-$k$ or top-$x\%$
+    -   Recall at fixed review capacity
+    -   Dollar-weighted capture or savings
+    -   False positives per true positive
+    -   Calibration diagnostics
 
-PR-AUC and AP are conceptually similar, but AP is a more precise metric that calculates the area under the PR curve using the actual precision values at each threshold, rather than interpolating between points. This makes AP a better choice for evaluating models on imbalanced data. For details, please refer to the scikit-learn documentation on [Average Precision](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.average_precision_score.html#sklearn.metrics.average_precision_score).
+PR-AUC and AP are conceptually similar, but AP calculates the area under the PR curve using the observed precision values at each threshold rather than an interpolated curve. Industry practice is not "never use ROC-AUC"; rather, ROC-AUC is a useful secondary diagnostic but is insufficient on its own for highly imbalanced fraud problems. In this lab, we use AP (`average_precision`) as the primary model-selection metric while keeping ROC-AUC as a secondary ranking diagnostic. For details, please refer to the scikit-learn documentation on [Average Precision](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.average_precision_score.html#sklearn.metrics.average_precision_score).
 
 **Process:**
 
 1.  Train multiple estimators on the original, imbalanced dataset.
-2.  Select the best model with the highest **average precision** on the test set.
+2.  Select the best model using **average precision** as the primary metric while reviewing **ROC-AUC** as a secondary threshold-free diagnostic.
 3.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.
-4.  Select the optimal decision threshold.
-5.  Evaluate the performance of the calibrated model and the optimal threshold on the test set.
+4.  Use the tuning set to select an optimal decision threshold with operational metrics in mind (for example, F1-score, precision at top-$k$, recall at fixed review capacity, false positives per true positive, or dollar-weighted capture).
+5.  Evaluate the performance of the calibrated model and chosen threshold on the test set using AP, ROC-AUC, and the operational metrics most relevant to the fraud workflow.
 
 Setup AutoGluon parameters.
 
@@ -1260,10 +1270,12 @@ Check the leaderboard.
 #| tbl-cap: "Model leaderboard - Class-Sensitive Evaluation"
 leaderboard_s2 = ag_model_s2_predictor.leaderboard(
     df_tuning_ft.to_pandas()
-    , extra_metrics=['average_precision', 'f1']
+    , extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
 display(leaderboard_s2)
 ```
+
+ROC-AUC is still reported here as a secondary threshold-free discrimination diagnostic, while average precision remains the primary metric for model selection in this strategy.
 
 Prefer CatBoost due to inference speed and performance when it is available.
 
@@ -1373,7 +1385,7 @@ Evaluate the original decision threshold of 0.5 on the test set.
 
 leaderboard_s2_default = ag_model_s2_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 
 display(leaderboard_s2_default)
@@ -1405,11 +1417,13 @@ Use the test set to evaluate the effectiveness of the decision threshold.
 
 leaderboard_s2_optimized = ag_model_s2_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 
 display(leaderboard_s2_optimized)
 ```
+
+ROC-AUC remains informative here as a secondary threshold-free ranking diagnostic, but threshold choice should be driven by F1 and other operational metrics.
 
 Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score.
 
@@ -1469,9 +1483,9 @@ append_running_metric_summary(
     -   Instances from the minority class are given higher weights.
     -   Instances from the majority class are given lower weights.
     -   The weights are inversely proportional to class frequencies.
--   AutoGluon provides a convenient way to do this:
+-   AutoGluon lets us do this without hand-building a separate weight column:
     -   Set the `sample_weight` argument in `predictor_args` to the special string `"balance_weight"`.
-    -   This automatically calculates and applies appropriate weights to balance the classes during training.
+    -   AutoGluon then computes inverse-frequency weights and applies them during training.
 -   Sample weights are not needed for the test set evaluation.
 
 **Process:**
@@ -1536,7 +1550,7 @@ Check the leaderboard.
 #| tbl-cap: "Model leaderboard - Cost-Sensitive Learning"
 leaderboard_s3 = ag_model_s3_predictor.leaderboard(
     df_tuning_ft.to_pandas()
-    , extra_metrics=['average_precision', 'f1']
+    , extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
 display(leaderboard_s3)
 ```
@@ -1649,7 +1663,7 @@ Evaluate the original decision threshold of 0.5 on the test set.
 
 leaderboard_s3_default = ag_model_s3_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 
 display(leaderboard_s3_default)
@@ -1681,7 +1695,7 @@ Use the test set to evaluate the effectiveness of the decision threshold.
 
 leaderboard_s3_optimized = ag_model_s3_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 
 display(leaderboard_s3_optimized)
@@ -1702,7 +1716,7 @@ comparison_results.append({
 })
 ```
 
-So far we've kept the training data unchanged and adjusted either the evaluation metric or the sample weights. The final family of strategies directly modifies the training data itself to create a more balanced class distribution.
+So far we've kept the training data unchanged and adjusted either the evaluation metric or the sample weights. The final family of strategies directly modifies the training data itself to create a less extreme class distribution.
 
 ```{python}
 #| label: tbl-running-summary-s3
@@ -1735,21 +1749,48 @@ append_running_metric_summary(
 
 **Rationale:**
 
--   Class-based resampling techniques modify the training data's class distribution to create a more balanced dataset.
+-   Class-based resampling techniques modify the training data's class distribution to create a less extreme dataset for model fitting.
 -   Resampling is performed **only** on the training data.
 -   The tuning and test sets remain in their original, imbalanced form to reflect reality (i.e., fraud is rare).
+-   In fraud detection, the model still needs plenty of legitimate transactions in view. The job is to learn fraud patterns without hiding the wide range of legitimate behavior that can look suspicious at first glance.
+
+A fully balanced 1:1 sample is often a bad default for fraud detection because it creates a training world the business never sees in production. Fraud is rare, legitimate traffic is abundant, and some legitimate customers will always look odd in the raw data.
+
+**Why 1:1 is usually a poor statistical default**
+
+-   It throws away too much useful non-fraud information. Legitimate transactions contain customer, merchant, device, geographic, seasonal, and amount variation that helps define the real non-fraud population.
+-   It can inflate false positives because the sampled data teaches the model that fraud is much more common than it really is unless later calibration, weighting, or prior correction is applied.
+-   It damages probability calibration. The rank ordering may still be useful, but raw predicted fraud probabilities from a 1:1 sample are usually not business-usable without correction.
+-   More non-fraud controls usually improve precision because they help the model distinguish fraud from legitimate weirdness. The gains are often largest when moving from 1:1 toward ratios such as 5:1 or 10:1.
+-   It can make the model learn sampling artifacts if the undersampled non-fraud group no longer looks like the real production population.
+
+**Why 1:1 is usually a poor business default**
+
+-   False positives are expensive: they can create declined legitimate transactions, manual review cost, customer frustration, merchant friction, and lost revenue.
+-   The business does not operate in a 50% fraud world. The model must prioritize the riskiest cases inside a large sea of legitimate activity.
+-   Fraud teams have limited alert capacity, so the model must rank cases well on a realistic population rather than on an artificially balanced slice.
+-   Many legitimate transactions look suspicious. The business wants to separate fraud from legitimate weirdness, not just from a tiny puddle of non-fraud examples.
+
+A practical compromise is to reduce the imbalance without pretending fraud and non-fraud are equally common:
+
+| Non-fraud:Fraud ratio | Why it is useful |
+|---|---|
+| `5:1` | Useful when fraud cases are limited and model training cost matters, but it is still a relatively aggressive rebalance. |
+| `10:1` | Strong general-purpose default for rare-event modeling. |
+| `20:1` | Better when legitimate behavior is highly diverse and cheap to include. |
+| `1:1` | Usually too artificial for deployment-oriented fraud modeling; keep it as a classroom simplification rather than a default. |
 
 **Common Resampling Schemes:**
 
--   **Random Undersampling (RUS):** Randomly remove instances from the majority class until the dataset is more balanced. This can lead to loss of information from the majority class. However, the scheme substantially reduces the dataset size, which can be beneficial for training speed and memory usage.
--   **Random Oversampling (ROS):** Randomly duplicate instances from the minority class. This can lead to overfitting on the minority class examples.
+-   **Random Undersampling (RUS):** Randomly remove instances from the majority class until the class imbalance is less extreme. In practice, a moderate target such as 5:1, 10:1, or 20:1 is often preferable to forcing a 1:1 sample. This can lead to loss of information from the majority class. However, the scheme substantially reduces the dataset size, which can be beneficial for training speed and memory usage.
+-   **Random Oversampling (ROS):** Randomly duplicate instances from the minority class. Here too, a moderate target such as 5:1, 10:1, or 20:1 is often safer than a 1:1 sample. This can lead to overfitting on the minority class examples.
 -   **SMOTE (Synthetic Minority Over-sampling Technique):** Creates synthetic samples for the minority class by interpolating between actual minority instances. This can help to create a more diverse set of minority examples than simple oversampling.
 -   **Hybrid Methods:** Combine oversampling and undersampling. For example, first apply SMOTE to generate synthetic samples for the minority class, then apply random undersampling to the majority class.
 
 **Process:**
 
-1.  Use RUS, ROS, SMOTE, or hybrid to create a **balanced** training set.
-2.  Train multiple estimators on the **balanced** training set.
+1.  Use RUS, ROS, SMOTE, or hybrid to create a less extreme training set. For RUS and ROS, ratios such as 5:1, 10:1, or 20:1 non-events to events are often more defensible than a fully balanced 1:1 sample.
+2.  Train multiple estimators on the resampled training set.
 3.  Select the best model with the highest **average precision** on the test set (which is imbalanced).
 4.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.
 5.  Select the optimal decision threshold.
@@ -1757,14 +1798,27 @@ append_running_metric_summary(
 
 ### Random Undersampling (RUS)
 
-Randomly remove instances from the majority class to balance the training set.
+Randomly remove instances from the majority class to reduce the imbalance in the training set. In this lab, 10:1 is the default example, 5:1 is a more aggressive option when fraud cases are limited and training cost matters, and 20:1 is a more conservative option when legitimate behavior is highly diverse.
+
+Setting the ratio to 1:1 is usually a bad idea for fraud data because it discards too many legitimate transactions, narrows the model's view of normal-but-unusual behavior, and can make the fitted boundary depend on a small and potentially unrepresentative slice of non-fraud cases. That can hurt precision and increase false positives after deployment.
 
 ```{python}
 #| label: resampling-rus-prep
 
-rus = RandomUnderSampler(random_state=2025)
+# Keep 1:1 out of the default path; fraud models usually need more non-fraud controls.
+target_non_event_to_event_ratio_rus = 10  # Try 5 for a more aggressive resample or 20 for a more conservative one.
+sampling_strategy_rus = 1 / target_non_event_to_event_ratio_rus  # imbalanced-learn expects event:non-event, so 5->0.20, 10->0.10, 20->0.05.
+
+rus = RandomUnderSampler(
+    sampling_strategy=sampling_strategy_rus,
+    random_state=2025
+)
 X_train_rus, y_train_rus = rus.fit_resample(X_train, y_train)
+rus_class_counts = y_train_rus.value_counts().sort_index()
+rus_non_event_to_event_ratio = rus_class_counts.loc[0] / rus_class_counts.loc[1]
 print(f"RUS training data shape: {X_train_rus.shape}")
+print(f"Target non-event:event ratio: {target_non_event_to_event_ratio_rus}:1")
+print(f"Achieved non-event:event ratio: {rus_non_event_to_event_ratio:.2f}:1")
 print(f"RUS target distribution:\n{y_train_rus.value_counts(normalize=True)}")
 ```
 
@@ -1813,7 +1867,7 @@ ag_model_s4a_predictor = ag_model_s4a.predictor
 
 leaderboard_s4a = ag_model_s4a_predictor.leaderboard(
     df_tuning_ft.to_pandas()
-    , extra_metrics=['average_precision', 'f1']
+    , extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
 display(leaderboard_s4a)
 ```
@@ -1902,7 +1956,7 @@ plt.close(fig)
 
 leaderboard_s4a_default = ag_model_s4a_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 display(leaderboard_s4a_default)
 ```
@@ -1926,7 +1980,7 @@ ag_model_s4a_predictor.save()
 
 leaderboard_s4a_optimized = ag_model_s4a_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 display(leaderboard_s4a_optimized)
 ```
@@ -1973,14 +2027,27 @@ append_running_metric_summary(
 
 ### Random Oversampling (ROS)
 
-Randomly duplicate instances from the minority class to balance the training set.
+Randomly duplicate instances from the minority class to reduce the imbalance in the training set. Here again, 10:1 is the default example, 5:1 is a more aggressive option when fraud cases are limited and compute matters, and 20:1 is a more conservative option when you want the model to retain more exposure to diverse non-fraud activity.
+
+A 1:1 ROS sample is usually a bad idea because it forces the model to see the same fraud cases too many times, increases overfitting risk, makes fraud look much more common than it really is, and often produces scores that need substantial calibration before the business can use them responsibly. That can translate into excess alerts and lower precision in production.
 
 ```{python}
 #| label: resampling-ros-prep
 
-ros = RandomOverSampler(random_state=2025)
+# Keep 1:1 out of the default path; fraud models usually need more non-fraud controls.
+target_non_event_to_event_ratio_ros = 10  # Try 5 for a more aggressive resample or 20 for a more conservative one.
+sampling_strategy_ros = 1 / target_non_event_to_event_ratio_ros  # imbalanced-learn expects event:non-event, so 5->0.20, 10->0.10, 20->0.05.
+
+ros = RandomOverSampler(
+    sampling_strategy=sampling_strategy_ros,
+    random_state=2025
+)
 X_train_ros, y_train_ros = ros.fit_resample(X_train, y_train)
+ros_class_counts = y_train_ros.value_counts().sort_index()
+ros_non_event_to_event_ratio = ros_class_counts.loc[0] / ros_class_counts.loc[1]
 print(f"ROS training data shape: {X_train_ros.shape}")
+print(f"Target non-event:event ratio: {target_non_event_to_event_ratio_ros}:1")
+print(f"Achieved non-event:event ratio: {ros_non_event_to_event_ratio:.2f}:1")
 print(f"ROS target distribution:\n{y_train_ros.value_counts(normalize=True)}")
 ```
 
@@ -2029,7 +2096,7 @@ ag_model_s4b_predictor = ag_model_s4b.predictor
 
 leaderboard_s4b = ag_model_s4b_predictor.leaderboard(
     df_tuning_ft.to_pandas()
-    , extra_metrics=['average_precision', 'f1']
+    , extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
 display(leaderboard_s4b)
 ```
@@ -2118,7 +2185,7 @@ plt.close(fig)
 
 leaderboard_s4b_default = ag_model_s4b_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 display(leaderboard_s4b_default)
 ```
@@ -2142,7 +2209,7 @@ ag_model_s4b_predictor.save()
 
 leaderboard_s4b_optimized = ag_model_s4b_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 display(leaderboard_s4b_optimized)
 ```
@@ -2251,7 +2318,7 @@ ag_model_s4c_predictor = ag_model_s4c.predictor
 
 leaderboard_s4c = ag_model_s4c_predictor.leaderboard(
     df_tuning_ft.to_pandas()
-    , extra_metrics=['average_precision', 'f1']
+    , extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
 display(leaderboard_s4c)
 ```
@@ -2340,7 +2407,7 @@ plt.close(fig)
 
 leaderboard_s4c_default = ag_model_s4c_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 display(leaderboard_s4c_default)
 ```
@@ -2364,7 +2431,7 @@ ag_model_s4c_predictor.save()
 
 leaderboard_s4c_optimized = ag_model_s4c_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 display(leaderboard_s4c_optimized)
 ```
@@ -2477,7 +2544,7 @@ ag_model_s4d_predictor = ag_model_s4d.predictor
 
 leaderboard_s4d = ag_model_s4d_predictor.leaderboard(
     df_tuning_ft.to_pandas()
-    , extra_metrics=['average_precision', 'f1']
+    , extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
 display(leaderboard_s4d)
 ```
@@ -2566,7 +2633,7 @@ plt.close(fig)
 
 leaderboard_s4d_default = ag_model_s4d_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 display(leaderboard_s4d_default)
 ```
@@ -2590,7 +2657,7 @@ ag_model_s4d_predictor.save()
 
 leaderboard_s4d_optimized = ag_model_s4d_predictor.leaderboard(
     df_test_ft.to_pandas()
-    , extra_metrics=['f1']
+    , extra_metrics=['roc_auc', 'f1']
 )
 display(leaderboard_s4d_optimized)
 ```
@@ -2635,7 +2702,7 @@ append_running_metric_summary(
 )
 ```
 
-After running all strategies, we compile the results into a summary table to compare their effectiveness.
+After all strategy families have run, we put the results in one table so the tradeoffs are visible in one place.
 
 ```{python}
 #| label: tbl-comparison-summary
@@ -3223,42 +3290,45 @@ append_running_metric_summary(
 
 # Key Conclusions and Recommendations
 
-This lab explored several common strategies for handling class imbalance in the context of credit card fraud detection. We compared: 1. Doing nothing (training on original imbalanced data). 2. Using a class-sensitive evaluation metric (PR-AUC / `average_precision`) for model selection. 3. Employing cost-sensitive learning via `sample_weight='balance_weight'`. 4. Applying class-based resampling (RUS, ROS, SMOTE, and Hybrid) to the training data.
+At this point the comparison is clean: we held the feature set fixed and changed only how the model responds to severe class imbalance.
 
-**Hypothetical Findings & Discussion:**
+**Template For Interpreting Your Results:**
 
-(Students should replace this with their actual findings based on the lab execution. The following is a general discussion based on common outcomes in such scenarios.)
+Do not copy the discussion below verbatim into a submission. Use it as a guide for writing up what your own runs actually showed.
 
--   **Strategy 1 (Do Nothing with ROC-AUC):** While simple, relying solely on ROC-AUC for model selection in highly imbalanced scenarios can be misleading. The model might achieve a high ROC-AUC by correctly classifying the vast majority of legitimate transactions, yet still perform poorly on identifying fraud. The F1-score after threshold tuning is the more critical indicator here.
+-   **Strategy 1 (Do Nothing / Original Imbalanced Data):** Treat this as the control case. If it already ranks fraud reasonably well, the feature set is doing more work than you might expect. If ROC-AUC looks respectable but thresholded performance is weak, that is a reminder that broad ranking quality does not automatically translate into a workable alert rule.
 
--   **Strategy 2 (PR-AUC Metric):** Using PR-AUC (`average_precision`) as the primary evaluation metric often leads to models that are better at distinguishing the minority (fraud) class. This is because PR-AUC focuses on the trade-off between precision and recall, which is more relevant when the number of true negatives is very large. The F1-score obtained after threshold tuning on this model is usually a strong contender.
+-   **Strategy 2 (Class-Sensitive Metric Selection):** Using PR-AUC (`average_precision`) as the primary metric usually lines up better with how fraud teams work, because only a small high-risk slice of transactions will be reviewed. Keep ROC-AUC in the report, but let AP and threshold metrics carry more weight in the decision.
 
--   **Strategy 3 (Cost-Sensitive Learning with `balance_weight`):** This approach directly tells the learning algorithm to pay more attention to the minority class by up-weighting its instances. It often yields good performance, comparable to or sometimes better than just using PR-AUC, especially in terms of recall for the fraud class. The `balance_weight` option in AutoGluon is a convenient way to implement this.
+-   **Strategy 3 (Cost-Sensitive Learning with `balance_weight`):** When you have enough data, reweighting is often the least disruptive way to make the learner take fraud more seriously. It keeps the original sample intact and usually creates fewer side effects than aggressive resampling.
 
--   **Strategy 4 (Resampling — RUS, ROS, SMOTE, Hybrid):** While resampling techniques aim to provide the model with more balanced training data, they come with significant caveats:
+-   **Strategy 4 (Resampling — RUS, ROS, SMOTE, Hybrid):** This family asks a practical question: if you are going to rebalance, how far should you go? For fraud data, 1:1 is often too aggressive. Ratios such as 5:1, 10:1, and 20:1 usually preserve more legitimate behavior while still making the fit easier:
 
-    -   **RUS (Random Undersampling):** Reduces training time and memory usage by discarding majority-class samples, but risks losing valuable information from the majority class.
-    -   **ROS (Random Oversampling):** Simple to implement but can lead to overfitting on duplicated minority examples.
-    -   **SMOTE:** Creates synthetic minority samples via interpolation, offering more diversity than ROS, but can still overfit and almost invariably destroys probability calibration.
-    -   **Hybrid (SMOTE + RUS):** Combines the benefits of both approaches but adds pipeline complexity and still requires explicit recalibration.
-    -   **Probability Calibration:** All resampling methods distort the predicted probabilities. An explicit recalibration step (e.g., Isotonic Regression or Platt Scaling) on a non-resampled tuning set is crucial if reliable probabilities are needed.
-    -   **Performance:** In practice, despite their intuitive appeal, resampling methods do not always outperform strategies like using PR-AUC and/or cost-sensitive learning, especially when considering the F1-score on an unadulterated test set and the reliability of probabilities.
+    -   **RUS (Random Undersampling):** RUS lowers training cost by throwing away majority-class rows, but the discarded rows may contain exactly the legitimate variation you need.
+    -   **ROS (Random Oversampling):** ROS is easy to implement, but duplicated fraud cases can make the model overreact to a small set of examples.
+    -   **SMOTE:** SMOTE creates synthetic minority samples by interpolation. It can add variety relative to ROS, but it still changes the training distribution and usually hurts raw calibration.
+    -   **Hybrid (SMOTE + RUS):** Hybrid pipelines can be effective, but they buy flexibility by adding more moving parts to debug and recalibrate.
+    -   **Probability Calibration:** Any resampling scheme can distort score calibration. If the probabilities will be used as probabilities rather than just rankings, recalibrate on an untouched tuning set.
+    -   **Performance:** Do not assume resampling wins by default. In many fraud problems, better features, a better selection metric, or class weights buy more than a more complex sampling pipeline.
 
 **General Recommendations:**
 
-1.  **Prioritize Class-Sensitive Metrics:** For imbalanced fraud detection, always prioritize metrics like PR-AUC (`average_precision`), F1-score, precision, and recall over simple accuracy or ROC-AUC for final model assessment and selection. AutoGluon makes it easy to specify `eval_metric='average_precision'`.
+1.  **Do Not Rely on One Metric:** In imbalanced fraud detection, ROC-AUC is a useful secondary view of ranking quality, not the whole report card. Pair it with PR-AUC (`average_precision`) and operations-aware metrics such as precision at top-$k$/top-$x\%$, recall at fixed review capacity, dollar-weighted capture or savings, false positives per true positive, and calibration diagnostics.
 
-2.  **Consider Cost-Sensitive Learning:** Techniques like `sample_weight='balance_weight'` are often effective and less prone to distorting probabilities compared to aggressive resampling. This is generally a robust approach.
+2.  **Try Cost-Sensitive Learning Before Aggressive Resampling:** If you have enough data and want to avoid synthetic examples or heavy undersampling, `sample_weight='balance_weight'` is often the cleanest next step.
 
-3.  **Be Cautious with Resampling:** Do not manipulate training data (e.g., via RUS, ROS, SMOTE) solely because it is imbalanced or "difficult to model." Such methods can introduce their own problems:
+3.  **Resample Carefully, Not Automatically:** Do not manipulate training data (e.g., via RUS, ROS, SMOTE) solely because it is imbalanced or feels difficult to model. Such methods can introduce their own problems:
 
-    -   **Loss of Information (RUS):** Undersampling can discard valuable data from the majority class.
-    -   **Overfitting (ROS, SMOTE):** Oversampling can lead to models that are too specific to the (potentially synthetic) minority samples.
-    -   **Destroyed Probability Calibration:** This is a major issue, especially if the model outputs are used for more than just binary classification (e.g., risk scoring, estimating expected fraud rates).
+    -   **Use Moderate Targets:** For RUS and ROS, ratios such as 5:1, 10:1, or 20:1 non-events to events are often more realistic than 1:1.
+    -   **Preserve Legitimate Variation:** More non-fraud controls help the model learn the sea of legitimate activity rather than a tiny puddle of non-fraud examples.
+    -   **Loss of Information (RUS):** Undersampling can discard valuable data from the majority class, especially if you force the data all the way to 1:1.
+    -   **Overfitting (ROS, SMOTE):** Oversampling can lead to models that are too specific to the (potentially synthetic) minority samples, and a 1:1 ROS sample makes that risk worse.
+    -   **Avoid False-Positive Inflation:** A fraud-heavy sampled training set can teach the model a world where fraud is much more common than it really is, which may translate into more alerts than the business can absorb.
+    -   **Destroyed Probability Calibration:** This is a major issue, especially if the model outputs are used for more than just binary classification (e.g., risk scoring, estimating expected fraud rates). More aggressive rebalancing usually makes calibration harder.
     -   **Increased Complexity:** More complex pipelines can be harder to maintain, understand, and debug.
 
-4.  **Probability Calibration is Crucial:** If the model's predicted probabilities are used for downstream tasks like estimating 'expected frauds per day,' 'expected fraud value,' or for any decision-making that relies on the magnitude of the probability (not just its rank), then accurate probability calibration is essential. Models trained on heavily resampled data often require a separate, explicit calibration step on a non-resampled tuning set.
+4.  **Calibrate If Scores Will Be Used as Probabilities:** If the model scores feed queue priority, expected-loss estimates, or any downstream decision that depends on the size of the probability, good ranking is not enough. Calibrate on untouched data that reflects the real production population.
 
-5.  **Threshold Tuning is Key:** Regardless of the imbalance strategy, always use a dedicated tuning set to find an optimal decision threshold that aligns with business objectives (e.g., maximizing F1-score, or balancing precision and recall according to specific cost considerations).
+5.  **Tune Thresholds on a Separate Set:** Regardless of the imbalance strategy, always use a dedicated tuning set to find an optimal decision threshold that aligns with business objectives (e.g., maximizing F1-score, or balancing precision and recall according to specific cost considerations).
 
-6.  **Domain Knowledge & Feature Engineering:** Robust feature engineering, informed by domain knowledge, often provides more significant and reliable gains than complex imbalance handling techniques alone.
+6.  **Spend Time on Features:** In fraud work, a small set of good recency, customer-history, and terminal-history features usually matters more than switching from one imbalance trick to another.
