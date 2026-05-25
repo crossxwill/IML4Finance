@@ -93,7 +93,8 @@ torch.set_num_threads(num_jobs)
 from course_utils.helpers import (
     global_set_seed,
     remove_ag_folder,
-    AutoGluonSklearnWrapper
+    AutoGluonSklearnWrapper,
+    select_best_non_ensemble_model,
 )
 
 # Settings
@@ -1277,13 +1278,12 @@ display(leaderboard_s2)
 
 ROC-AUC is still reported here as a secondary threshold-free discrimination diagnostic, while average precision remains the primary metric for model selection in this strategy.
 
-Prefer CatBoost due to inference speed and performance when it is available.
+Use the highest-ranked non-weighted-ensemble learner from the leaderboard for downstream inspection and threshold tuning.
 
 ```{python}
 #| label: set-best-model-s2
 
-available_models_s2 = ag_model_s2_predictor.model_names()
-selected_best_model_s2 = 'CatBoost' if 'CatBoost' in available_models_s2 else ag_model_s2_predictor.model_best
+selected_best_model_s2 = select_best_non_ensemble_model(leaderboard_s2)
 
 ag_model_s2_predictor.set_model_best(selected_best_model_s2)
 
@@ -1357,8 +1357,8 @@ Since the isotonic regression model was fitted on the tuning set, we can no long
 
 fig, ax = plt.subplots()
 
-for estimator, name, color in [(ag_model_s2, 'Uncalib_CatBoost', 'orange'),
-          (cal_model_s2, 'Calib_CatBoost', 'blue')]:
+for estimator, name, color in [(ag_model_s2, f'Uncalibrated: {selected_best_model_s2}', 'orange'),
+          (cal_model_s2, f'Calibrated: {selected_best_model_s2}', 'blue')]:
 
   CalibrationDisplay.from_estimator(
       estimator = estimator,
@@ -1375,7 +1375,7 @@ display(fig)
 plt.close(fig)
 ```
 
-The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
+The uncalibrated selected model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
 
 Evaluate the original decision threshold of 0.5 on the test set.
 
@@ -1555,13 +1555,12 @@ leaderboard_s3 = ag_model_s3_predictor.leaderboard(
 display(leaderboard_s3)
 ```
 
-Prefer CatBoost due to inference speed and performance when it is available.
+Use the highest-ranked non-weighted-ensemble learner from the leaderboard for downstream inspection and threshold tuning.
 
 ```{python}
 #| label: set-best-model-s3
 
-available_models_s3 = ag_model_s3_predictor.model_names()
-selected_best_model_s3 = 'CatBoost' if 'CatBoost' in available_models_s3 else ag_model_s3_predictor.model_best
+selected_best_model_s3 = select_best_non_ensemble_model(leaderboard_s3)
 
 ag_model_s3_predictor.set_model_best(selected_best_model_s3)
 
@@ -1635,8 +1634,8 @@ Since the isotonic regression model was fitted on the tuning set, we can no long
 
 fig, ax = plt.subplots()
 
-for estimator, name, color in [(ag_model_s3, 'Uncalib_CatBoost', 'orange'),
-          (cal_model_s3, 'Calib_CatBoost', 'blue')]:
+for estimator, name, color in [(ag_model_s3, f'Uncalibrated: {selected_best_model_s3}', 'orange'),
+          (cal_model_s3, f'Calibrated: {selected_best_model_s3}', 'blue')]:
 
   CalibrationDisplay.from_estimator(
       estimator = estimator,
@@ -1653,7 +1652,7 @@ display(fig)
 plt.close(fig)
 ```
 
-The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
+The uncalibrated selected model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
 
 Evaluate the original decision threshold of 0.5 on the test set.
 
@@ -1875,8 +1874,7 @@ display(leaderboard_s4a)
 ```{python}
 #| label: set-best-model-rus
 
-available_models_s4a = ag_model_s4a_predictor.model_names()
-selected_best_model_s4a = 'CatBoost' if 'CatBoost' in available_models_s4a else ag_model_s4a_predictor.model_best
+selected_best_model_s4a = select_best_non_ensemble_model(leaderboard_s4a)
 ag_model_s4a_predictor.set_model_best(selected_best_model_s4a)
 ag_model_s4a.predictor.save()
 ```
@@ -1934,8 +1932,8 @@ cal_model_s4a.fit(X = X_tuning, y = y_tuning)
 %matplotlib inline
 
 fig, ax = plt.subplots()
-for estimator, name, color in [(ag_model_s4a, 'Uncalib_CatBoost', 'orange'),
-          (cal_model_s4a, 'Calib_CatBoost', 'blue')]:
+for estimator, name, color in [(ag_model_s4a, f'Uncalibrated: {selected_best_model_s4a}', 'orange'),
+          (cal_model_s4a, f'Calibrated: {selected_best_model_s4a}', 'blue')]:
   CalibrationDisplay.from_estimator(
       estimator = estimator,
       X = X_test,
@@ -2104,8 +2102,7 @@ display(leaderboard_s4b)
 ```{python}
 #| label: set-best-model-ros
 
-available_models_s4b = ag_model_s4b_predictor.model_names()
-selected_best_model_s4b = 'CatBoost' if 'CatBoost' in available_models_s4b else ag_model_s4b_predictor.model_best
+selected_best_model_s4b = select_best_non_ensemble_model(leaderboard_s4b)
 ag_model_s4b_predictor.set_model_best(selected_best_model_s4b)
 ag_model_s4b.predictor.save()
 ```
@@ -2163,8 +2160,8 @@ cal_model_s4b.fit(X = X_tuning, y = y_tuning)
 %matplotlib inline
 
 fig, ax = plt.subplots()
-for estimator, name, color in [(ag_model_s4b, 'Uncalib_CatBoost', 'orange'),
-          (cal_model_s4b, 'Calib_CatBoost', 'blue')]:
+for estimator, name, color in [(ag_model_s4b, f'Uncalibrated: {selected_best_model_s4b}', 'orange'),
+          (cal_model_s4b, f'Calibrated: {selected_best_model_s4b}', 'blue')]:
   CalibrationDisplay.from_estimator(
       estimator = estimator,
       X = X_test,
@@ -2326,8 +2323,7 @@ display(leaderboard_s4c)
 ```{python}
 #| label: set-best-model-smote
 
-available_models_s4c = ag_model_s4c_predictor.model_names()
-selected_best_model_s4c = 'CatBoost' if 'CatBoost' in available_models_s4c else ag_model_s4c_predictor.model_best
+selected_best_model_s4c = select_best_non_ensemble_model(leaderboard_s4c)
 ag_model_s4c_predictor.set_model_best(selected_best_model_s4c)
 ag_model_s4c.predictor.save()
 ```
@@ -2385,8 +2381,8 @@ cal_model_s4c.fit(X = X_tuning, y = y_tuning)
 %matplotlib inline
 
 fig, ax = plt.subplots()
-for estimator, name, color in [(ag_model_s4c, 'Uncalib_CatBoost', 'orange'),
-          (cal_model_s4c, 'Calib_CatBoost', 'blue')]:
+for estimator, name, color in [(ag_model_s4c, f'Uncalibrated: {selected_best_model_s4c}', 'orange'),
+          (cal_model_s4c, f'Calibrated: {selected_best_model_s4c}', 'blue')]:
   CalibrationDisplay.from_estimator(
       estimator = estimator,
       X = X_test,
@@ -2552,8 +2548,7 @@ display(leaderboard_s4d)
 ```{python}
 #| label: set-best-model-hybrid
 
-available_models_s4d = ag_model_s4d_predictor.model_names()
-selected_best_model_s4d = 'CatBoost' if 'CatBoost' in available_models_s4d else ag_model_s4d_predictor.model_best
+selected_best_model_s4d = select_best_non_ensemble_model(leaderboard_s4d)
 ag_model_s4d_predictor.set_model_best(selected_best_model_s4d)
 ag_model_s4d.predictor.save()
 ```
@@ -2611,8 +2606,8 @@ cal_model_s4d.fit(X = X_tuning, y = y_tuning)
 %matplotlib inline
 
 fig, ax = plt.subplots()
-for estimator, name, color in [(ag_model_s4d, 'Uncalib_CatBoost', 'orange'),
-          (cal_model_s4d, 'Calib_CatBoost', 'blue')]:
+for estimator, name, color in [(ag_model_s4d, f'Uncalibrated: {selected_best_model_s4d}', 'orange'),
+          (cal_model_s4d, f'Calibrated: {selected_best_model_s4d}', 'blue')]:
   CalibrationDisplay.from_estimator(
       estimator = estimator,
       X = X_test,

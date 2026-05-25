@@ -75,6 +75,45 @@ def remove_ag_folder(mdl_folder: str) -> None:
         print(f"Removed existing AutoGluon folder: {mdl_folder}")
 
 
+def select_best_non_ensemble_model(
+    leaderboard: pd.DataFrame,
+    ensemble_prefix: str = "WeightedEnsemble",
+) -> str:
+    """
+    Returns the highest-ranked non-weighted-ensemble model from a leaderboard.
+
+    Parameters
+    ----------
+    leaderboard : pandas.DataFrame
+        AutoGluon leaderboard sorted in rank order.
+
+    ensemble_prefix : str, default="WeightedEnsemble"
+        Prefix used by AutoGluon weighted ensemble model names.
+
+    Returns
+    -------
+    str
+        Model name for the best non-weighted-ensemble row.
+
+    Raises
+    ------
+    ValueError
+        If the leaderboard is missing a model column or contains only ensembles.
+    """
+    if "model" not in leaderboard.columns:
+        raise ValueError("Leaderboard must contain a 'model' column.")
+
+    model_names = leaderboard["model"].astype(str)
+    non_ensemble_models = model_names[
+        ~model_names.str.startswith(ensemble_prefix, na=False)
+    ]
+
+    if non_ensemble_models.empty:
+        raise ValueError("Leaderboard does not contain a non-weighted-ensemble model.")
+
+    return non_ensemble_models.iloc[0]
+
+
 # =============================================================================
 # AUTOGLUON SKLEARN WRAPPER
 # =============================================================================
