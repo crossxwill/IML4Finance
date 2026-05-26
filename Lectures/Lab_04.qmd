@@ -1459,7 +1459,7 @@ predictor_args_s3 = {
 fit_args_s3 = {'holdout_frac': 0.2,
             'excluded_model_types': ['KNN'],
             'presets': 'medium_quality',
-            'time_limit': 180}  
+            'time_limit': 540}  
 
 ag_wrapper_s3 = AutoGluonSklearnWrapper(
     label=target_label,
