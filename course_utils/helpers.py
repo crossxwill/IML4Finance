@@ -37,6 +37,7 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
+    log_loss,
 )
 
 # Specialized ML libraries
@@ -265,7 +266,12 @@ def predict_positive_class_scores(
     model_name: str | None = None,
 ) -> np.ndarray:
     """
-    Predict positive-class scores from a fitted estimator or predictor.
+    Low-level utility to extract positive-class scores from a fitted estimator
+    or predictor.
+
+    Lab 04 now prefers AutoGluon's native predict_proba plus threshold
+    calibration workflow in student-facing code. Keep this helper for internal
+    utilities or instructor workflows that need a common score-extraction path.
 
     Parameters
     ----------
@@ -380,7 +386,12 @@ def find_best_threshold(
     scorer: Callable[[np.ndarray, np.ndarray], float] | None = None,
 ) -> float:
     """
-    Search decision thresholds directly on positive-class score arrays.
+    Low-level utility to search decision thresholds directly on
+    positive-class score arrays.
+
+    Lab 04 now prefers AutoGluon's native threshold calibration workflow for
+    student-facing threshold selection. Use this helper when you already have
+    score arrays and need threshold search for internal evaluation or reporting.
 
     Parameters
     ----------
@@ -724,10 +735,16 @@ def build_running_metric_row(
     y_test,
     test_scores,
     best_threshold: float | None = None,
+    threshold_label: str | None = None,
     threshold_scorer: Callable[[np.ndarray, np.ndarray], float] | None = None,
 ) -> dict[str, Any]:
     """
     Build one running-summary row from tuning-set scores and test-set scores.
+
+    This helper can consume a provided threshold directly. If best_threshold is
+    omitted, it falls back to find_best_threshold for low-level reporting
+    convenience. In Lab 04, prefer passing an AutoGluon-calibrated threshold
+    explicitly so the fallback is not treated as the recommended student path.
     """
     tuning_scores = extract_positive_class_scores(tuning_scores).reshape(-1)
     test_scores = extract_positive_class_scores(test_scores).reshape(-1)
@@ -748,9 +765,11 @@ def build_running_metric_row(
     return {
         "Strategy": strategy_name,
         "Model": model_name,
+        "Threshold Setting": threshold_label,
         "Test ROC-AUC": roc_auc_score(y_test, test_scores),
         "Test Average Precision": average_precision_score(y_test, test_scores),
-        "best_threshold": float(best_threshold),
+        "Test Log Loss": log_loss(y_test, test_scores, labels=[0, 1]),
+        "Threshold": float(best_threshold),
         "precision": precision_score(y_test, y_pred_test, zero_division=0),
         "recall": recall_score(y_test, y_pred_test, zero_division=0),
         "F1-score": f1_score(y_test, y_pred_test, zero_division=0),
@@ -764,18 +783,26 @@ def append_running_metric_summary(
     round_map: dict[str, int] | None = None,
 ) -> pd.DataFrame:
     """
-    Update and display a running summary table keyed by strategy and model.
+    Update and return a running summary table keyed by strategy, model, and threshold setting.
     """
     if running_metric_results is None:
         running_metric_results = []
 
     existing_rows = {
-        (result["Strategy"], result["Model"]): idx
+        (
+            result["Strategy"],
+            result["Model"],
+            result.get("Threshold Setting"),
+        ): idx
         for idx, result in enumerate(running_metric_results)
     }
 
     for row in rows:
-        row_key = (row["Strategy"], row["Model"])
+        row_key = (
+            row["Strategy"],
+            row["Model"],
+            row.get("Threshold Setting"),
+        )
         if row_key in existing_rows:
             running_metric_results[existing_rows[row_key]] = row
         else:
@@ -786,7 +813,8 @@ def append_running_metric_summary(
     round_map = round_map or {
         "Test ROC-AUC": 4,
         "Test Average Precision": 4,
-        "best_threshold": 4,
+        "Test Log Loss": 4,
+        "Threshold": 4,
         "precision": 4,
         "recall": 4,
         "F1-score": 4,
@@ -796,16 +824,6 @@ def append_running_metric_summary(
         for column, decimals in round_map.items()
         if column in running_metric_df.columns
     })
-
-    if display_fn is None:
-        try:
-            from IPython.display import display as ipython_display
-            display_fn = ipython_display
-        except ImportError:
-            display_fn = None
-
-    if display_fn is not None:
-        display_fn(rounded_df)
 
     return rounded_df
 
