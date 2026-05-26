@@ -17,7 +17,7 @@ import warnings
 import time
 import gc
 import re
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Callable
 
 # Data manipulation and visualization
 import numpy as np
@@ -31,6 +31,13 @@ from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
 from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
 from sklearn.inspection import PartialDependenceDisplay
 from sklearn.calibration import CalibrationDisplay
+from sklearn.metrics import (
+    roc_auc_score,
+    average_precision_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
 
 # Specialized ML libraries
 from autogluon.tabular import TabularPredictor, TabularDataset
@@ -75,6 +82,53 @@ def remove_ag_folder(mdl_folder: str) -> None:
         print(f"Removed existing AutoGluon folder: {mdl_folder}")
 
 
+def select_top_non_ensemble_models(
+    leaderboard: pd.DataFrame,
+    n: int = 1,
+    ensemble_prefix: str = "WeightedEnsemble",
+) -> list[str]:
+    """
+    Returns the top-ranked non-weighted-ensemble model names from a leaderboard.
+
+    Parameters
+    ----------
+    leaderboard : pandas.DataFrame
+        AutoGluon leaderboard sorted in rank order.
+
+    n : int, default=1
+        Number of top non-weighted-ensemble model names to return.
+
+    ensemble_prefix : str, default="WeightedEnsemble"
+        Prefix used by AutoGluon weighted ensemble model names.
+
+    Returns
+    -------
+    list of str
+        Top-ranked non-weighted-ensemble model names.
+
+    Raises
+    ------
+    ValueError
+        If the leaderboard is missing a model column, contains only ensembles,
+        or n is less than 1.
+    """
+    if "model" not in leaderboard.columns:
+        raise ValueError("Leaderboard must contain a 'model' column.")
+    if n < 1:
+        raise ValueError("n must be at least 1.")
+
+    model_names = leaderboard["model"].astype(str)
+    non_ensemble_models = model_names[
+        ~model_names.str.startswith(ensemble_prefix, na=False)
+    ]
+    top_models = non_ensemble_models.head(n).tolist()
+
+    if not top_models:
+        raise ValueError("Leaderboard does not contain a non-weighted-ensemble model.")
+
+    return top_models
+
+
 def select_best_non_ensemble_model(
     leaderboard: pd.DataFrame,
     ensemble_prefix: str = "WeightedEnsemble",
@@ -100,18 +154,734 @@ def select_best_non_ensemble_model(
     ValueError
         If the leaderboard is missing a model column or contains only ensembles.
     """
-    if "model" not in leaderboard.columns:
-        raise ValueError("Leaderboard must contain a 'model' column.")
+    return select_top_non_ensemble_models(
+        leaderboard=leaderboard,
+        n=1,
+        ensemble_prefix=ensemble_prefix,
+    )[0]
 
-    model_names = leaderboard["model"].astype(str)
-    non_ensemble_models = model_names[
-        ~model_names.str.startswith(ensemble_prefix, na=False)
-    ]
 
-    if non_ensemble_models.empty:
-        raise ValueError("Leaderboard does not contain a non-weighted-ensemble model.")
+# =============================================================================
+# LAB 04 SHARED UTILITIES
+# =============================================================================
 
-    return non_ensemble_models.iloc[0]
+def extract_positive_class_scores(probabilities) -> np.ndarray:
+    """
+    Extract positive-class scores from common probability outputs.
+
+    Parameters
+    ----------
+    probabilities : array-like, pandas.Series, or pandas.DataFrame
+        Probability output from a binary classifier.
+
+    Returns
+    -------
+    np.ndarray
+        One-dimensional array of positive-class scores.
+    """
+    if isinstance(probabilities, pd.DataFrame):
+        if probabilities.shape[1] == 0:
+            raise ValueError("probabilities must contain at least one column.")
+        if probabilities.shape[1] == 1:
+            return probabilities.iloc[:, 0].to_numpy(dtype=float)
+        for positive_column in (1, "1", True):
+            if positive_column in probabilities.columns:
+                return probabilities[positive_column].to_numpy(dtype=float)
+        return probabilities.iloc[:, -1].to_numpy(dtype=float)
+
+    if isinstance(probabilities, pd.Series):
+        return probabilities.to_numpy(dtype=float)
+
+    probabilities = np.asarray(probabilities, dtype=float)
+    if probabilities.ndim == 0:
+        return probabilities.reshape(1)
+    if probabilities.ndim == 1:
+        return probabilities
+    if probabilities.ndim != 2:
+        raise ValueError("probabilities must be one- or two-dimensional.")
+    if probabilities.shape[1] == 0:
+        raise ValueError("probabilities must contain at least one column.")
+
+    return probabilities[:, -1]
+
+
+def _resolve_autogluon_predictor(estimator):
+    """Return an underlying AutoGluon predictor when one is available."""
+    if isinstance(estimator, TabularPredictor):
+        return estimator
+
+    predictor = getattr(estimator, "predictor_", None)
+    if isinstance(predictor, TabularPredictor):
+        return predictor
+
+    predictor = getattr(estimator, "predictor", None)
+    if isinstance(predictor, TabularPredictor):
+        return predictor
+
+    if hasattr(estimator, "steps"):
+        for _, step in reversed(estimator.steps):
+            predictor = _resolve_autogluon_predictor(step)
+            if predictor is not None:
+                return predictor
+
+    return None
+
+
+def _coerce_autogluon_prediction_features(estimator, predictor, features):
+    """Coerce prediction features into a DataFrame/TabularDataset for AutoGluon."""
+    if isinstance(features, TabularDataset):
+        return features
+
+    if hasattr(estimator, "_validate_features"):
+        try:
+            return TabularDataset(estimator._validate_features(features))
+        except Exception:
+            pass
+
+    if hasattr(features, "columns"):
+        return TabularDataset(features)
+
+    feature_names = getattr(estimator, "feature_names_", None)
+    if feature_names is None and hasattr(predictor, "feature_metadata_in"):
+        feature_names = predictor.feature_metadata_in.get_features()
+
+    feature_array = np.asarray(features)
+    if feature_array.ndim != 2:
+        raise ValueError(
+            "features must be two-dimensional when model_name is provided "
+            "for AutoGluon predictions."
+        )
+    if feature_names is None:
+        raise ValueError(
+            "Could not infer feature names for the requested AutoGluon model prediction."
+        )
+
+    return TabularDataset(pd.DataFrame(feature_array, columns=list(feature_names)))
+
+
+def predict_positive_class_scores(
+    estimator,
+    features,
+    model_name: str | None = None,
+) -> np.ndarray:
+    """
+    Predict positive-class scores from a fitted estimator or predictor.
+
+    Parameters
+    ----------
+    estimator : object
+        Fitted estimator with predict_proba, TabularPredictor, or an object that
+        exposes an underlying AutoGluon predictor.
+
+    features : array-like or DataFrame
+        Feature matrix used for prediction.
+
+    model_name : str, optional
+        AutoGluon model name to score when the estimator exposes a
+        TabularPredictor.
+
+    Returns
+    -------
+    np.ndarray
+        One-dimensional array of positive-class scores.
+    """
+    if model_name is not None:
+        predictor = _resolve_autogluon_predictor(estimator)
+        if predictor is not None:
+            ag_features = _coerce_autogluon_prediction_features(
+                estimator=estimator,
+                predictor=predictor,
+                features=features,
+            )
+            return extract_positive_class_scores(
+                predictor.predict_proba(ag_features, model=model_name)
+            )
+
+        try:
+            probabilities = estimator.predict_proba(features, model=model_name)
+        except TypeError as exc:
+            raise ValueError(
+                "model_name is only supported for AutoGluon predictors or "
+                "estimators that accept a 'model' keyword argument."
+            ) from exc
+
+        return extract_positive_class_scores(probabilities)
+
+    return extract_positive_class_scores(estimator.predict_proba(features))
+
+
+def _find_best_f1_threshold_from_score_support(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+) -> float | None:
+    """Search the observed score support exactly for the best F1 threshold."""
+    unique_labels = np.unique(y_true)
+    if np.any(pd.isna(unique_labels)) or not np.all(np.isin(unique_labels, [0, 1, False, True])):
+        return None
+
+    y_true_binary = np.asarray(y_true, dtype=int)
+    order = np.argsort(y_score, kind="mergesort")[::-1]
+    sorted_scores = y_score[order]
+    sorted_true = y_true_binary[order]
+
+    true_positives = np.cumsum(sorted_true)
+    false_positives = np.cumsum(1 - sorted_true)
+    total_positives = int(sorted_true.sum())
+    unique_score_mask = np.r_[sorted_scores[1:] != sorted_scores[:-1], True]
+
+    candidate_thresholds = sorted_scores[unique_score_mask]
+    tp_at_threshold = true_positives[unique_score_mask]
+    fp_at_threshold = false_positives[unique_score_mask]
+    fn_at_threshold = total_positives - tp_at_threshold
+    denominator = (2 * tp_at_threshold) + fp_at_threshold + fn_at_threshold
+    f1_scores = np.divide(
+        2 * tp_at_threshold,
+        denominator,
+        out=np.zeros_like(candidate_thresholds, dtype=float),
+        where=denominator > 0,
+    )
+
+    best_score = np.max(f1_scores)
+    best_thresholds = candidate_thresholds[np.isclose(f1_scores, best_score)]
+
+    return float(np.min(best_thresholds))
+
+
+def _build_threshold_search_candidates(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    num_thresholds: int,
+) -> np.ndarray:
+    """Build threshold candidates from the score distribution and positive scores."""
+    quantile_count = max(2, min(int(num_thresholds), y_score.shape[0]))
+    distribution_thresholds = np.quantile(
+        y_score,
+        np.linspace(0.0, 1.0, quantile_count),
+    )
+    positive_score_thresholds = np.unique(y_score[np.asarray(y_true).reshape(-1) == 1])
+    boundary_thresholds = np.array([0.0, float(np.min(y_score)), float(np.max(y_score)), 1.0])
+
+    return np.unique(
+        np.clip(
+            np.concatenate(
+                [distribution_thresholds, positive_score_thresholds, boundary_thresholds]
+            ),
+            0.0,
+            1.0,
+        )
+    )
+
+
+def find_best_threshold(
+    y_true,
+    y_score,
+    num_thresholds: int = 200,
+    thresholds=None,
+    scorer: Callable[[np.ndarray, np.ndarray], float] | None = None,
+) -> float:
+    """
+    Search decision thresholds directly on positive-class score arrays.
+
+    Parameters
+    ----------
+    y_true : array-like
+        True binary labels.
+
+    y_score : array-like
+        Positive-class scores.
+
+    num_thresholds : int, default=200
+        Number of quantile-based thresholds to evaluate from the score
+        distribution when thresholds is not provided and a custom scorer is used.
+
+    thresholds : array-like, optional
+        Explicit candidate thresholds.
+
+    scorer : callable, optional
+        Function with signature scorer(y_true, y_pred). Defaults to F1-score.
+
+    Returns
+    -------
+    float
+        Threshold with the best score under the chosen scorer.
+    """
+    y_true = np.asarray(y_true).reshape(-1)
+    y_score = extract_positive_class_scores(y_score).reshape(-1)
+
+    if y_true.shape[0] != y_score.shape[0]:
+        raise ValueError("y_true and y_score must have the same number of observations.")
+
+    if thresholds is None:
+        if num_thresholds < 1:
+            raise ValueError("num_thresholds must be at least 1.")
+        if scorer is None:
+            exact_f1_threshold = _find_best_f1_threshold_from_score_support(y_true, y_score)
+            if exact_f1_threshold is not None:
+                return exact_f1_threshold
+
+        thresholds = _build_threshold_search_candidates(
+            y_true=y_true,
+            y_score=y_score,
+            num_thresholds=num_thresholds,
+        )
+    else:
+        thresholds = np.asarray(thresholds, dtype=float).reshape(-1)
+        if thresholds.size == 0:
+            raise ValueError("thresholds must contain at least one value.")
+        thresholds = np.unique(np.sort(thresholds))
+
+    if np.any((thresholds < 0) | (thresholds > 1)):
+        raise ValueError("thresholds must be in the interval [0, 1].")
+
+    if scorer is None:
+        scorer = lambda y_true_input, y_pred_input: f1_score(
+            y_true_input,
+            y_pred_input,
+            zero_division=0,
+        )
+
+    best_threshold = 0.5
+    best_score = -np.inf
+
+    for threshold in thresholds:
+        y_pred = (y_score >= threshold).astype(int)
+        current_score = float(scorer(y_true, y_pred))
+        if current_score > best_score:
+            best_score = current_score
+            best_threshold = float(threshold)
+
+    return float(best_threshold)
+
+
+def _coerce_results_frame(results) -> pd.DataFrame:
+    if isinstance(results, pd.DataFrame):
+        return results
+    if isinstance(results, pd.Series):
+        return pd.DataFrame([results.to_dict()])
+    if isinstance(results, dict):
+        return pd.DataFrame([results])
+    return pd.DataFrame(results)
+
+
+_RESULT_COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
+    "model": ("Model",),
+    "Model": ("model",),
+}
+
+
+def _resolve_results_column_name(results_df: pd.DataFrame, column_name: str) -> str:
+    candidate_names = (column_name,) + _RESULT_COLUMN_ALIASES.get(column_name, ())
+    for candidate_name in candidate_names:
+        if candidate_name in results_df.columns:
+            return candidate_name
+
+    raise KeyError(f"Column '{column_name}' not found in results.")
+
+
+def _select_single_result_row(results, filters: dict | None = None) -> pd.Series:
+    results_df = _coerce_results_frame(results)
+
+    if filters:
+        mask = pd.Series(True, index=results_df.index)
+        for column, value in filters.items():
+            resolved_column = _resolve_results_column_name(results_df, column)
+            mask &= results_df[resolved_column].eq(value)
+        results_df = results_df.loc[mask]
+
+    if results_df.empty:
+        raise ValueError("No rows matched the requested filters.")
+    if len(results_df) > 1:
+        raise ValueError("Multiple rows matched the requested filters. Add more specific filters.")
+
+    return results_df.iloc[0]
+
+
+_METRIC_NAME_ALIASES: dict[str, tuple[str, ...]] = {
+    "f1": ("F1-score",),
+    "F1-score": ("f1",),
+}
+
+
+def _resolve_metric_name(row: pd.Series, metric_name: str) -> str:
+    candidate_names = (metric_name,) + _METRIC_NAME_ALIASES.get(metric_name, ())
+    for candidate_name in candidate_names:
+        if candidate_name in row.index:
+            return candidate_name
+
+    raise KeyError(f"Metric '{metric_name}' not found in results.")
+
+
+def _extract_metric_value_from_row(row: pd.Series, metric_name: str) -> float:
+    resolved_metric_name = _resolve_metric_name(row, metric_name)
+    value = row[resolved_metric_name]
+    if pd.isna(value):
+        raise ValueError(f"Metric '{metric_name}' is missing.")
+
+    return float(value)
+
+
+def _compare_metric_values(
+    left_value: float,
+    right_value: float,
+    better_when: str = "higher",
+    tolerance: float = 1e-4,
+) -> str:
+    if better_when not in {"higher", "lower"}:
+        raise ValueError("better_when must be either 'higher' or 'lower'.")
+
+    if abs(left_value - right_value) <= tolerance:
+        return "tie"
+
+    if better_when == "higher":
+        return "left" if left_value > right_value else "right"
+
+    return "left" if left_value < right_value else "right"
+
+
+def _format_metric_value(value: float, decimals: int = 4) -> str:
+    return f"{float(value):.{decimals}f}"
+
+
+def _build_result_label(
+    strategy_name: str,
+    filters: dict | None = None,
+    label: str | None = None,
+) -> str:
+    if label is not None:
+        return label
+
+    filters = filters or {}
+    detail_values = [str(value) for column, value in filters.items() if column != "Strategy"]
+    if detail_values:
+        return f"{strategy_name} ({', '.join(detail_values)})"
+
+    return strategy_name
+
+
+def _resolve_metric_direction(metric_name: str, better_when: dict[str, str] | None = None) -> str:
+    if better_when and metric_name in better_when:
+        direction = better_when[metric_name]
+    elif metric_name.lower() in {"log_loss", "loss", "rmse", "mae", "mse"}:
+        direction = "lower"
+    elif metric_name.lower() in {
+        "roc_auc",
+        "score_test",
+        "average_precision",
+        "ap",
+        "f1",
+        "f1-score",
+        "precision",
+        "recall",
+    }:
+        direction = "higher"
+    else:
+        raise ValueError(
+            f"No comparison direction was provided for metric '{metric_name}'. "
+            "Pass better_when explicitly for this metric."
+        )
+
+    if direction not in {"higher", "lower"}:
+        raise ValueError("better_when values must be either 'higher' or 'lower'.")
+
+    return direction
+
+
+def build_threshold_comparison_text(
+    default_results=None,
+    optimized_results=None,
+    model_name: str | None = None,
+    dataset_name: str = "test set",
+    metric_name: str = "f1",
+    metric_label: str = "F1-score",
+    model_column: str = "model",
+    default_threshold: float = 0.5,
+    optimized_threshold: float | None = None,
+    tolerance: float = 1e-4,
+    default_metric: float | None = None,
+    optimized_metric: float | None = None,
+    model_label: str | None = None,
+) -> str:
+    """
+    Build concise text comparing default and optimized thresholds.
+
+    This helper supports either direct metric values or result tables that
+    contain a single row for the selected model.
+    """
+    if (default_metric is None) != (optimized_metric is None):
+        raise ValueError(
+            "default_metric and optimized_metric must both be provided when using direct values."
+        )
+
+    if default_metric is None:
+        if default_results is None or optimized_results is None:
+            raise ValueError(
+                "Provide either direct metrics or both default_results and optimized_results."
+            )
+        filters = {model_column: model_name} if model_name is not None else None
+        default_row = _select_single_result_row(default_results, filters=filters)
+        optimized_row = _select_single_result_row(optimized_results, filters=filters)
+        default_metric = _extract_metric_value_from_row(default_row, metric_name)
+        optimized_metric = _extract_metric_value_from_row(optimized_row, metric_name)
+
+    default_metric = float(default_metric)
+    optimized_metric = float(optimized_metric)
+    comparison = _compare_metric_values(
+        default_metric,
+        optimized_metric,
+        better_when="higher",
+        tolerance=tolerance,
+    )
+
+    model_label = model_label or model_name or "the selected model"
+    if comparison == "tie":
+        verdict = f"threshold tuning does not materially change the {metric_label} for {model_label}"
+    elif comparison == "right":
+        verdict = f"threshold tuning improves the {metric_label} for {model_label}"
+    else:
+        verdict = f"the default threshold still gives the higher {metric_label} for {model_label}"
+
+    default_sentence = (
+        f"The default threshold of {default_threshold:.3f} gives {metric_label} "
+        f"{_format_metric_value(default_metric)}."
+    )
+    if optimized_threshold is None:
+        optimized_sentence = (
+            f"The optimized threshold gives {metric_label} "
+            f"{_format_metric_value(optimized_metric)}."
+        )
+    else:
+        optimized_sentence = (
+            f"The optimized threshold of {optimized_threshold:.3f} gives {metric_label} "
+            f"{_format_metric_value(optimized_metric)}."
+        )
+
+    return f"On the {dataset_name}, {verdict}. {default_sentence} {optimized_sentence}"
+
+
+def build_strategy_metric_comparison_text(
+    results,
+    left_strategy: str,
+    right_strategy: str,
+    metrics: list[str],
+    left_filters: dict | None = None,
+    right_filters: dict | None = None,
+    left_label: str | None = None,
+    right_label: str | None = None,
+    metric_labels: dict[str, str] | None = None,
+    better_when: dict[str, str] | None = None,
+    context_name: str = "the current summary",
+    tolerance: float = 1e-4,
+) -> str:
+    left_filters = {**(left_filters or {}), "Strategy": left_strategy}
+    right_filters = {**(right_filters or {}), "Strategy": right_strategy}
+
+    left_row = _select_single_result_row(results, filters=left_filters)
+    right_row = _select_single_result_row(results, filters=right_filters)
+
+    left_label = _build_result_label(left_strategy, filters=left_filters, label=left_label)
+    right_label = _build_result_label(right_strategy, filters=right_filters, label=right_label)
+    metric_labels = metric_labels or {}
+    better_when = better_when or {}
+
+    sentences = [f"In {context_name}, comparing {left_label} with {right_label}."]
+
+    for metric_name in metrics:
+        metric_label = metric_labels.get(metric_name, metric_name)
+        left_value = _extract_metric_value_from_row(left_row, metric_name)
+        right_value = _extract_metric_value_from_row(right_row, metric_name)
+        metric_direction = _resolve_metric_direction(metric_name, better_when=better_when)
+        comparison = _compare_metric_values(
+            left_value,
+            right_value,
+            better_when=metric_direction,
+            tolerance=tolerance,
+        )
+
+        if comparison == "tie":
+            sentences.append(
+                f"{metric_label} is similar ({left_label}: {_format_metric_value(left_value)}, "
+                f"{right_label}: {_format_metric_value(right_value)})."
+            )
+        elif comparison == "left":
+            sentences.append(
+                f"{left_label} is better on {metric_label} "
+                f"({_format_metric_value(left_value)} versus {_format_metric_value(right_value)})."
+            )
+        else:
+            sentences.append(
+                f"{right_label} is better on {metric_label} "
+                f"({_format_metric_value(right_value)} versus {_format_metric_value(left_value)})."
+            )
+
+    return " ".join(sentences)
+
+
+def build_running_metric_row(
+    strategy_name: str,
+    model_name: str,
+    y_tuning,
+    tuning_scores,
+    y_test,
+    test_scores,
+    best_threshold: float | None = None,
+    threshold_scorer: Callable[[np.ndarray, np.ndarray], float] | None = None,
+) -> dict[str, Any]:
+    """
+    Build one running-summary row from tuning-set scores and test-set scores.
+    """
+    tuning_scores = extract_positive_class_scores(tuning_scores).reshape(-1)
+    test_scores = extract_positive_class_scores(test_scores).reshape(-1)
+    y_test = np.asarray(y_test).reshape(-1)
+
+    if y_test.shape[0] != test_scores.shape[0]:
+        raise ValueError("y_test and test_scores must have the same number of observations.")
+
+    if best_threshold is None:
+        best_threshold = find_best_threshold(
+            y_true=y_tuning,
+            y_score=tuning_scores,
+            scorer=threshold_scorer,
+        )
+
+    y_pred_test = (test_scores >= best_threshold).astype(int)
+
+    return {
+        "Strategy": strategy_name,
+        "Model": model_name,
+        "Test ROC-AUC": roc_auc_score(y_test, test_scores),
+        "Test Average Precision": average_precision_score(y_test, test_scores),
+        "best_threshold": float(best_threshold),
+        "precision": precision_score(y_test, y_pred_test, zero_division=0),
+        "recall": recall_score(y_test, y_pred_test, zero_division=0),
+        "F1-score": f1_score(y_test, y_pred_test, zero_division=0),
+    }
+
+
+def append_running_metric_summary(
+    rows: list[dict[str, Any]],
+    running_metric_results: list[dict[str, Any]] | None = None,
+    display_fn=None,
+    round_map: dict[str, int] | None = None,
+) -> pd.DataFrame:
+    """
+    Update and display a running summary table keyed by strategy and model.
+    """
+    if running_metric_results is None:
+        running_metric_results = []
+
+    existing_rows = {
+        (result["Strategy"], result["Model"]): idx
+        for idx, result in enumerate(running_metric_results)
+    }
+
+    for row in rows:
+        row_key = (row["Strategy"], row["Model"])
+        if row_key in existing_rows:
+            running_metric_results[existing_rows[row_key]] = row
+        else:
+            running_metric_results.append(row)
+            existing_rows[row_key] = len(running_metric_results) - 1
+
+    running_metric_df = pd.DataFrame(running_metric_results)
+    round_map = round_map or {
+        "Test ROC-AUC": 4,
+        "Test Average Precision": 4,
+        "best_threshold": 4,
+        "precision": 4,
+        "recall": 4,
+        "F1-score": 4,
+    }
+    rounded_df = running_metric_df.round({
+        column: decimals
+        for column, decimals in round_map.items()
+        if column in running_metric_df.columns
+    })
+
+    if display_fn is None:
+        try:
+            from IPython.display import display as ipython_display
+            display_fn = ipython_display
+        except ImportError:
+            display_fn = None
+
+    if display_fn is not None:
+        display_fn(rounded_df)
+
+    return rounded_df
+
+
+def plot_named_calibration_curves(
+    y_true,
+    named_scores,
+    n_bins: int = 20,
+    ax=None,
+    title: str = "Calibration Plot",
+    curve_kwargs: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """
+    Plot multiple named calibration curves from score arrays.
+
+    Parameters
+    ----------
+    y_true : array-like
+        True binary labels.
+
+    named_scores : dict or sequence of tuples
+        Mapping from display name to score array.
+
+    n_bins : int, default=20
+        Number of bins for each calibration curve.
+
+    ax : matplotlib.axes.Axes, optional
+        Existing axes to draw on.
+
+    title : str, default="Calibration Plot"
+        Plot title.
+
+    curve_kwargs : dict, optional
+        Per-curve keyword arguments passed to CalibrationDisplay.from_predictions.
+
+    Returns
+    -------
+    dict
+        Dictionary containing the figure, axes, and calibration displays.
+    """
+    if isinstance(named_scores, dict):
+        score_items = list(named_scores.items())
+    else:
+        score_items = list(named_scores)
+
+    if not score_items:
+        raise ValueError("named_scores must contain at least one score array.")
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7, 6))
+    else:
+        fig = ax.figure
+
+    y_true = np.asarray(y_true).reshape(-1)
+    curve_kwargs = curve_kwargs or {}
+    displays = {}
+
+    for index, (name, scores) in enumerate(score_items):
+        display_kwargs = dict(curve_kwargs.get(name, {}))
+        display_kwargs.setdefault("ref_line", index == 0)
+        displays[name] = CalibrationDisplay.from_predictions(
+            y_true=y_true,
+            y_prob=extract_positive_class_scores(scores),
+            n_bins=n_bins,
+            name=name,
+            ax=ax,
+            **display_kwargs,
+        )
+
+    ax.set_title(title)
+
+    return {
+        "figure": fig,
+        "ax": ax,
+        "displays": displays,
+    }
 
 
 # =============================================================================
@@ -123,8 +893,8 @@ class AutoGluonSklearnWrapper(BaseEstimator, ClassifierMixin):
     Scikit-learn compatible wrapper for AutoGluon TabularPredictor.
     
     Inherits from scikit-learn's BaseEstimator and ClassifierMixin to provide
-    full compatibility with scikit-learn tools like PartialDependenceDisplay(),
-    CalibratedClassifierCV, etc.
+    full compatibility with estimator-aware scikit-learn tools such as
+    PartialDependenceDisplay().
     
     Parameters
     ----------

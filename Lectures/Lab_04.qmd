@@ -57,7 +57,7 @@ import numpy as np
 import pandas as pd
 import polars as pl # Polars is a fast DataFrame library
 import matplotlib.pyplot as plt
-from IPython.display import display # Explicit import for display
+from IPython.display import Markdown, display # Explicit import for display
 import re
 import duckdb
 
@@ -70,7 +70,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, average_precision_score, precision_score, recall_score, f1_score, classification_report
 from sklearn.pipeline import Pipeline
 from sklearn.inspection import PartialDependenceDisplay
-from sklearn.calibration import CalibratedClassifierCV, CalibrationDisplay # Added for probability calibration
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
 from sklearn.utils.validation import check_is_fitted
 from sklearn import set_config
@@ -84,8 +83,8 @@ from imblearn.over_sampling import RandomOverSampler, SMOTE
 from autogluon.tabular import TabularPredictor, TabularDataset
 from ydata_profiling import ProfileReport
 import shap
-import dice_ml
-from dice_ml.utils import helpers 
+# import dice_ml
+# from dice_ml.utils import helpers 
 import torch
 torch.set_num_threads(num_jobs)
 
@@ -94,9 +93,15 @@ from course_utils.helpers import (
     global_set_seed,
     remove_ag_folder,
     AutoGluonSklearnWrapper,
-    select_best_non_ensemble_model,
+    select_top_non_ensemble_models,
+    predict_positive_class_scores,
+    find_best_threshold,
+    build_threshold_comparison_text,
+    build_strategy_metric_comparison_text,
+    build_running_metric_row,
+    append_running_metric_summary,
+    plot_named_calibration_curves,
 )
-
 # Settings
 pd.set_option('display.max_columns', 50)
 pd.set_option('display.max_rows', 100)
@@ -394,7 +399,7 @@ display(fraud_analysis_pandas.head(10))
 
 ## Prequential Data Splitting (using Polars)
 
-To properly evaluate fraud detection models, we split the data **chronologically** into training, tuning (calibration), and test sets based on the `TX_DATETIME` column.
+To properly evaluate fraud detection models, we split the data **chronologically** into training, tuning, and test sets based on the `TX_DATETIME` column.
 
 Also known as out-of-time validation, prequential data splitting ensures that future transactions do not influence model training or validation.
 
@@ -738,7 +743,7 @@ def polars_feature_pipeline(df: pl.DataFrame) -> pl.DataFrame:
             ) 
 ```
 
-Apply the data pipeline to `df_fraud` and then split the data into training and calibration sets.
+Apply the data pipeline to `df_fraud` and then split the data into training, tuning, and test sets.
 
 ```{python}
 #| label: apply-feature-engineering
@@ -782,7 +787,7 @@ ft_compare_profile.to_file("Lab04_eda_compare_train_tuning_ft.html")
 
 From this point on, we keep the feature set fixed and change one imbalance-handling choice at a time. That makes it easier to see whether performance changes come from the metric, the weighting scheme, or the resampling method rather than from the rest of the pipeline.
 
-For every strategy, we follow the same routine: fit on the training set, inspect calibration, tune a decision threshold on the tuning set, and evaluate on the untouched test set.
+For the first three strategies below, we follow the same routine: fit on the training set, use tuning-set scores to choose the decision threshold, evaluate on the untouched test set, and then inspect held-out calibration plots as a descriptive diagnostic.
 
 ## Data
 
@@ -829,95 +834,9 @@ y_test = df_test_ft[target_label].to_pandas()
 
 comparison_results = []
 running_metric_results = []
-
-def extract_positive_class_scores(probabilities) -> np.ndarray:
-    if isinstance(probabilities, pd.DataFrame):
-        if 1 in probabilities.columns:
-            return probabilities[1].to_numpy(dtype=float)
-        return probabilities.iloc[:, -1].to_numpy(dtype=float)
-
-    probabilities = np.asarray(probabilities, dtype=float)
-    if probabilities.ndim == 1:
-        return probabilities
-    return probabilities[:, -1]
-
-
-def predict_positive_class_scores(estimator, features) -> np.ndarray:
-    return extract_positive_class_scores(estimator.predict_proba(features))
-
-
-def find_best_threshold(y_true, y_score, num_thresholds: int = 200) -> float:
-    thresholds = np.linspace(0.005, 0.995, num_thresholds)
-    best_threshold = 0.5
-    best_f1 = -1.0
-
-    for threshold in thresholds:
-        y_pred = (y_score >= threshold).astype(int)
-        current_f1 = f1_score(y_true, y_pred, zero_division=0)
-        if current_f1 > best_f1:
-            best_f1 = current_f1
-            best_threshold = threshold
-
-    return float(best_threshold)
-
-
-def build_running_metric_row(
-    strategy_name: str,
-    model_name: str,
-    y_tuning,
-    tuning_scores,
-    y_test,
-    test_scores,
-    best_threshold: float | None = None
-) -> dict:
-    tuning_scores = np.asarray(tuning_scores, dtype=float)
-    test_scores = np.asarray(test_scores, dtype=float)
-
-    if best_threshold is None:
-        best_threshold = find_best_threshold(y_tuning, tuning_scores)
-
-    y_pred_test = (test_scores >= best_threshold).astype(int)
-
-    return {
-        "Strategy": strategy_name,
-        "Model": model_name,
-        "Test ROC-AUC": roc_auc_score(y_test, test_scores),
-        "Test Average Precision": average_precision_score(y_test, test_scores),
-        "best_threshold": float(best_threshold),
-        "precision": precision_score(y_test, y_pred_test, zero_division=0),
-        "recall": recall_score(y_test, y_pred_test, zero_division=0),
-        "F1-score": f1_score(y_test, y_pred_test, zero_division=0)
-    }
-
-
-def append_running_metric_summary(rows: list[dict]) -> None:
-    existing_rows = {
-        (result["Strategy"], result["Model"]): idx
-        for idx, result in enumerate(running_metric_results)
-    }
-
-    for row in rows:
-        row_key = (row["Strategy"], row["Model"])
-        if row_key in existing_rows:
-            running_metric_results[existing_rows[row_key]] = row
-        else:
-            running_metric_results.append(row)
-            existing_rows[row_key] = len(running_metric_results) - 1
-
-    running_metric_df = pd.DataFrame(running_metric_results)
-    display(
-        running_metric_df.round({
-            "Test ROC-AUC": 4,
-            "Test Average Precision": 4,
-            "best_threshold": 4,
-            "precision": 4,
-            "recall": 4,
-            "F1-score": 4
-        })
-    )
 ```
 
-## Do-Nothing Approach
+## Ignore Class Imbalance Approach
 
 **Rationale:**
 
@@ -931,18 +850,18 @@ def append_running_metric_summary(rows: list[dict]) -> None:
 **Process:**
 
 1.  Train multiple estimators on the original, imbalanced dataset.
-2.  Select the best model with the lowest **log loss** on the test set.
-3.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.
-4.  Select the optimal decision threshold.
-5.  Evaluate the performance of the calibrated model and the optimal threshold on the test set.
+2.  Use the tuning-set leaderboard under **log loss** to keep the top three non-weighted-ensemble learners in view.
+3.  Tune the decision threshold directly on the selected best model's tuning-set scores.
+4.  Evaluate the selected base model and threshold on the untouched test set.
+5.  After the threshold is fixed, inspect the shortlisted base models on one test-set calibration plot as a descriptive diagnostic.
 
 Setup AutoGluon parameters.
 
 ```{python}
-#| label: setup-autogluon-do-nothing
+#| label: setup-autogluon-ignore-class-imbalance
 
-strategy_name_1 = "1. Do Nothing"
-model_folder_s1 = "./Lab04_ag_models_s1_do_nothing"
+strategy_name_1 = "1. Ignore Class Imbalance"
+model_folder_s1 = "./Lab04_ag_models_s1_ignore_class_imbalance"
 remove_ag_folder(model_folder_s1)
 
 predictor_args_s1 = {
@@ -967,7 +886,7 @@ ag_wrapper_s1 = AutoGluonSklearnWrapper(
 Fit the model using AutoGluon.
 
 ```{python}
-#| label: lab04-fit-autogluon-s1
+#| label: fit-autogluon-ignore-class-imbalance
 ag_model_s1 = ag_wrapper_s1.fit(X_train, y_train)
 
 ag_model_s1.predictor.save()  # Save the predictor for later use
@@ -975,31 +894,40 @@ ag_model_s1.predictor.save()  # Save the predictor for later use
 
 Access the AutoGluon predictor object.
 ```{python}
-#| label: access-autogluon-predictor-s1
+#| label: access-autogluon-predictor-ignore-class-imbalance
 
 ag_model_s1_predictor = ag_model_s1.predictor
 
 ```
 
-Check the leaderboard.
+Check the top base models on the tuning leaderboard.
 
 ```{python}
-#| label: tbl-leaderboard-s1
-#| tbl-cap: "Model leaderboard - Do Nothing"
+#| label: tbl-leaderboard-ignore-class-imbalance
+#| tbl-cap: "Top non-ensemble models on the tuning leaderboard - Ignore Class Imbalance"
 leaderboard_s1 = ag_model_s1_predictor.leaderboard(
     df_tuning_ft.to_pandas()
     , extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
-display(leaderboard_s1)
+
+top_base_models_s1 = select_top_non_ensemble_models(leaderboard_s1, n=3)
+leaderboard_s1_top = (
+    leaderboard_s1.loc[
+        leaderboard_s1['model'].isin(top_base_models_s1),
+        ['model', 'score_val', 'roc_auc', 'average_precision', 'f1']
+    ]
+    .rename(columns={'score_val': 'Validation Score'})
+    .reset_index(drop=True)
+)
+display(leaderboard_s1_top)
 ```
 
-Prefer CatBoost due to inference speed and performance when it is available.
+Use the highest-ranked non-weighted-ensemble learner from the leaderboard for downstream inspection and threshold tuning.
 
 ```{python}
-#| label: set-best-model-s1
+#| label: set-best-model-ignore-class-imbalance
 
-available_models_s1 = ag_model_s1_predictor.model_names()
-selected_best_model_s1 = 'CatBoost' if 'CatBoost' in available_models_s1 else ag_model_s1_predictor.model_best
+selected_best_model_s1 = top_base_models_s1[0]
 
 ag_model_s1_predictor.set_model_best(selected_best_model_s1)
 
@@ -1010,8 +938,8 @@ ag_model_s1.predictor.save()  # Save the predictor for later use
 Check feature importance.
 
 ```{python}
-#| label: tbl-feature-importance-s1
-#| tbl-cap: "Feature importance - Do Nothing"
+#| label: tbl-feature-importance-ignore-class-imbalance
+#| tbl-cap: "Feature importance - Ignore Class Imbalance"
 
 feature_importance_s1 = ag_model_s1_predictor.feature_importance(
     df_tuning_ft.to_pandas(),
@@ -1022,164 +950,139 @@ feature_importance_s1 = ag_model_s1_predictor.feature_importance(
 display(feature_importance_s1)
 ```
 
-Check probability calibration using the tuning set.
+Use the tuning-set scores from the selected model to search directly for the F1-maximizing threshold before looking at any test-set diagnostics. Then evaluate the default and optimized thresholds on the test set.
 
 ```{python}
-#| label: fig-calibration-s1
-#| fig-cap: "Calibration curve on tuning set - Do Nothing"
+#| label: threshold-tuning-ignore-class-imbalance
 
-%matplotlib inline
+selected_best_model_tuning_scores_s1 = predict_positive_class_scores(
+    ag_model_s1_predictor,
+    X_tuning,
+    model_name=selected_best_model_s1,
+)
 
-fig, ax = plt.subplots()
+best_threshold_s1 = find_best_threshold(
+    y_true=y_tuning,
+    y_score=selected_best_model_tuning_scores_s1,
+)
 
-pre_cal_disp_s1 = CalibrationDisplay.from_estimator(
-        estimator = ag_model_s1,
-        X = X_tuning,
-        y = y_tuning,
-        n_bins = 20,
-        name = 'Pre-Calib Curve: Do Nothing Strategy',
-    color = 'orange',
-    ax = ax
+selected_best_model_test_scores_s1 = predict_positive_class_scores(
+    ag_model_s1_predictor,
+    X_test,
+    model_name=selected_best_model_s1,
+)
+
+default_summary_s1 = build_running_metric_row(
+    strategy_name_1,
+    selected_best_model_s1,
+    y_tuning,
+    selected_best_model_tuning_scores_s1,
+    y_test,
+    selected_best_model_test_scores_s1,
+    best_threshold=0.5,
+)
+optimized_summary_s1 = build_running_metric_row(
+    strategy_name_1,
+    selected_best_model_s1,
+    y_tuning,
+    selected_best_model_tuning_scores_s1,
+    y_test,
+    selected_best_model_test_scores_s1,
+    best_threshold=best_threshold_s1,
+)
+```
+
+```{python}
+#| label: tbl-threshold-summary-ignore-class-imbalance
+#| tbl-cap: "Threshold summary on the test set - Ignore Class Imbalance"
+
+threshold_summary_s1 = pd.DataFrame([
+    {
+        "Threshold Setting": "default",
+        "Threshold": 0.5,
+        "Precision": default_summary_s1["precision"],
+        "Recall": default_summary_s1["recall"],
+        "F1-score": default_summary_s1["F1-score"],
+    },
+    {
+        "Threshold Setting": "optimized",
+        "Threshold": best_threshold_s1,
+        "Precision": optimized_summary_s1["precision"],
+        "Recall": optimized_summary_s1["recall"],
+        "F1-score": optimized_summary_s1["F1-score"],
+    },
+]).round(4)
+display(threshold_summary_s1)
+
+threshold_note_s1 = build_threshold_comparison_text(
+    default_metric=default_summary_s1["F1-score"],
+    optimized_metric=optimized_summary_s1["F1-score"],
+    model_label=selected_best_model_s1,
+    dataset_name="test set",
+    metric_label="F1-score",
+    optimized_threshold=best_threshold_s1,
+)
+display(Markdown(threshold_note_s1))
+```
+
+Now that the threshold is fixed from tuning-set scores, inspect the top three uncalibrated base models on the test set. This keeps the comparison short and treats calibration as a held-out descriptive check rather than an input to model or threshold selection.
+
+```{python}
+#| label: fig-calibration-ignore-class-imbalance-test
+#| fig-cap: "Test-set calibration curves for the top base models - Ignore Class Imbalance"
+
+named_test_scores_s1 = [
+    (
+        model_name,
+        predict_positive_class_scores(
+            ag_model_s1_predictor,
+            X_test,
+            model_name=model_name,
+        ),
     )
+    for model_name in top_base_models_s1
+]
 
-ax.set_title("Calibration Plot (Tuning Set)")
-display(fig)
-plt.close(fig)
-```
-
-Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
-
-```{python}
-#| label: lab04-fit-calibration-s1
-cal_model_s1 = CalibratedClassifierCV(
-    estimator = ag_model_s1,
-    method='isotonic',
-    cv="prefit" # Use the fitted model from ag_model
+calibration_plot_s1 = plot_named_calibration_curves(
+    y_true=y_test,
+    named_scores=named_test_scores_s1,
+    n_bins=20,
+    title="Calibration Plot (Test Set)",
 )
+display(calibration_plot_s1["figure"])
+plt.close(calibration_plot_s1["figure"])
 
-global_set_seed()
-
-cal_model_s1.fit(X = X_tuning,
-            y = y_tuning)
-```
-
-Since the isotonic regression model was fitted on the tuning set, we can no longer use the tuning set for calibration evaluation. We will use the test set for calibration evaluation.
-
-```{python}
-#| label: fig-calibration-s1-test
-#| fig-cap: "Calibration curve on test set - Do Nothing"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-
-for estimator, name, color in [(ag_model_s1, 'Uncalib_CatBoost', 'orange'),
-          (cal_model_s1, 'Calib_CatBoost', 'blue')]:
-
-  CalibrationDisplay.from_estimator(
-      estimator = estimator,
-      X = X_test,
-      y = y_test,
-      n_bins = 20,
-      name = name,
-      color = color,
-      ax = ax
-    )
-    
-ax.set_title("Calibration Plot (Test Set)")
-display(fig)
-plt.close(fig)
-```
-
-The uncalibrated CatBoost model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
-
-Evaluate the original decision threshold of 0.5 on the test set.
-
-```{python}
-#| label: tbl-evaluate-default-threshold-s1
-#| tbl-cap: "Test performance with default threshold (0.5) - Do Nothing"
-
-leaderboard_s1_default = ag_model_s1_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
+calibration_note_s1 = (
+    "The test-set calibration plot compares the top uncalibrated base models from the tuning leaderboard: "
+    + ", ".join(top_base_models_s1)
+    + f". The operating threshold for {selected_best_model_s1} was already chosen from its tuning-set scores before this held-out calibration check."
 )
-
-display(leaderboard_s1_default)
-
+display(Markdown(calibration_note_s1))
 ```
 
-Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score.
-
 ```{python}
-#| label: threshold-tuning-s1
-
-best_threshold_s1 = (ag_model_s1_predictor
-                .calibrate_decision_threshold(
-                data = df_tuning_ft.to_pandas(),
-                metric = 'f1',
-                decision_thresholds = 200)
-                )
-
-ag_model_s1_predictor.set_decision_threshold(best_threshold_s1)
-
-ag_model_s1_predictor.save()  # Save the predictor with the new threshold
-```
-
-Use the test set to evaluate the effectiveness of the decision threshold.
-
-```{python}
-#| label: tbl-evaluate-threshold-s1
-#| tbl-cap: "Test performance with optimized threshold - Do Nothing"
-
-leaderboard_s1_optimized = ag_model_s1_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
-)
-
-display(leaderboard_s1_optimized)
-```
-
-Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score.
-
-```{python}
-#| label: append-results-s1
+#| label: append-results-ignore-class-imbalance
 
 comparison_results.append({
     "Strategy": strategy_name_1,
-    "Test ROC-AUC": leaderboard_s1_optimized.loc[leaderboard_s1_optimized['model'] == selected_best_model_s1, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s1_optimized.columns else None,
-    "Test PR-AUC": leaderboard_s1_optimized.loc[leaderboard_s1_optimized['model'] == selected_best_model_s1, 'score_test'].values[0],
-    "Test F1 (Optimized)": leaderboard_s1_optimized.loc[leaderboard_s1_optimized['model'] == selected_best_model_s1, 'f1'].values[0],
+    "Test ROC-AUC": optimized_summary_s1["Test ROC-AUC"],
+    "Test PR-AUC": optimized_summary_s1["Test Average Precision"],
+    "Test F1 (Optimized)": optimized_summary_s1["F1-score"],
     "Optimized Threshold": best_threshold_s1,
-    "Calibration Note": "Uncalibrated model used; calibration did not improve on test set."
+    "Calibration Note": calibration_note_s1
 })
 ```
 
 Log loss gives us a clean baseline because it rewards probability quality over the whole score distribution. In a fraud workflow, though, the business often cares most about the small slice of transactions that might actually be investigated.
 
 ```{python}
-#| label: tbl-running-summary-s1
-#| tbl-cap: "Running comparison through the do-nothing approach"
+#| label: tbl-running-summary-ignore-class-imbalance
+#| tbl-cap: "Running comparison through the ignore-class-imbalance approach"
 
 append_running_metric_summary(
-    [
-        build_running_metric_row(
-            strategy_name_1,
-            "Uncalibrated",
-            y_tuning,
-            predict_positive_class_scores(ag_model_s1, X_tuning),
-            y_test,
-            predict_positive_class_scores(ag_model_s1, X_test),
-            best_threshold=best_threshold_s1
-        ),
-        build_running_metric_row(
-            strategy_name_1,
-            "Calibrated",
-            y_tuning,
-            predict_positive_class_scores(cal_model_s1, X_tuning),
-            y_test,
-            predict_positive_class_scores(cal_model_s1, X_test)
-        )
-    ]
+    [optimized_summary_s1],
+    running_metric_results=running_metric_results,
+    display_fn=display,
 )
 ```
 
@@ -1213,10 +1116,10 @@ PR-AUC and AP are conceptually similar, but AP calculates the area under the PR 
 **Process:**
 
 1.  Train multiple estimators on the original, imbalanced dataset.
-2.  Select the best model using **average precision** as the primary metric while reviewing **ROC-AUC** as a secondary threshold-free diagnostic.
-3.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.
-4.  Use the tuning set to select an optimal decision threshold with operational metrics in mind (for example, F1-score, precision at top-$k$, recall at fixed review capacity, false positives per true positive, or dollar-weighted capture).
-5.  Evaluate the performance of the calibrated model and chosen threshold on the test set using AP, ROC-AUC, and the operational metrics most relevant to the fraud workflow.
+2.  Select the best model using **average precision** as the primary metric while keeping the top three non-weighted-ensemble learners from the tuning leaderboard in view.
+3.  Use the selected model's tuning-set scores to search for an operational decision threshold.
+4.  Evaluate the selected predictor and chosen threshold on the test set using AP, ROC-AUC, and the operational metrics most relevant to the fraud workflow.
+5.  After the threshold is fixed, inspect the shortlisted base models on one test-set calibration plot as a descriptive diagnostic.
 
 Setup AutoGluon parameters.
 
@@ -1264,16 +1167,26 @@ ag_model_s2_predictor = ag_model_s2.predictor
 
 ```
 
-Check the leaderboard.
+Check the top base models on the tuning leaderboard.
 
 ```{python}
 #| label: tbl-leaderboard-s2
-#| tbl-cap: "Model leaderboard - Class-Sensitive Evaluation"
+#| tbl-cap: "Top non-ensemble models on the tuning leaderboard - Class-Sensitive Evaluation"
 leaderboard_s2 = ag_model_s2_predictor.leaderboard(
     df_tuning_ft.to_pandas()
     , extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
-display(leaderboard_s2)
+
+top_base_models_s2 = select_top_non_ensemble_models(leaderboard_s2, n=3)
+leaderboard_s2_top = (
+    leaderboard_s2.loc[
+        leaderboard_s2['model'].isin(top_base_models_s2),
+        ['model', 'score_val', 'roc_auc', 'average_precision', 'f1']
+    ]
+    .rename(columns={'score_val': 'Validation Score'})
+    .reset_index(drop=True)
+)
+display(leaderboard_s2_top)
 ```
 
 ROC-AUC is still reported here as a secondary threshold-free discrimination diagnostic, while average precision remains the primary metric for model selection in this strategy.
@@ -1283,7 +1196,7 @@ Use the highest-ranked non-weighted-ensemble learner from the leaderboard for do
 ```{python}
 #| label: set-best-model-s2
 
-selected_best_model_s2 = select_best_non_ensemble_model(leaderboard_s2)
+selected_best_model_s2 = top_base_models_s2[0]
 
 ag_model_s2_predictor.set_model_best(selected_best_model_s2)
 
@@ -1306,166 +1219,162 @@ feature_importance_s2 = ag_model_s2_predictor.feature_importance(
 display(feature_importance_s2)
 ```
 
-Check probability calibration using the tuning set.
-
-```{python}
-#| label: fig-calibration-s2
-#| fig-cap: "Calibration curve on tuning set - Class-Sensitive Evaluation"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-
-pre_cal_disp_s2 = CalibrationDisplay.from_estimator(
-        estimator = ag_model_s2,
-        X = X_tuning,
-        y = y_tuning,
-        n_bins = 20,
-        name = 'Pre-Calib Curve: Class-Sensitive Strategy',
-    color = 'orange',
-    ax = ax
-    )
-
-ax.set_title("Calibration Plot (Tuning Set)")
-display(fig)
-plt.close(fig)
-```
-
-Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
-
-```{python}
-#| label: lab04-fit-calibration-s2
-cal_model_s2 = CalibratedClassifierCV(
-    estimator = ag_model_s2,
-    method='isotonic',
-    cv="prefit" # Use the fitted model from ag_model
-)
-
-global_set_seed()
-
-cal_model_s2.fit(X = X_tuning,
-            y = y_tuning)
-```
-
-Since the isotonic regression model was fitted on the tuning set, we can no longer use the tuning set for calibration evaluation. We will use the test set for calibration evaluation.
-
-```{python}
-#| label: fig-calibration-s2-test
-#| fig-cap: "Calibration curve on test set - Class-Sensitive Evaluation"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-
-for estimator, name, color in [(ag_model_s2, f'Uncalibrated: {selected_best_model_s2}', 'orange'),
-          (cal_model_s2, f'Calibrated: {selected_best_model_s2}', 'blue')]:
-
-  CalibrationDisplay.from_estimator(
-      estimator = estimator,
-      X = X_test,
-      y = y_test,
-      n_bins = 20,
-      name = name,
-      color = color,
-      ax = ax
-    )
-    
-ax.set_title("Calibration Plot (Test Set)")
-display(fig)
-plt.close(fig)
-```
-
-The uncalibrated selected model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
-
-Evaluate the original decision threshold of 0.5 on the test set.
-
-```{python}
-#| label: tbl-evaluate-default-threshold-s2
-#| tbl-cap: "Test performance with default threshold (0.5) - Class-Sensitive Evaluation"
-
-leaderboard_s2_default = ag_model_s2_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
-)
-
-display(leaderboard_s2_default)
-
-```
-
-Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score.
+Use the selected model's tuning-set scores to search directly for the F1-maximizing threshold before looking at any test-set diagnostics. Then compare the default and optimized thresholds on the test set.
 
 ```{python}
 #| label: threshold-tuning-s2
 
-best_threshold_s2 = (ag_model_s2_predictor
-                .calibrate_decision_threshold(
-                data = df_tuning_ft.to_pandas(),
-                metric = 'f1',
-                decision_thresholds = 200)
-                )
-
-ag_model_s2_predictor.set_decision_threshold(best_threshold_s2)
-
-ag_model_s2_predictor.save()  # Save the predictor with the new threshold
-```
-
-Use the test set to evaluate the effectiveness of the decision threshold.
-
-```{python}
-#| label: tbl-evaluate-threshold-s2
-#| tbl-cap: "Test performance with optimized threshold - Class-Sensitive Evaluation"
-
-leaderboard_s2_optimized = ag_model_s2_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
+selected_best_model_tuning_scores_s2 = predict_positive_class_scores(
+    ag_model_s2_predictor,
+    X_tuning,
+    model_name=selected_best_model_s2,
 )
 
-display(leaderboard_s2_optimized)
+best_threshold_s2 = find_best_threshold(
+    y_true=y_tuning,
+    y_score=selected_best_model_tuning_scores_s2,
+)
+
+selected_best_model_test_scores_s2 = predict_positive_class_scores(
+    ag_model_s2_predictor,
+    X_test,
+    model_name=selected_best_model_s2,
+)
+
+default_summary_s2 = build_running_metric_row(
+    strategy_name_2,
+    selected_best_model_s2,
+    y_tuning,
+    selected_best_model_tuning_scores_s2,
+    y_test,
+    selected_best_model_test_scores_s2,
+    best_threshold=0.5,
+)
+optimized_summary_s2 = build_running_metric_row(
+    strategy_name_2,
+    selected_best_model_s2,
+    y_tuning,
+    selected_best_model_tuning_scores_s2,
+    y_test,
+    selected_best_model_test_scores_s2,
+    best_threshold=best_threshold_s2,
+)
 ```
 
-ROC-AUC remains informative here as a secondary threshold-free ranking diagnostic, but threshold choice should be driven by F1 and other operational metrics.
+```{python}
+#| label: tbl-threshold-summary-s2
+#| tbl-cap: "Threshold summary on the test set - Class-Sensitive Evaluation"
 
-Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score.
+threshold_summary_s2 = pd.DataFrame([
+    {
+        "Threshold Setting": "default",
+        "Threshold": 0.5,
+        "Precision": default_summary_s2["precision"],
+        "Recall": default_summary_s2["recall"],
+        "F1-score": default_summary_s2["F1-score"],
+    },
+    {
+        "Threshold Setting": "optimized",
+        "Threshold": best_threshold_s2,
+        "Precision": optimized_summary_s2["precision"],
+        "Recall": optimized_summary_s2["recall"],
+        "F1-score": optimized_summary_s2["F1-score"],
+    },
+]).round(4)
+display(threshold_summary_s2)
+
+threshold_note_s2 = build_threshold_comparison_text(
+    default_metric=default_summary_s2["F1-score"],
+    optimized_metric=optimized_summary_s2["F1-score"],
+    model_label=selected_best_model_s2,
+    dataset_name="test set",
+    metric_label="F1-score",
+    optimized_threshold=best_threshold_s2,
+)
+display(Markdown(threshold_note_s2))
+```
+
+Now that the threshold is fixed from tuning-set scores, inspect the top three uncalibrated base models on the test set. This keeps the comparison short and treats calibration as a held-out descriptive check rather than an input to model or threshold selection.
+
+```{python}
+#| label: fig-calibration-s2-test
+#| fig-cap: "Test-set calibration curves for the top base models - Class-Sensitive Evaluation"
+
+named_test_scores_s2 = [
+    (
+        model_name,
+        predict_positive_class_scores(
+            ag_model_s2_predictor,
+            X_test,
+            model_name=model_name,
+        ),
+    )
+    for model_name in top_base_models_s2
+]
+
+calibration_plot_s2 = plot_named_calibration_curves(
+    y_true=y_test,
+    named_scores=named_test_scores_s2,
+    n_bins=20,
+    title="Calibration Plot (Test Set)",
+)
+display(calibration_plot_s2["figure"])
+plt.close(calibration_plot_s2["figure"])
+
+calibration_note_s2 = (
+    "The test-set calibration plot compares the top uncalibrated base models from the tuning leaderboard: "
+    + ", ".join(top_base_models_s2)
+    + f". The operating threshold for {selected_best_model_s2} was already chosen from its tuning-set scores before this held-out calibration check."
+)
+display(Markdown(calibration_note_s2))
+```
 
 ```{python}
 #| label: append-results-s2
 
 comparison_results.append({
     "Strategy": strategy_name_2,
-    "Test ROC-AUC": leaderboard_s2_optimized.loc[leaderboard_s2_optimized['model'] == selected_best_model_s2, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s2_optimized.columns else None,
-    "Test PR-AUC": leaderboard_s2_optimized.loc[leaderboard_s2_optimized['model'] == selected_best_model_s2, 'score_test'].values[0],
-    "Test F1 (Optimized)": leaderboard_s2_optimized.loc[leaderboard_s2_optimized['model'] == selected_best_model_s2, 'f1'].values[0],
+    "Test ROC-AUC": optimized_summary_s2["Test ROC-AUC"],
+    "Test PR-AUC": optimized_summary_s2["Test Average Precision"],
+    "Test F1 (Optimized)": optimized_summary_s2["F1-score"],
     "Optimized Threshold": best_threshold_s2,
-    "Calibration Note": "Uncalibrated model used; calibration did not improve on test set."
+    "Calibration Note": calibration_note_s2
 })
 ```
 
-Changing the evaluation metric improved model selection, but the training process itself still treats all samples equally. Next, we explicitly tell the model that fraud cases matter more by assigning higher weights to the minority class.
+```{python}
+#| label: lab04-s1-s2-transition-note
+
+transition_note_s2 = build_strategy_metric_comparison_text(
+    comparison_results,
+    left_strategy=strategy_name_1,
+    right_strategy=strategy_name_2,
+    metrics=["Test PR-AUC", "Test ROC-AUC", "Test F1 (Optimized)"],
+    left_label="the ignore-class-imbalance baseline",
+    right_label="the class-sensitive evaluation strategy",
+    metric_labels={
+        "Test PR-AUC": "Test PR-AUC",
+        "Test ROC-AUC": "Test ROC-AUC",
+        "Test F1 (Optimized)": "Test F1 at the optimized threshold"
+    },
+    better_when={
+        "Test PR-AUC": "higher",
+        "Test ROC-AUC": "higher",
+        "Test F1 (Optimized)": "higher"
+    },
+    context_name="the running comparison after the class-sensitive strategy"
+)
+display(Markdown(transition_note_s2))
+```
 
 ```{python}
 #| label: tbl-running-summary-s2
 #| tbl-cap: "Running comparison through the class-sensitive approach"
 
 append_running_metric_summary(
-    [
-        build_running_metric_row(
-            strategy_name_2,
-            "Uncalibrated",
-            y_tuning,
-            predict_positive_class_scores(ag_model_s2, X_tuning),
-            y_test,
-            predict_positive_class_scores(ag_model_s2, X_test),
-            best_threshold=best_threshold_s2
-        ),
-        build_running_metric_row(
-            strategy_name_2,
-            "Calibrated",
-            y_tuning,
-            predict_positive_class_scores(cal_model_s2, X_tuning),
-            y_test,
-            predict_positive_class_scores(cal_model_s2, X_test)
-        )
-    ]
+    [optimized_summary_s2],
+    running_metric_results=running_metric_results,
+    display_fn=display,
 )
 ```
 
@@ -1492,10 +1401,10 @@ append_running_metric_summary(
 
 1.  Specify sample weights for each observation in the training set by setting `sample_weight` to `"balance_weight"`.
 2.  Train multiple estimators on the original, imbalanced dataset.
-3.  Select the best model with the highest **average precision** on the test set.
-4.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.
-5.  Select the optimal decision threshold.
-6.  Evaluate the performance of the calibrated model and the optimal threshold on the test set.
+3.  Use the tuning leaderboard to keep the top three non-weighted-ensemble learners in view and select the best one under **average precision**.
+4.  Tune the decision threshold directly on the selected best model's tuning-set scores.
+5.  Evaluate the selected predictor and the optimized threshold on the test set.
+6.  After the threshold is fixed, inspect the shortlisted base models on one test-set calibration plot as a descriptive diagnostic.
 
 Setup AutoGluon parameters.
 
@@ -1543,16 +1452,26 @@ ag_model_s3_predictor = ag_model_s3.predictor
 
 ```
 
-Check the leaderboard.
+Check the top base models on the tuning leaderboard.
 
 ```{python}
 #| label: tbl-leaderboard-s3
-#| tbl-cap: "Model leaderboard - Cost-Sensitive Learning"
+#| tbl-cap: "Top non-ensemble models on the tuning leaderboard - Cost-Sensitive Learning"
 leaderboard_s3 = ag_model_s3_predictor.leaderboard(
     df_tuning_ft.to_pandas()
     , extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
-display(leaderboard_s3)
+
+top_base_models_s3 = select_top_non_ensemble_models(leaderboard_s3, n=3)
+leaderboard_s3_top = (
+    leaderboard_s3.loc[
+        leaderboard_s3['model'].isin(top_base_models_s3),
+        ['model', 'score_val', 'roc_auc', 'average_precision', 'f1']
+    ]
+    .rename(columns={'score_val': 'Validation Score'})
+    .reset_index(drop=True)
+)
+display(leaderboard_s3_top)
 ```
 
 Use the highest-ranked non-weighted-ensemble learner from the leaderboard for downstream inspection and threshold tuning.
@@ -1560,7 +1479,7 @@ Use the highest-ranked non-weighted-ensemble learner from the leaderboard for do
 ```{python}
 #| label: set-best-model-s3
 
-selected_best_model_s3 = select_best_non_ensemble_model(leaderboard_s3)
+selected_best_model_s3 = top_base_models_s3[0]
 
 ag_model_s3_predictor.set_model_best(selected_best_model_s3)
 
@@ -1583,135 +1502,126 @@ feature_importance_s3 = ag_model_s3_predictor.feature_importance(
 display(feature_importance_s3)
 ```
 
-Check probability calibration using the tuning set.
-
-```{python}
-#| label: fig-calibration-s3
-#| fig-cap: "Calibration curve on tuning set - Cost-Sensitive Learning"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-
-pre_cal_disp_s3 = CalibrationDisplay.from_estimator(
-        estimator = ag_model_s3,
-        X = X_tuning,
-        y = y_tuning,
-        n_bins = 20,
-        name = 'Pre-Calib Curve: Cost-Sensitive Strategy',
-    color = 'orange',
-    ax = ax
-    )
-
-ax.set_title("Calibration Plot (Tuning Set)")
-display(fig)
-plt.close(fig)
-```
-
-Fit a calibration model (isotonic regression) to the predicted probabilities from the tuning set. After fitting, we can no longer use the tuning set for calibration evaluation due to potential overfitting on the tuning set.
-
-```{python}
-#| label: lab04-fit-calibration-s3
-cal_model_s3 = CalibratedClassifierCV(
-    estimator = ag_model_s3,
-    method='isotonic',
-    cv="prefit" # Use the fitted model from ag_model
-)
-
-global_set_seed()
-
-cal_model_s3.fit(X = X_tuning,
-            y = y_tuning)
-```
-
-Since the isotonic regression model was fitted on the tuning set, we can no longer use the tuning set for calibration evaluation. We will use the test set for calibration evaluation.
-
-```{python}
-#| label: fig-calibration-s3-test
-#| fig-cap: "Calibration curve on test set - Cost-Sensitive Learning"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-
-for estimator, name, color in [(ag_model_s3, f'Uncalibrated: {selected_best_model_s3}', 'orange'),
-          (cal_model_s3, f'Calibrated: {selected_best_model_s3}', 'blue')]:
-
-  CalibrationDisplay.from_estimator(
-      estimator = estimator,
-      X = X_test,
-      y = y_test,
-      n_bins = 20,
-      name = name,
-      color = color,
-      ax = ax
-    )
-    
-ax.set_title("Calibration Plot (Test Set)")
-display(fig)
-plt.close(fig)
-```
-
-The uncalibrated selected model shows **better** calibration than the calibrated model. This is likely due to the isotonic regression model overfitting to the tuning set. We will use the uncalibrated model to set the optimal decision threshold.
-
-Evaluate the original decision threshold of 0.5 on the test set.
-
-```{python}
-#| label: tbl-evaluate-default-threshold-s3
-#| tbl-cap: "Test performance with default threshold (0.5) - Cost-Sensitive Learning"
-
-leaderboard_s3_default = ag_model_s3_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
-)
-
-display(leaderboard_s3_default)
-
-```
-
-Since the tuning set is no longer being used for probability calibration, we will use it to find the optimal decision threshold that maximizes the F1-score.
+Use the selected model's tuning-set scores to search directly for the F1-maximizing threshold before looking at any test-set diagnostics. Then compare the default and optimized thresholds on the test set.
 
 ```{python}
 #| label: threshold-tuning-s3
 
-best_threshold_s3 = (ag_model_s3_predictor
-                .calibrate_decision_threshold(
-                data = df_tuning_ft.to_pandas(),
-                metric = 'f1',
-                decision_thresholds = 200)
-                )
-
-ag_model_s3_predictor.set_decision_threshold(best_threshold_s3)
-
-ag_model_s3_predictor.save()  # Save the predictor with the new threshold
-```
-
-Use the test set to evaluate the effectiveness of the decision threshold.
-
-```{python}
-#| label: tbl-evaluate-threshold-s3
-#| tbl-cap: "Test performance with optimized threshold - Cost-Sensitive Learning"
-
-leaderboard_s3_optimized = ag_model_s3_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
+selected_best_model_tuning_scores_s3 = predict_positive_class_scores(
+    ag_model_s3_predictor,
+    X_tuning,
+    model_name=selected_best_model_s3,
 )
 
-display(leaderboard_s3_optimized)
+best_threshold_s3 = find_best_threshold(
+    y_true=y_tuning,
+    y_score=selected_best_model_tuning_scores_s3,
+)
+
+selected_best_model_test_scores_s3 = predict_positive_class_scores(
+    ag_model_s3_predictor,
+    X_test,
+    model_name=selected_best_model_s3,
+)
+
+default_summary_s3 = build_running_metric_row(
+    strategy_name_3,
+    selected_best_model_s3,
+    y_tuning,
+    selected_best_model_tuning_scores_s3,
+    y_test,
+    selected_best_model_test_scores_s3,
+    best_threshold=0.5,
+)
+optimized_summary_s3 = build_running_metric_row(
+    strategy_name_3,
+    selected_best_model_s3,
+    y_tuning,
+    selected_best_model_tuning_scores_s3,
+    y_test,
+    selected_best_model_test_scores_s3,
+    best_threshold=best_threshold_s3,
+)
 ```
 
-Tuning the decision threshold does not appear to substantially improve the F1-score on the test set. The default threshold of 0.5 yields a similar F1-score.
+```{python}
+#| label: tbl-threshold-summary-s3
+#| tbl-cap: "Threshold summary on the test set - Cost-Sensitive Learning"
+
+threshold_summary_s3 = pd.DataFrame([
+    {
+        "Threshold Setting": "default",
+        "Threshold": 0.5,
+        "Precision": default_summary_s3["precision"],
+        "Recall": default_summary_s3["recall"],
+        "F1-score": default_summary_s3["F1-score"],
+    },
+    {
+        "Threshold Setting": "optimized",
+        "Threshold": best_threshold_s3,
+        "Precision": optimized_summary_s3["precision"],
+        "Recall": optimized_summary_s3["recall"],
+        "F1-score": optimized_summary_s3["F1-score"],
+    },
+]).round(4)
+display(threshold_summary_s3)
+
+threshold_note_s3 = build_threshold_comparison_text(
+    default_metric=default_summary_s3["F1-score"],
+    optimized_metric=optimized_summary_s3["F1-score"],
+    model_label=selected_best_model_s3,
+    dataset_name="test set",
+    metric_label="F1-score",
+    optimized_threshold=best_threshold_s3,
+)
+display(Markdown(threshold_note_s3))
+```
+
+Now that the threshold is fixed from tuning-set scores, inspect the top three uncalibrated base models on the test set. This keeps the comparison short and treats calibration as a held-out descriptive check rather than an input to model or threshold selection.
+
+```{python}
+#| label: fig-calibration-s3-test
+#| fig-cap: "Test-set calibration curves for the top base models - Cost-Sensitive Learning"
+
+named_test_scores_s3 = [
+    (
+        model_name,
+        predict_positive_class_scores(
+            ag_model_s3_predictor,
+            X_test,
+            model_name=model_name,
+        ),
+    )
+    for model_name in top_base_models_s3
+]
+
+calibration_plot_s3 = plot_named_calibration_curves(
+    y_true=y_test,
+    named_scores=named_test_scores_s3,
+    n_bins=20,
+    title="Calibration Plot (Test Set)",
+)
+display(calibration_plot_s3["figure"])
+plt.close(calibration_plot_s3["figure"])
+
+calibration_note_s3 = (
+    "The test-set calibration plot compares the top uncalibrated base models from the tuning leaderboard: "
+    + ", ".join(top_base_models_s3)
+    + f". The operating threshold for {selected_best_model_s3} was already chosen from its tuning-set scores before this held-out calibration check."
+)
+display(Markdown(calibration_note_s3))
+```
 
 ```{python}
 #| label: append-results-s3
 
 comparison_results.append({
     "Strategy": strategy_name_3,
-    "Test ROC-AUC": leaderboard_s3_optimized.loc[leaderboard_s3_optimized['model'] == selected_best_model_s3, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s3_optimized.columns else None,
-    "Test PR-AUC": leaderboard_s3_optimized.loc[leaderboard_s3_optimized['model'] == selected_best_model_s3, 'score_test'].values[0],
-    "Test F1 (Optimized)": leaderboard_s3_optimized.loc[leaderboard_s3_optimized['model'] == selected_best_model_s3, 'f1'].values[0],
+    "Test ROC-AUC": optimized_summary_s3["Test ROC-AUC"],
+    "Test PR-AUC": optimized_summary_s3["Test Average Precision"],
+    "Test F1 (Optimized)": optimized_summary_s3["F1-score"],
     "Optimized Threshold": best_threshold_s3,
-    "Calibration Note": "Uncalibrated model used; calibration did not improve on test set."
+    "Calibration Note": calibration_note_s3
 })
 ```
 
@@ -1722,25 +1632,9 @@ So far we've kept the training data unchanged and adjusted either the evaluation
 #| tbl-cap: "Running comparison through the cost-sensitive approach"
 
 append_running_metric_summary(
-    [
-        build_running_metric_row(
-            strategy_name_3,
-            "Uncalibrated",
-            y_tuning,
-            predict_positive_class_scores(ag_model_s3, X_tuning),
-            y_test,
-            predict_positive_class_scores(ag_model_s3, X_test),
-            best_threshold=best_threshold_s3
-        ),
-        build_running_metric_row(
-            strategy_name_3,
-            "Calibrated",
-            y_tuning,
-            predict_positive_class_scores(cal_model_s3, X_tuning),
-            y_test,
-            predict_positive_class_scores(cal_model_s3, X_test)
-        )
-    ]
+    [optimized_summary_s3],
+    running_metric_results=running_metric_results,
+    display_fn=display,
 )
 ```
 
@@ -1786,14 +1680,9 @@ A practical compromise is to reduce the imbalance without pretending fraud and n
 -   **SMOTE (Synthetic Minority Over-sampling Technique):** Creates synthetic samples for the minority class by interpolating between actual minority instances. This can help to create a more diverse set of minority examples than simple oversampling.
 -   **Hybrid Methods:** Combine oversampling and undersampling. For example, first apply SMOTE to generate synthetic samples for the minority class, then apply random undersampling to the majority class.
 
-**Process:**
+**Shared workflow:**
 
-1.  Use RUS, ROS, SMOTE, or hybrid to create a less extreme training set. For RUS and ROS, ratios such as 5:1, 10:1, or 20:1 non-events to events are often more defensible than a fully balanced 1:1 sample.
-2.  Train multiple estimators on the resampled training set.
-3.  Select the best model with the highest **average precision** on the test set (which is imbalanced).
-4.  Check for proper probability calibration. Calibrate the predicted probabilities if needed.
-5.  Select the optimal decision threshold.
-6.  Evaluate the performance of the calibrated model and the optimal threshold on the test set (which is imbalanced).
+Each resampling strategy below changes only the training data. The repeated workflow then fits AutoGluon on the resampled sample, keeps the top three non-ensemble base models from the tuning leaderboard, uses `top_base_models_sX[0]` to choose an F1-maximizing threshold from `X_tuning` and `y_tuning`, compares default and optimized thresholds on the test set, and ends with one held-out test-set calibration plot for the top base models only.
 
 ### Random Undersampling (RUS)
 
@@ -1847,6 +1736,8 @@ ag_wrapper_s4a = AutoGluonSklearnWrapper(
 )
 ```
 
+Fit the model using AutoGluon.
+
 ```{python}
 #| label: fit-autogluon-rus
 
@@ -1854,30 +1745,50 @@ ag_model_s4a = ag_wrapper_s4a.fit(X_train_rus, y_train_rus)
 ag_model_s4a.predictor.save()
 ```
 
+Access the AutoGluon predictor object.
+
 ```{python}
 #| label: access-predictor-rus
 
 ag_model_s4a_predictor = ag_model_s4a.predictor
 ```
 
+Check the top base models on the tuning leaderboard.
+
 ```{python}
 #| label: tbl-leaderboard-rus
-#| tbl-cap: "Model leaderboard - Random Undersampling"
+#| tbl-cap: "Top non-ensemble models on the tuning leaderboard - Random Undersampling"
 
 leaderboard_s4a = ag_model_s4a_predictor.leaderboard(
-    df_tuning_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'average_precision', 'f1']
+    df_tuning_ft.to_pandas(),
+    extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
-display(leaderboard_s4a)
+
+top_base_models_s4a = select_top_non_ensemble_models(leaderboard_s4a, n=3)
+leaderboard_s4a_top = (
+    leaderboard_s4a.loc[
+        leaderboard_s4a['model'].isin(top_base_models_s4a),
+        ['model', 'score_val', 'roc_auc', 'average_precision', 'f1']
+    ]
+    .rename(columns={'score_val': 'Validation Score'})
+    .reset_index(drop=True)
+)
+display(leaderboard_s4a_top)
 ```
+
+Use the highest-ranked non-weighted-ensemble learner from the leaderboard for downstream inspection and threshold tuning.
 
 ```{python}
 #| label: set-best-model-rus
 
-selected_best_model_s4a = select_best_non_ensemble_model(leaderboard_s4a)
+selected_best_model_s4a = top_base_models_s4a[0]
+
 ag_model_s4a_predictor.set_model_best(selected_best_model_s4a)
+
 ag_model_s4a.predictor.save()
 ```
+
+Check feature importance.
 
 ```{python}
 #| label: tbl-feature-importance-rus
@@ -1891,96 +1802,114 @@ feature_importance_s4a = ag_model_s4a_predictor.feature_importance(
 display(feature_importance_s4a)
 ```
 
-```{python}
-#| label: fig-calibration-rus
-#| fig-cap: "Calibration curve on tuning set - Random Undersampling"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-
-pre_cal_disp_s4a = CalibrationDisplay.from_estimator(
-        estimator = ag_model_s4a,
-        X = X_tuning,
-        y = y_tuning,
-        n_bins = 20,
-        name = 'Pre-Calib Curve: RUS Strategy',
-    color = 'orange',
-    ax = ax
-    )
-ax.set_title("Calibration Plot (Tuning Set) - RUS")
-display(fig)
-plt.close(fig)
-```
-
-```{python}
-#| label: fit-calibration-rus
-
-cal_model_s4a = CalibratedClassifierCV(
-    estimator = ag_model_s4a,
-    method='isotonic',
-    cv="prefit"
-)
-global_set_seed()
-cal_model_s4a.fit(X = X_tuning, y = y_tuning)
-```
-
-```{python}
-#| label: fig-calibration-rus-test
-#| fig-cap: "Calibration curve on test set - Random Undersampling"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-for estimator, name, color in [(ag_model_s4a, f'Uncalibrated: {selected_best_model_s4a}', 'orange'),
-          (cal_model_s4a, f'Calibrated: {selected_best_model_s4a}', 'blue')]:
-  CalibrationDisplay.from_estimator(
-      estimator = estimator,
-      X = X_test,
-      y = y_test,
-      n_bins = 20,
-      name = name,
-      color = color,
-      ax = ax
-    )
-ax.set_title("Calibration Plot (Test Set) - RUS")
-display(fig)
-plt.close(fig)
-```
-
-```{python}
-#| label: tbl-evaluate-default-threshold-rus
-#| tbl-cap: "Test performance with default threshold (0.5) - Random Undersampling"
-
-leaderboard_s4a_default = ag_model_s4a_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
-)
-display(leaderboard_s4a_default)
-```
+Use the selected model's tuning-set scores to search directly for the F1-maximizing threshold before looking at any test-set diagnostics. Then compare the default and optimized thresholds on the test set.
 
 ```{python}
 #| label: threshold-tuning-rus
 
-best_threshold_s4a = (ag_model_s4a_predictor
-                .calibrate_decision_threshold(
-                data = df_tuning_ft.to_pandas(),
-                metric = 'f1',
-                decision_thresholds = 200)
-                )
-ag_model_s4a_predictor.set_decision_threshold(best_threshold_s4a)
-ag_model_s4a_predictor.save()
+selected_best_model_tuning_scores_s4a = predict_positive_class_scores(
+    ag_model_s4a_predictor,
+    X_tuning,
+    model_name=selected_best_model_s4a,
+)
+
+best_threshold_s4a = find_best_threshold(
+    y_true=y_tuning,
+    y_score=selected_best_model_tuning_scores_s4a,
+)
+
+selected_best_model_test_scores_s4a = predict_positive_class_scores(
+    ag_model_s4a_predictor,
+    X_test,
+    model_name=selected_best_model_s4a,
+)
+
+default_summary_s4a = build_running_metric_row(
+    strategy_name_4a,
+    selected_best_model_s4a,
+    y_tuning,
+    selected_best_model_tuning_scores_s4a,
+    y_test,
+    selected_best_model_test_scores_s4a,
+    best_threshold=0.5,
+)
+optimized_summary_s4a = build_running_metric_row(
+    strategy_name_4a,
+    selected_best_model_s4a,
+    y_tuning,
+    selected_best_model_tuning_scores_s4a,
+    y_test,
+    selected_best_model_test_scores_s4a,
+    best_threshold=best_threshold_s4a,
+)
 ```
 
 ```{python}
-#| label: tbl-evaluate-threshold-rus
-#| tbl-cap: "Test performance with optimized threshold - Random Undersampling"
+#| label: tbl-threshold-summary-rus
+#| tbl-cap: "Threshold summary on the test set - Random Undersampling"
 
-leaderboard_s4a_optimized = ag_model_s4a_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
+threshold_summary_s4a = pd.DataFrame([
+    {
+        "Threshold Setting": "default",
+        "Threshold": 0.5,
+        "Precision": default_summary_s4a["precision"],
+        "Recall": default_summary_s4a["recall"],
+        "F1-score": default_summary_s4a["F1-score"],
+    },
+    {
+        "Threshold Setting": "optimized",
+        "Threshold": best_threshold_s4a,
+        "Precision": optimized_summary_s4a["precision"],
+        "Recall": optimized_summary_s4a["recall"],
+        "F1-score": optimized_summary_s4a["F1-score"],
+    },
+]).round(4)
+display(threshold_summary_s4a)
+
+threshold_note_s4a = build_threshold_comparison_text(
+    default_metric=default_summary_s4a["F1-score"],
+    optimized_metric=optimized_summary_s4a["F1-score"],
+    model_label=selected_best_model_s4a,
+    dataset_name="test set",
+    metric_label="F1-score",
+    optimized_threshold=best_threshold_s4a,
 )
-display(leaderboard_s4a_optimized)
+display(Markdown(threshold_note_s4a))
+```
+
+Now inspect the top three uncalibrated base models on the test set. This keeps calibration as a held-out descriptive check rather than an input to model or threshold selection.
+
+```{python}
+#| label: fig-calibration-rus-test
+#| fig-cap: "Test-set calibration curves for the top base models - Random Undersampling"
+
+named_test_scores_s4a = [
+    (
+        model_name,
+        predict_positive_class_scores(
+            ag_model_s4a_predictor,
+            X_test,
+            model_name=model_name,
+        ),
+    )
+    for model_name in top_base_models_s4a
+]
+
+calibration_plot_s4a = plot_named_calibration_curves(
+    y_true=y_test,
+    named_scores=named_test_scores_s4a,
+    n_bins=20,
+    title="Calibration Plot (Test Set)",
+)
+display(calibration_plot_s4a["figure"])
+plt.close(calibration_plot_s4a["figure"])
+
+calibration_note_s4a = (
+    "The test-set calibration plot compares the top uncalibrated base models from the tuning leaderboard: "
+    + ", ".join(top_base_models_s4a)
+    + f". The operating threshold for {selected_best_model_s4a} was already chosen from its tuning-set scores before this held-out calibration check."
+)
+display(Markdown(calibration_note_s4a))
 ```
 
 ```{python}
@@ -1988,11 +1917,11 @@ display(leaderboard_s4a_optimized)
 
 comparison_results.append({
     "Strategy": strategy_name_4a,
-    "Test ROC-AUC": leaderboard_s4a_optimized.loc[leaderboard_s4a_optimized['model'] == selected_best_model_s4a, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s4a_optimized.columns else None,
-    "Test PR-AUC": leaderboard_s4a_optimized.loc[leaderboard_s4a_optimized['model'] == selected_best_model_s4a, 'score_test'].values[0],
-    "Test F1 (Optimized)": leaderboard_s4a_optimized.loc[leaderboard_s4a_optimized['model'] == selected_best_model_s4a, 'f1'].values[0],
+    "Test ROC-AUC": optimized_summary_s4a["Test ROC-AUC"],
+    "Test PR-AUC": optimized_summary_s4a["Test Average Precision"],
+    "Test F1 (Optimized)": optimized_summary_s4a["F1-score"],
     "Optimized Threshold": best_threshold_s4a,
-    "Calibration Note": "Uncalibrated model used; calibration did not improve on test set."
+    "Calibration Note": calibration_note_s4a
 })
 ```
 
@@ -2001,25 +1930,9 @@ comparison_results.append({
 #| tbl-cap: "Running comparison through random undersampling"
 
 append_running_metric_summary(
-    [
-        build_running_metric_row(
-            strategy_name_4a,
-            "Uncalibrated",
-            y_tuning,
-            predict_positive_class_scores(ag_model_s4a, X_tuning),
-            y_test,
-            predict_positive_class_scores(ag_model_s4a, X_test),
-            best_threshold=best_threshold_s4a
-        ),
-        build_running_metric_row(
-            strategy_name_4a,
-            "Calibrated",
-            y_tuning,
-            predict_positive_class_scores(cal_model_s4a, X_tuning),
-            y_test,
-            predict_positive_class_scores(cal_model_s4a, X_test)
-        )
-    ]
+    [optimized_summary_s4a],
+    running_metric_results=running_metric_results,
+    display_fn=display,
 )
 ```
 
@@ -2075,6 +1988,8 @@ ag_wrapper_s4b = AutoGluonSklearnWrapper(
 )
 ```
 
+Fit the model using AutoGluon.
+
 ```{python}
 #| label: fit-autogluon-ros
 
@@ -2082,30 +1997,50 @@ ag_model_s4b = ag_wrapper_s4b.fit(X_train_ros, y_train_ros)
 ag_model_s4b.predictor.save()
 ```
 
+Access the AutoGluon predictor object.
+
 ```{python}
 #| label: access-predictor-ros
 
 ag_model_s4b_predictor = ag_model_s4b.predictor
 ```
 
+Check the top base models on the tuning leaderboard.
+
 ```{python}
 #| label: tbl-leaderboard-ros
-#| tbl-cap: "Model leaderboard - Random Oversampling"
+#| tbl-cap: "Top non-ensemble models on the tuning leaderboard - Random Oversampling"
 
 leaderboard_s4b = ag_model_s4b_predictor.leaderboard(
-    df_tuning_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'average_precision', 'f1']
+    df_tuning_ft.to_pandas(),
+    extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
-display(leaderboard_s4b)
+
+top_base_models_s4b = select_top_non_ensemble_models(leaderboard_s4b, n=3)
+leaderboard_s4b_top = (
+    leaderboard_s4b.loc[
+        leaderboard_s4b['model'].isin(top_base_models_s4b),
+        ['model', 'score_val', 'roc_auc', 'average_precision', 'f1']
+    ]
+    .rename(columns={'score_val': 'Validation Score'})
+    .reset_index(drop=True)
+)
+display(leaderboard_s4b_top)
 ```
+
+Use the highest-ranked non-weighted-ensemble learner from the leaderboard for downstream inspection and threshold tuning.
 
 ```{python}
 #| label: set-best-model-ros
 
-selected_best_model_s4b = select_best_non_ensemble_model(leaderboard_s4b)
+selected_best_model_s4b = top_base_models_s4b[0]
+
 ag_model_s4b_predictor.set_model_best(selected_best_model_s4b)
+
 ag_model_s4b.predictor.save()
 ```
+
+Check feature importance.
 
 ```{python}
 #| label: tbl-feature-importance-ros
@@ -2119,96 +2054,114 @@ feature_importance_s4b = ag_model_s4b_predictor.feature_importance(
 display(feature_importance_s4b)
 ```
 
-```{python}
-#| label: fig-calibration-ros
-#| fig-cap: "Calibration curve on tuning set - Random Oversampling"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-
-pre_cal_disp_s4b = CalibrationDisplay.from_estimator(
-        estimator = ag_model_s4b,
-        X = X_tuning,
-        y = y_tuning,
-        n_bins = 20,
-        name = 'Pre-Calib Curve: ROS Strategy',
-    color = 'orange',
-    ax = ax
-    )
-ax.set_title("Calibration Plot (Tuning Set) - ROS")
-display(fig)
-plt.close(fig)
-```
-
-```{python}
-#| label: fit-calibration-ros
-
-cal_model_s4b = CalibratedClassifierCV(
-    estimator = ag_model_s4b,
-    method='isotonic',
-    cv="prefit"
-)
-global_set_seed()
-cal_model_s4b.fit(X = X_tuning, y = y_tuning)
-```
-
-```{python}
-#| label: fig-calibration-ros-test
-#| fig-cap: "Calibration curve on test set - Random Oversampling"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-for estimator, name, color in [(ag_model_s4b, f'Uncalibrated: {selected_best_model_s4b}', 'orange'),
-          (cal_model_s4b, f'Calibrated: {selected_best_model_s4b}', 'blue')]:
-  CalibrationDisplay.from_estimator(
-      estimator = estimator,
-      X = X_test,
-      y = y_test,
-      n_bins = 20,
-      name = name,
-      color = color,
-      ax = ax
-    )
-ax.set_title("Calibration Plot (Test Set) - ROS")
-display(fig)
-plt.close(fig)
-```
-
-```{python}
-#| label: tbl-evaluate-default-threshold-ros
-#| tbl-cap: "Test performance with default threshold (0.5) - Random Oversampling"
-
-leaderboard_s4b_default = ag_model_s4b_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
-)
-display(leaderboard_s4b_default)
-```
+Use the selected model's tuning-set scores to search directly for the F1-maximizing threshold before looking at any test-set diagnostics. Then compare the default and optimized thresholds on the test set.
 
 ```{python}
 #| label: threshold-tuning-ros
 
-best_threshold_s4b = (ag_model_s4b_predictor
-                .calibrate_decision_threshold(
-                data = df_tuning_ft.to_pandas(),
-                metric = 'f1',
-                decision_thresholds = 200)
-                )
-ag_model_s4b_predictor.set_decision_threshold(best_threshold_s4b)
-ag_model_s4b_predictor.save()
+selected_best_model_tuning_scores_s4b = predict_positive_class_scores(
+    ag_model_s4b_predictor,
+    X_tuning,
+    model_name=selected_best_model_s4b,
+)
+
+best_threshold_s4b = find_best_threshold(
+    y_true=y_tuning,
+    y_score=selected_best_model_tuning_scores_s4b,
+)
+
+selected_best_model_test_scores_s4b = predict_positive_class_scores(
+    ag_model_s4b_predictor,
+    X_test,
+    model_name=selected_best_model_s4b,
+)
+
+default_summary_s4b = build_running_metric_row(
+    strategy_name_4b,
+    selected_best_model_s4b,
+    y_tuning,
+    selected_best_model_tuning_scores_s4b,
+    y_test,
+    selected_best_model_test_scores_s4b,
+    best_threshold=0.5,
+)
+optimized_summary_s4b = build_running_metric_row(
+    strategy_name_4b,
+    selected_best_model_s4b,
+    y_tuning,
+    selected_best_model_tuning_scores_s4b,
+    y_test,
+    selected_best_model_test_scores_s4b,
+    best_threshold=best_threshold_s4b,
+)
 ```
 
 ```{python}
-#| label: tbl-evaluate-threshold-ros
-#| tbl-cap: "Test performance with optimized threshold - Random Oversampling"
+#| label: tbl-threshold-summary-ros
+#| tbl-cap: "Threshold summary on the test set - Random Oversampling"
 
-leaderboard_s4b_optimized = ag_model_s4b_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
+threshold_summary_s4b = pd.DataFrame([
+    {
+        "Threshold Setting": "default",
+        "Threshold": 0.5,
+        "Precision": default_summary_s4b["precision"],
+        "Recall": default_summary_s4b["recall"],
+        "F1-score": default_summary_s4b["F1-score"],
+    },
+    {
+        "Threshold Setting": "optimized",
+        "Threshold": best_threshold_s4b,
+        "Precision": optimized_summary_s4b["precision"],
+        "Recall": optimized_summary_s4b["recall"],
+        "F1-score": optimized_summary_s4b["F1-score"],
+    },
+]).round(4)
+display(threshold_summary_s4b)
+
+threshold_note_s4b = build_threshold_comparison_text(
+    default_metric=default_summary_s4b["F1-score"],
+    optimized_metric=optimized_summary_s4b["F1-score"],
+    model_label=selected_best_model_s4b,
+    dataset_name="test set",
+    metric_label="F1-score",
+    optimized_threshold=best_threshold_s4b,
 )
-display(leaderboard_s4b_optimized)
+display(Markdown(threshold_note_s4b))
+```
+
+Now inspect the top three uncalibrated base models on the test set. This keeps calibration as a held-out descriptive check rather than an input to model or threshold selection.
+
+```{python}
+#| label: fig-calibration-ros-test
+#| fig-cap: "Test-set calibration curves for the top base models - Random Oversampling"
+
+named_test_scores_s4b = [
+    (
+        model_name,
+        predict_positive_class_scores(
+            ag_model_s4b_predictor,
+            X_test,
+            model_name=model_name,
+        ),
+    )
+    for model_name in top_base_models_s4b
+]
+
+calibration_plot_s4b = plot_named_calibration_curves(
+    y_true=y_test,
+    named_scores=named_test_scores_s4b,
+    n_bins=20,
+    title="Calibration Plot (Test Set)",
+)
+display(calibration_plot_s4b["figure"])
+plt.close(calibration_plot_s4b["figure"])
+
+calibration_note_s4b = (
+    "The test-set calibration plot compares the top uncalibrated base models from the tuning leaderboard: "
+    + ", ".join(top_base_models_s4b)
+    + f". The operating threshold for {selected_best_model_s4b} was already chosen from its tuning-set scores before this held-out calibration check."
+)
+display(Markdown(calibration_note_s4b))
 ```
 
 ```{python}
@@ -2216,11 +2169,11 @@ display(leaderboard_s4b_optimized)
 
 comparison_results.append({
     "Strategy": strategy_name_4b,
-    "Test ROC-AUC": leaderboard_s4b_optimized.loc[leaderboard_s4b_optimized['model'] == selected_best_model_s4b, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s4b_optimized.columns else None,
-    "Test PR-AUC": leaderboard_s4b_optimized.loc[leaderboard_s4b_optimized['model'] == selected_best_model_s4b, 'score_test'].values[0],
-    "Test F1 (Optimized)": leaderboard_s4b_optimized.loc[leaderboard_s4b_optimized['model'] == selected_best_model_s4b, 'f1'].values[0],
+    "Test ROC-AUC": optimized_summary_s4b["Test ROC-AUC"],
+    "Test PR-AUC": optimized_summary_s4b["Test Average Precision"],
+    "Test F1 (Optimized)": optimized_summary_s4b["F1-score"],
     "Optimized Threshold": best_threshold_s4b,
-    "Calibration Note": "Uncalibrated model used; calibration did not improve on test set."
+    "Calibration Note": calibration_note_s4b
 })
 ```
 
@@ -2229,45 +2182,30 @@ comparison_results.append({
 #| tbl-cap: "Running comparison through random oversampling"
 
 append_running_metric_summary(
-    [
-        build_running_metric_row(
-            strategy_name_4b,
-            "Uncalibrated",
-            y_tuning,
-            predict_positive_class_scores(ag_model_s4b, X_tuning),
-            y_test,
-            predict_positive_class_scores(ag_model_s4b, X_test),
-            best_threshold=best_threshold_s4b
-        ),
-        build_running_metric_row(
-            strategy_name_4b,
-            "Calibrated",
-            y_tuning,
-            predict_positive_class_scores(cal_model_s4b, X_tuning),
-            y_test,
-            predict_positive_class_scores(cal_model_s4b, X_test)
-        )
-    ]
+    [optimized_summary_s4b],
+    running_metric_results=running_metric_results,
+    display_fn=display,
 )
 ```
 
 ### SMOTE (Synthetic Minority Over-sampling Technique)
 
-Create synthetic samples for the minority class by interpolating between actual minority instances.
+SMOTE creates synthetic minority samples by interpolating between nearby minority instances. That can expand local fraud coverage without exact duplication, but if the minority class is too small the synthetic neighborhoods can become unstable.
 
 ```{python}
 #| label: resampling-smote-prep
 
-minority_class_count = y_train.value_counts().min()
-k_neighbors_smote = min(5, max(1, minority_class_count - 1))
-if minority_class_count <= 1:
+minority_class_count_smote = y_train.value_counts().min()
+k_neighbors_smote = min(5, max(1, minority_class_count_smote - 1))
+if minority_class_count_smote <= 1:
     print("Minority class count is too low for SMOTE. Using original data as fallback.")
     X_train_smote, y_train_smote = X_train.copy(), y_train.copy()
 else:
     smote = SMOTE(random_state=2025, k_neighbors=k_neighbors_smote)
     X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
-    print(f"SMOTE training data shape: {X_train_smote.shape}")
-    print(f"SMOTE target distribution:\n{y_train_smote.value_counts(normalize=True)}")
+
+print(f"SMOTE training data shape: {X_train_smote.shape}")
+print(f"SMOTE target distribution:\n{y_train_smote.value_counts(normalize=True)}")
 ```
 
 ```{python}
@@ -2296,6 +2234,8 @@ ag_wrapper_s4c = AutoGluonSklearnWrapper(
 )
 ```
 
+Fit the model using AutoGluon.
+
 ```{python}
 #| label: fit-autogluon-smote
 
@@ -2303,30 +2243,50 @@ ag_model_s4c = ag_wrapper_s4c.fit(X_train_smote, y_train_smote)
 ag_model_s4c.predictor.save()
 ```
 
+Access the AutoGluon predictor object.
+
 ```{python}
 #| label: access-predictor-smote
 
 ag_model_s4c_predictor = ag_model_s4c.predictor
 ```
 
+Check the top base models on the tuning leaderboard.
+
 ```{python}
 #| label: tbl-leaderboard-smote
-#| tbl-cap: "Model leaderboard - SMOTE"
+#| tbl-cap: "Top non-ensemble models on the tuning leaderboard - SMOTE"
 
 leaderboard_s4c = ag_model_s4c_predictor.leaderboard(
-    df_tuning_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'average_precision', 'f1']
+    df_tuning_ft.to_pandas(),
+    extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
-display(leaderboard_s4c)
+
+top_base_models_s4c = select_top_non_ensemble_models(leaderboard_s4c, n=3)
+leaderboard_s4c_top = (
+    leaderboard_s4c.loc[
+        leaderboard_s4c['model'].isin(top_base_models_s4c),
+        ['model', 'score_val', 'roc_auc', 'average_precision', 'f1']
+    ]
+    .rename(columns={'score_val': 'Validation Score'})
+    .reset_index(drop=True)
+)
+display(leaderboard_s4c_top)
 ```
+
+Use the highest-ranked non-weighted-ensemble learner from the leaderboard for downstream inspection and threshold tuning.
 
 ```{python}
 #| label: set-best-model-smote
 
-selected_best_model_s4c = select_best_non_ensemble_model(leaderboard_s4c)
+selected_best_model_s4c = top_base_models_s4c[0]
+
 ag_model_s4c_predictor.set_model_best(selected_best_model_s4c)
+
 ag_model_s4c.predictor.save()
 ```
+
+Check feature importance.
 
 ```{python}
 #| label: tbl-feature-importance-smote
@@ -2340,96 +2300,114 @@ feature_importance_s4c = ag_model_s4c_predictor.feature_importance(
 display(feature_importance_s4c)
 ```
 
-```{python}
-#| label: fig-calibration-smote
-#| fig-cap: "Calibration curve on tuning set - SMOTE"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-
-pre_cal_disp_s4c = CalibrationDisplay.from_estimator(
-        estimator = ag_model_s4c,
-        X = X_tuning,
-        y = y_tuning,
-        n_bins = 20,
-        name = 'Pre-Calib Curve: SMOTE Strategy',
-    color = 'orange',
-    ax = ax
-    )
-ax.set_title("Calibration Plot (Tuning Set) - SMOTE")
-display(fig)
-plt.close(fig)
-```
-
-```{python}
-#| label: fit-calibration-smote
-
-cal_model_s4c = CalibratedClassifierCV(
-    estimator = ag_model_s4c,
-    method='isotonic',
-    cv="prefit"
-)
-global_set_seed()
-cal_model_s4c.fit(X = X_tuning, y = y_tuning)
-```
-
-```{python}
-#| label: fig-calibration-smote-test
-#| fig-cap: "Calibration curve on test set - SMOTE"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-for estimator, name, color in [(ag_model_s4c, f'Uncalibrated: {selected_best_model_s4c}', 'orange'),
-          (cal_model_s4c, f'Calibrated: {selected_best_model_s4c}', 'blue')]:
-  CalibrationDisplay.from_estimator(
-      estimator = estimator,
-      X = X_test,
-      y = y_test,
-      n_bins = 20,
-      name = name,
-      color = color,
-      ax = ax
-    )
-ax.set_title("Calibration Plot (Test Set) - SMOTE")
-display(fig)
-plt.close(fig)
-```
-
-```{python}
-#| label: tbl-evaluate-default-threshold-smote
-#| tbl-cap: "Test performance with default threshold (0.5) - SMOTE"
-
-leaderboard_s4c_default = ag_model_s4c_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
-)
-display(leaderboard_s4c_default)
-```
+Use the selected model's tuning-set scores to search directly for the F1-maximizing threshold before looking at any test-set diagnostics. Then compare the default and optimized thresholds on the test set.
 
 ```{python}
 #| label: threshold-tuning-smote
 
-best_threshold_s4c = (ag_model_s4c_predictor
-                .calibrate_decision_threshold(
-                data = df_tuning_ft.to_pandas(),
-                metric = 'f1',
-                decision_thresholds = 200)
-                )
-ag_model_s4c_predictor.set_decision_threshold(best_threshold_s4c)
-ag_model_s4c_predictor.save()
+selected_best_model_tuning_scores_s4c = predict_positive_class_scores(
+    ag_model_s4c_predictor,
+    X_tuning,
+    model_name=selected_best_model_s4c,
+)
+
+best_threshold_s4c = find_best_threshold(
+    y_true=y_tuning,
+    y_score=selected_best_model_tuning_scores_s4c,
+)
+
+selected_best_model_test_scores_s4c = predict_positive_class_scores(
+    ag_model_s4c_predictor,
+    X_test,
+    model_name=selected_best_model_s4c,
+)
+
+default_summary_s4c = build_running_metric_row(
+    strategy_name_4c,
+    selected_best_model_s4c,
+    y_tuning,
+    selected_best_model_tuning_scores_s4c,
+    y_test,
+    selected_best_model_test_scores_s4c,
+    best_threshold=0.5,
+)
+optimized_summary_s4c = build_running_metric_row(
+    strategy_name_4c,
+    selected_best_model_s4c,
+    y_tuning,
+    selected_best_model_tuning_scores_s4c,
+    y_test,
+    selected_best_model_test_scores_s4c,
+    best_threshold=best_threshold_s4c,
+)
 ```
 
 ```{python}
-#| label: tbl-evaluate-threshold-smote
-#| tbl-cap: "Test performance with optimized threshold - SMOTE"
+#| label: tbl-threshold-summary-smote
+#| tbl-cap: "Threshold summary on the test set - SMOTE"
 
-leaderboard_s4c_optimized = ag_model_s4c_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
+threshold_summary_s4c = pd.DataFrame([
+    {
+        "Threshold Setting": "default",
+        "Threshold": 0.5,
+        "Precision": default_summary_s4c["precision"],
+        "Recall": default_summary_s4c["recall"],
+        "F1-score": default_summary_s4c["F1-score"],
+    },
+    {
+        "Threshold Setting": "optimized",
+        "Threshold": best_threshold_s4c,
+        "Precision": optimized_summary_s4c["precision"],
+        "Recall": optimized_summary_s4c["recall"],
+        "F1-score": optimized_summary_s4c["F1-score"],
+    },
+]).round(4)
+display(threshold_summary_s4c)
+
+threshold_note_s4c = build_threshold_comparison_text(
+    default_metric=default_summary_s4c["F1-score"],
+    optimized_metric=optimized_summary_s4c["F1-score"],
+    model_label=selected_best_model_s4c,
+    dataset_name="test set",
+    metric_label="F1-score",
+    optimized_threshold=best_threshold_s4c,
 )
-display(leaderboard_s4c_optimized)
+display(Markdown(threshold_note_s4c))
+```
+
+Now inspect the top three uncalibrated base models on the test set. This keeps calibration as a held-out descriptive check rather than an input to model or threshold selection.
+
+```{python}
+#| label: fig-calibration-smote-test
+#| fig-cap: "Test-set calibration curves for the top base models - SMOTE"
+
+named_test_scores_s4c = [
+    (
+        model_name,
+        predict_positive_class_scores(
+            ag_model_s4c_predictor,
+            X_test,
+            model_name=model_name,
+        ),
+    )
+    for model_name in top_base_models_s4c
+]
+
+calibration_plot_s4c = plot_named_calibration_curves(
+    y_true=y_test,
+    named_scores=named_test_scores_s4c,
+    n_bins=20,
+    title="Calibration Plot (Test Set)",
+)
+display(calibration_plot_s4c["figure"])
+plt.close(calibration_plot_s4c["figure"])
+
+calibration_note_s4c = (
+    "The test-set calibration plot compares the top uncalibrated base models from the tuning leaderboard: "
+    + ", ".join(top_base_models_s4c)
+    + f". The operating threshold for {selected_best_model_s4c} was already chosen from its tuning-set scores before this held-out calibration check."
+)
+display(Markdown(calibration_note_s4c))
 ```
 
 ```{python}
@@ -2437,11 +2415,11 @@ display(leaderboard_s4c_optimized)
 
 comparison_results.append({
     "Strategy": strategy_name_4c,
-    "Test ROC-AUC": leaderboard_s4c_optimized.loc[leaderboard_s4c_optimized['model'] == selected_best_model_s4c, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s4c_optimized.columns else None,
-    "Test PR-AUC": leaderboard_s4c_optimized.loc[leaderboard_s4c_optimized['model'] == selected_best_model_s4c, 'score_test'].values[0],
-    "Test F1 (Optimized)": leaderboard_s4c_optimized.loc[leaderboard_s4c_optimized['model'] == selected_best_model_s4c, 'f1'].values[0],
+    "Test ROC-AUC": optimized_summary_s4c["Test ROC-AUC"],
+    "Test PR-AUC": optimized_summary_s4c["Test Average Precision"],
+    "Test F1 (Optimized)": optimized_summary_s4c["F1-score"],
     "Optimized Threshold": best_threshold_s4c,
-    "Calibration Note": "Uncalibrated model used; calibration did not improve on test set."
+    "Calibration Note": calibration_note_s4c
 })
 ```
 
@@ -2450,49 +2428,32 @@ comparison_results.append({
 #| tbl-cap: "Running comparison through SMOTE"
 
 append_running_metric_summary(
-    [
-        build_running_metric_row(
-            strategy_name_4c,
-            "Uncalibrated",
-            y_tuning,
-            predict_positive_class_scores(ag_model_s4c, X_tuning),
-            y_test,
-            predict_positive_class_scores(ag_model_s4c, X_test),
-            best_threshold=best_threshold_s4c
-        ),
-        build_running_metric_row(
-            strategy_name_4c,
-            "Calibrated",
-            y_tuning,
-            predict_positive_class_scores(cal_model_s4c, X_tuning),
-            y_test,
-            predict_positive_class_scores(cal_model_s4c, X_test)
-        )
-    ]
+    [optimized_summary_s4c],
+    running_metric_results=running_metric_results,
+    display_fn=display,
 )
 ```
 
 ### Hybrid: SMOTE + RUS
 
-First apply SMOTE to generate synthetic minority samples, then apply random undersampling to the majority class.
+First apply SMOTE to generate synthetic minority samples, then apply random undersampling to the majority class. This aims to reduce the information loss from pure RUS without leaning as hard on a fully synthetic or fully balanced sample.
 
 ```{python}
 #| label: resampling-hybrid-prep
 
-minority_class_count = y_train.value_counts().min()
-if minority_class_count <= 1:
+minority_class_count_hybrid = y_train.value_counts().min()
+if minority_class_count_hybrid <= 1:
     print("Minority class count is too low for SMOTE. Using original data as fallback.")
     X_train_hybrid, y_train_hybrid = X_train.copy(), y_train.copy()
 else:
-    k_neighbors_hybrid = min(5, max(1, minority_class_count - 1))
-    # Use partial balancing: SMOTE to 0.5 (50% of majority), then RUS to 0.8 (80% majority-to-minority ratio).
-    # This avoids the extreme overfitting of full SMOTE and the information loss of full RUS.
+    k_neighbors_hybrid = min(5, max(1, minority_class_count_hybrid - 1))
     smote_hybrid = SMOTE(random_state=2025, k_neighbors=k_neighbors_hybrid, sampling_strategy=0.5)
     X_train_smote_temp, y_train_smote_temp = smote_hybrid.fit_resample(X_train, y_train)
     rus_hybrid = RandomUnderSampler(random_state=2025, sampling_strategy=0.8)
     X_train_hybrid, y_train_hybrid = rus_hybrid.fit_resample(X_train_smote_temp, y_train_smote_temp)
-    print(f"Hybrid training data shape: {X_train_hybrid.shape}")
-    print(f"Hybrid target distribution:\n{y_train_hybrid.value_counts(normalize=True)}")
+
+print(f"Hybrid training data shape: {X_train_hybrid.shape}")
+print(f"Hybrid target distribution:\n{y_train_hybrid.value_counts(normalize=True)}")
 ```
 
 ```{python}
@@ -2521,6 +2482,8 @@ ag_wrapper_s4d = AutoGluonSklearnWrapper(
 )
 ```
 
+Fit the model using AutoGluon.
+
 ```{python}
 #| label: fit-autogluon-hybrid
 
@@ -2528,30 +2491,50 @@ ag_model_s4d = ag_wrapper_s4d.fit(X_train_hybrid, y_train_hybrid)
 ag_model_s4d.predictor.save()
 ```
 
+Access the AutoGluon predictor object.
+
 ```{python}
 #| label: access-predictor-hybrid
 
 ag_model_s4d_predictor = ag_model_s4d.predictor
 ```
 
+Check the top base models on the tuning leaderboard.
+
 ```{python}
 #| label: tbl-leaderboard-hybrid
-#| tbl-cap: "Model leaderboard - Hybrid (SMOTE+RUS)"
+#| tbl-cap: "Top non-ensemble models on the tuning leaderboard - Hybrid (SMOTE+RUS)"
 
 leaderboard_s4d = ag_model_s4d_predictor.leaderboard(
-    df_tuning_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'average_precision', 'f1']
+    df_tuning_ft.to_pandas(),
+    extra_metrics=['roc_auc', 'average_precision', 'f1']
 )
-display(leaderboard_s4d)
+
+top_base_models_s4d = select_top_non_ensemble_models(leaderboard_s4d, n=3)
+leaderboard_s4d_top = (
+    leaderboard_s4d.loc[
+        leaderboard_s4d['model'].isin(top_base_models_s4d),
+        ['model', 'score_val', 'roc_auc', 'average_precision', 'f1']
+    ]
+    .rename(columns={'score_val': 'Validation Score'})
+    .reset_index(drop=True)
+)
+display(leaderboard_s4d_top)
 ```
+
+Use the highest-ranked non-weighted-ensemble learner from the leaderboard for downstream inspection and threshold tuning.
 
 ```{python}
 #| label: set-best-model-hybrid
 
-selected_best_model_s4d = select_best_non_ensemble_model(leaderboard_s4d)
+selected_best_model_s4d = top_base_models_s4d[0]
+
 ag_model_s4d_predictor.set_model_best(selected_best_model_s4d)
+
 ag_model_s4d.predictor.save()
 ```
+
+Check feature importance.
 
 ```{python}
 #| label: tbl-feature-importance-hybrid
@@ -2565,96 +2548,114 @@ feature_importance_s4d = ag_model_s4d_predictor.feature_importance(
 display(feature_importance_s4d)
 ```
 
-```{python}
-#| label: fig-calibration-hybrid
-#| fig-cap: "Calibration curve on tuning set - Hybrid (SMOTE+RUS)"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-
-pre_cal_disp_s4d = CalibrationDisplay.from_estimator(
-        estimator = ag_model_s4d,
-        X = X_tuning,
-        y = y_tuning,
-        n_bins = 20,
-        name = 'Pre-Calib Curve: Hybrid Strategy',
-    color = 'orange',
-    ax = ax
-    )
-ax.set_title("Calibration Plot (Tuning Set) - Hybrid")
-display(fig)
-plt.close(fig)
-```
-
-```{python}
-#| label: fit-calibration-hybrid
-
-cal_model_s4d = CalibratedClassifierCV(
-    estimator = ag_model_s4d,
-    method='isotonic',
-    cv="prefit"
-)
-global_set_seed()
-cal_model_s4d.fit(X = X_tuning, y = y_tuning)
-```
-
-```{python}
-#| label: fig-calibration-hybrid-test
-#| fig-cap: "Calibration curve on test set - Hybrid (SMOTE+RUS)"
-
-%matplotlib inline
-
-fig, ax = plt.subplots()
-for estimator, name, color in [(ag_model_s4d, f'Uncalibrated: {selected_best_model_s4d}', 'orange'),
-          (cal_model_s4d, f'Calibrated: {selected_best_model_s4d}', 'blue')]:
-  CalibrationDisplay.from_estimator(
-      estimator = estimator,
-      X = X_test,
-      y = y_test,
-      n_bins = 20,
-      name = name,
-      color = color,
-      ax = ax
-    )
-ax.set_title("Calibration Plot (Test Set) - Hybrid")
-display(fig)
-plt.close(fig)
-```
-
-```{python}
-#| label: tbl-evaluate-default-threshold-hybrid
-#| tbl-cap: "Test performance with default threshold (0.5) - Hybrid (SMOTE+RUS)"
-
-leaderboard_s4d_default = ag_model_s4d_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
-)
-display(leaderboard_s4d_default)
-```
+Use the selected model's tuning-set scores to search directly for the F1-maximizing threshold before looking at any test-set diagnostics. Then compare the default and optimized thresholds on the test set.
 
 ```{python}
 #| label: threshold-tuning-hybrid
 
-best_threshold_s4d = (ag_model_s4d_predictor
-                .calibrate_decision_threshold(
-                data = df_tuning_ft.to_pandas(),
-                metric = 'f1',
-                decision_thresholds = 200)
-                )
-ag_model_s4d_predictor.set_decision_threshold(best_threshold_s4d)
-ag_model_s4d_predictor.save()
+selected_best_model_tuning_scores_s4d = predict_positive_class_scores(
+    ag_model_s4d_predictor,
+    X_tuning,
+    model_name=selected_best_model_s4d,
+)
+
+best_threshold_s4d = find_best_threshold(
+    y_true=y_tuning,
+    y_score=selected_best_model_tuning_scores_s4d,
+)
+
+selected_best_model_test_scores_s4d = predict_positive_class_scores(
+    ag_model_s4d_predictor,
+    X_test,
+    model_name=selected_best_model_s4d,
+)
+
+default_summary_s4d = build_running_metric_row(
+    strategy_name_4d,
+    selected_best_model_s4d,
+    y_tuning,
+    selected_best_model_tuning_scores_s4d,
+    y_test,
+    selected_best_model_test_scores_s4d,
+    best_threshold=0.5,
+)
+optimized_summary_s4d = build_running_metric_row(
+    strategy_name_4d,
+    selected_best_model_s4d,
+    y_tuning,
+    selected_best_model_tuning_scores_s4d,
+    y_test,
+    selected_best_model_test_scores_s4d,
+    best_threshold=best_threshold_s4d,
+)
 ```
 
 ```{python}
-#| label: tbl-evaluate-threshold-hybrid
-#| tbl-cap: "Test performance with optimized threshold - Hybrid (SMOTE+RUS)"
+#| label: tbl-threshold-summary-hybrid
+#| tbl-cap: "Threshold summary on the test set - Hybrid (SMOTE+RUS)"
 
-leaderboard_s4d_optimized = ag_model_s4d_predictor.leaderboard(
-    df_test_ft.to_pandas()
-    , extra_metrics=['roc_auc', 'f1']
+threshold_summary_s4d = pd.DataFrame([
+    {
+        "Threshold Setting": "default",
+        "Threshold": 0.5,
+        "Precision": default_summary_s4d["precision"],
+        "Recall": default_summary_s4d["recall"],
+        "F1-score": default_summary_s4d["F1-score"],
+    },
+    {
+        "Threshold Setting": "optimized",
+        "Threshold": best_threshold_s4d,
+        "Precision": optimized_summary_s4d["precision"],
+        "Recall": optimized_summary_s4d["recall"],
+        "F1-score": optimized_summary_s4d["F1-score"],
+    },
+]).round(4)
+display(threshold_summary_s4d)
+
+threshold_note_s4d = build_threshold_comparison_text(
+    default_metric=default_summary_s4d["F1-score"],
+    optimized_metric=optimized_summary_s4d["F1-score"],
+    model_label=selected_best_model_s4d,
+    dataset_name="test set",
+    metric_label="F1-score",
+    optimized_threshold=best_threshold_s4d,
 )
-display(leaderboard_s4d_optimized)
+display(Markdown(threshold_note_s4d))
+```
+
+Now inspect the top three uncalibrated base models on the test set. This keeps calibration as a held-out descriptive check rather than an input to model or threshold selection.
+
+```{python}
+#| label: fig-calibration-hybrid-test
+#| fig-cap: "Test-set calibration curves for the top base models - Hybrid (SMOTE+RUS)"
+
+named_test_scores_s4d = [
+    (
+        model_name,
+        predict_positive_class_scores(
+            ag_model_s4d_predictor,
+            X_test,
+            model_name=model_name,
+        ),
+    )
+    for model_name in top_base_models_s4d
+]
+
+calibration_plot_s4d = plot_named_calibration_curves(
+    y_true=y_test,
+    named_scores=named_test_scores_s4d,
+    n_bins=20,
+    title="Calibration Plot (Test Set)",
+)
+display(calibration_plot_s4d["figure"])
+plt.close(calibration_plot_s4d["figure"])
+
+calibration_note_s4d = (
+    "The test-set calibration plot compares the top uncalibrated base models from the tuning leaderboard: "
+    + ", ".join(top_base_models_s4d)
+    + f". The operating threshold for {selected_best_model_s4d} was already chosen from its tuning-set scores before this held-out calibration check."
+)
+display(Markdown(calibration_note_s4d))
 ```
 
 ```{python}
@@ -2662,11 +2663,11 @@ display(leaderboard_s4d_optimized)
 
 comparison_results.append({
     "Strategy": strategy_name_4d,
-    "Test ROC-AUC": leaderboard_s4d_optimized.loc[leaderboard_s4d_optimized['model'] == selected_best_model_s4d, 'roc_auc'].values[0] if 'roc_auc' in leaderboard_s4d_optimized.columns else None,
-    "Test PR-AUC": leaderboard_s4d_optimized.loc[leaderboard_s4d_optimized['model'] == selected_best_model_s4d, 'score_test'].values[0],
-    "Test F1 (Optimized)": leaderboard_s4d_optimized.loc[leaderboard_s4d_optimized['model'] == selected_best_model_s4d, 'f1'].values[0],
+    "Test ROC-AUC": optimized_summary_s4d["Test ROC-AUC"],
+    "Test PR-AUC": optimized_summary_s4d["Test Average Precision"],
+    "Test F1 (Optimized)": optimized_summary_s4d["F1-score"],
     "Optimized Threshold": best_threshold_s4d,
-    "Calibration Note": "Uncalibrated model used; calibration did not improve on test set."
+    "Calibration Note": calibration_note_s4d
 })
 ```
 
@@ -2675,25 +2676,9 @@ comparison_results.append({
 #| tbl-cap: "Running comparison through SMOTE plus random undersampling"
 
 append_running_metric_summary(
-    [
-        build_running_metric_row(
-            strategy_name_4d,
-            "Uncalibrated",
-            y_tuning,
-            predict_positive_class_scores(ag_model_s4d, X_tuning),
-            y_test,
-            predict_positive_class_scores(ag_model_s4d, X_test),
-            best_threshold=best_threshold_s4d
-        ),
-        build_running_metric_row(
-            strategy_name_4d,
-            "Calibrated",
-            y_tuning,
-            predict_positive_class_scores(cal_model_s4d, X_tuning),
-            y_test,
-            predict_positive_class_scores(cal_model_s4d, X_test)
-        )
-    ]
+    [optimized_summary_s4d],
+    running_metric_results=running_metric_results,
+    display_fn=display,
 )
 ```
 
@@ -2740,7 +2725,7 @@ if comparison_results:
 
     model_registry = {}
     for var_name, strategy_key, display_name in [
-        ('ag_model_s1', "1. Do Nothing", "Strategy 1 (Do Nothing)"),
+        ('ag_model_s1', "1. Ignore Class Imbalance", "Strategy 1 (Ignore Class Imbalance)"),
         ('ag_model_s2', "2. Class Sensitive Evaluation", "Strategy 2 (Class-Sensitive)"),
         ('ag_model_s3', "3. Cost Sensitive Learning", "Strategy 3 (Cost-Sensitive)"),
         ('ag_model_s4a', "4a. RUS", "Strategy 4a (RUS)"),
@@ -3107,26 +3092,21 @@ display(pd.DataFrame({
 #| label: fig-logistic-rus-prior-correction
 #| fig-cap: "Calibration plot for logistic RUS prior correction on the test set"
 
-fig, ax = plt.subplots(figsize=(7, 6))
-CalibrationDisplay.from_predictions(
-    y_true=y_test,
-    y_prob=raw_sampled_probs,
+calibration_plot_logistic_rus = plot_named_calibration_curves(
+    y_test,
+    [
+        ("Raw sampled fit", raw_sampled_probs),
+        ("Prior-corrected fit", prior_corrected_probs),
+    ],
     n_bins=20,
-    name="Raw sampled fit",
-    color="orange",
-    ax=ax
+    title="Calibration Plot (Test Set) - Logistic RUS Prior Correction",
+    curve_kwargs={
+        "Raw sampled fit": {"color": "orange"},
+        "Prior-corrected fit": {"color": "blue"},
+    },
 )
-CalibrationDisplay.from_predictions(
-    y_true=y_test,
-    y_prob=prior_corrected_probs,
-    n_bins=20,
-    name="Prior-corrected fit",
-    color="blue",
-    ax=ax
-)
-ax.set_title("Calibration Plot (Test Set) - Logistic RUS Prior Correction")
-display(fig)
-plt.close(fig)
+display(calibration_plot_logistic_rus["figure"])
+plt.close(calibration_plot_logistic_rus["figure"])
 ```
 
 This correction fixes the prior shift induced by class-based sampling and maps the fitted model back to the original training-set prior. It is not the same as a nonparametric calibration step such as isotonic regression. If the deployment fraud rate differs from the original training-set fraud rate, replace `prior_original` with the desired deployment prior. The correction is exact only when resampling changes class frequencies without otherwise changing $P(X \mid Y)$. For SMOTE or feature-dependent sampling, treat the same intercept shift as an approximation and validate on untouched data.
@@ -3153,7 +3133,9 @@ append_running_metric_summary(
             y_test,
             prior_corrected_probs
         )
-    ]
+    ],
+    running_metric_results=running_metric_results,
+    display_fn=display,
 )
 ```
 
@@ -3233,26 +3215,21 @@ display(pd.DataFrame({
 #| label: fig-logistic-ros-prior-correction
 #| fig-cap: "Calibration plot for logistic ROS prior correction on the test set"
 
-fig, ax = plt.subplots(figsize=(7, 6))
-CalibrationDisplay.from_predictions(
-    y_true=y_test,
-    y_prob=raw_sampled_probs_ros,
+calibration_plot_logistic_ros = plot_named_calibration_curves(
+    y_test,
+    [
+        ("Raw sampled fit", raw_sampled_probs_ros),
+        ("Prior-corrected fit", prior_corrected_probs_ros),
+    ],
     n_bins=20,
-    name="Raw sampled fit",
-    color="orange",
-    ax=ax
+    title="Calibration Plot (Test Set) - Logistic ROS Prior Correction",
+    curve_kwargs={
+        "Raw sampled fit": {"color": "orange"},
+        "Prior-corrected fit": {"color": "blue"},
+    },
 )
-CalibrationDisplay.from_predictions(
-    y_true=y_test,
-    y_prob=prior_corrected_probs_ros,
-    n_bins=20,
-    name="Prior-corrected fit",
-    color="blue",
-    ax=ax
-)
-ax.set_title("Calibration Plot (Test Set) - Logistic ROS Prior Correction")
-display(fig)
-plt.close(fig)
+display(calibration_plot_logistic_ros["figure"])
+plt.close(calibration_plot_logistic_ros["figure"])
 ```
 
 As with RUS, this correction addresses the prior shift introduced by class-based oversampling. It is still a prior correction rather than a separate calibration model. Because ROS duplicates observed minority cases rather than synthesizing new feature vectors, the intercept shift is on firmer ground here than it is for SMOTE.
@@ -3279,7 +3256,9 @@ append_running_metric_summary(
             y_test,
             prior_corrected_probs_ros
         )
-    ]
+    ],
+    running_metric_results=running_metric_results,
+    display_fn=display,
 )
 ```
 
@@ -3291,7 +3270,8 @@ At this point the comparison is clean: we held the feature set fixed and changed
 
 Do not copy the discussion below verbatim into a submission. Use it as a guide for writing up what your own runs actually showed.
 
--   **Strategy 1 (Do Nothing / Original Imbalanced Data):** Treat this as the control case. If it already ranks fraud reasonably well, the feature set is doing more work than you might expect. If ROC-AUC looks respectable but thresholded performance is weak, that is a reminder that broad ranking quality does not automatically translate into a workable alert rule.
+-   **Strategy 1 (Ignore Class Imbalance):** Treat this as the control case. If it already ranks fraud reasonably well, the feature set is doing more work than you might expect. If ROC-AUC looks respectable but thresholded performance is weak, that is a reminder that broad ranking quality does not automatically translate into a workable alert rule.
+-   **Strategy 1 (Ignore Class Imbalance):** Treat this as the control case. If it already ranks fraud reasonably well, the feature set is doing more work than you might expect. If ROC-AUC looks respectable but thresholded performance is weak, that is a reminder that broad ranking quality does not automatically translate into a workable alert rule.
 
 -   **Strategy 2 (Class-Sensitive Metric Selection):** Using PR-AUC (`average_precision`) as the primary metric usually lines up better with how fraud teams work, because only a small high-risk slice of transactions will be reviewed. Keep ROC-AUC in the report, but let AP and threshold metrics carry more weight in the decision.
 
