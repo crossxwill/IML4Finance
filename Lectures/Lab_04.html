@@ -925,7 +925,7 @@ Table&nbsp;5: Sample credit card transactions loaded with pandas
 <span id="cb12-28"><a href="#cb12-28"></a><span class="bu">print</span>(<span class="ss">f"Polars fraud analysis completed in </span><span class="sc">{</span>end_time <span class="op">-</span> start_time<span class="sc">:.2f}</span><span class="ss"> seconds."</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Polars fraud analysis completed in 0.10 seconds.</code></pre>
+<pre><code>Polars fraud analysis completed in 0.05 seconds.</code></pre>
 </div>
 </div>
 <div class="cell" data-execution_count="11">
@@ -1081,22 +1081,6 @@ Table&nbsp;6: Customer fraud-rate summary computed with Polars
 <td>153</td>
 </tr>
 <tr class="odd">
-<td>2944</td>
-<td>0.083333</td>
-<td>1</td>
-<td>56.741667</td>
-<td>39.956073</td>
-<td>71.15</td>
-<td>18.27</td>
-<td>170.65</td>
-<td>12</td>
-<td>170.65</td>
-<td>2018-05-16 17:33:50</td>
-<td>2018-09-17 10:37:49</td>
-<td>14.220833</td>
-<td>123</td>
-</tr>
-<tr class="even">
 <td>4650</td>
 <td>0.083333</td>
 <td>1</td>
@@ -1111,6 +1095,22 @@ Table&nbsp;6: Customer fraud-rate summary computed with Polars
 <td>2018-09-28 13:46:55</td>
 <td>33.35</td>
 <td>169</td>
+</tr>
+<tr class="even">
+<td>2944</td>
+<td>0.083333</td>
+<td>1</td>
+<td>56.741667</td>
+<td>39.956073</td>
+<td>71.15</td>
+<td>18.27</td>
+<td>170.65</td>
+<td>12</td>
+<td>170.65</td>
+<td>2018-05-16 17:33:50</td>
+<td>2018-09-17 10:37:49</td>
+<td>14.220833</td>
+<td>123</td>
 </tr>
 <tr class="odd">
 <td>1449</td>
@@ -1206,16 +1206,16 @@ Table&nbsp;7: Customer fraud-rate summary computed with DuckDB
 │ CUSTOMER_ID │     FRAUD_RATE      │ TOTAL_FRAUDS │     AVG_AMOUNT     │     STD_AMOUNT     │     P95_AMOUNT     │ MIN_AMOUNT │     MAX_AMOUNT     │ TX_COUNT │    FRAUD_VALUE     │      FIRST_TX       │       LAST_TX       │  AVG_FRAUD_AMOUNT  │ CUSTOMER_TENURE_DAYS │
 │    int64    │       double        │    int128    │       double       │       double       │       double       │   double   │       double       │  int64   │       double       │    timestamp_ns     │    timestamp_ns     │       double       │        int64         │
 ├─────────────┼─────────────────────┼──────────────┼────────────────────┼────────────────────┼────────────────────┼────────────┼────────────────────┼──────────┼────────────────────┼─────────────────────┼─────────────────────┼────────────────────┼──────────────────────┤
-│        2871 │                 0.2 │            5 │ 102.95199999999997 │  83.66016754306277 │            137.352 │       18.5 │ 472.40000000000003 │       25 │             814.94 │ 2018-04-01 15:36:36 │ 2018-09-22 05:59:17 │            32.5976 │                  174 │
-│        4609 │                0.12 │            3 │             33.306 │ 31.049254016803687 │  97.62599999999983 │       5.14 │              145.0 │       25 │             271.09 │ 2018-04-01 07:06:34 │ 2018-09-28 14:36:02 │ 10.843599999999999 │                  180 │
+│        2871 │                 0.2 │            5 │ 102.95199999999998 │  83.66016754306276 │            137.352 │       18.5 │ 472.40000000000003 │       25 │             814.94 │ 2018-04-01 15:36:36 │ 2018-09-22 05:59:17 │            32.5976 │                  174 │
+│        4609 │                0.12 │            3 │             33.306 │  31.04925401680369 │  97.62599999999983 │       5.14 │              145.0 │       25 │             271.09 │ 2018-04-01 07:06:34 │ 2018-09-28 14:36:02 │ 10.843599999999999 │                  180 │
 │        2947 │ 0.11428571428571428 │            4 │   68.2082857142857 │  85.50504716735986 │  292.5099999999997 │      11.24 │             370.95 │       35 │            1038.03 │ 2018-04-05 09:13:23 │ 2018-09-30 08:25:09 │ 29.657999999999998 │                  178 │
-│         305 │ 0.09333333333333334 │            7 │ 136.92200000000003 │ 117.05182842586372 │ 290.17499999999967 │       1.25 │             781.55 │       75 │ 2919.3999999999996 │ 2018-04-02 08:28:47 │ 2018-09-30 05:58:23 │  38.92533333333333 │                  181 │
-│        2051 │ 0.09090909090909091 │            1 │  109.9509090909091 │ 52.492327716447384 │             189.59 │       39.4 │             236.19 │       11 │             236.19 │ 2018-04-13 14:55:23 │ 2018-09-27 16:48:55 │ 21.471818181818183 │                  167 │
+│         305 │ 0.09333333333333334 │            7 │            136.922 │ 117.05182842586372 │ 290.17499999999967 │       1.25 │             781.55 │       75 │ 2919.3999999999996 │ 2018-04-02 08:28:47 │ 2018-09-30 05:58:23 │  38.92533333333333 │                  181 │
+│        2051 │ 0.09090909090909091 │            1 │  109.9509090909091 │  52.49232771644737 │             189.59 │       39.4 │             236.19 │       11 │             236.19 │ 2018-04-13 14:55:23 │ 2018-09-27 16:48:55 │ 21.471818181818183 │                  167 │
+│        4650 │ 0.08333333333333333 │            1 │ 111.15583333333335 │ 101.40020812766282 │ 280.17899999999986 │      29.83 │ 400.20000000000005 │       12 │ 400.20000000000005 │ 2018-04-11 16:49:44 │ 2018-09-28 13:46:55 │              33.35 │                  170 │
+│        2944 │ 0.08333333333333333 │            1 │  56.74166666666667 │  39.95607266016322 │ 115.92499999999993 │      18.27 │             170.65 │       12 │             170.65 │ 2018-05-16 17:33:50 │ 2018-09-17 10:37:49 │ 14.220833333333333 │                  124 │
 │        3160 │ 0.08333333333333333 │            1 │ 13.410833333333334 │  5.060180482468141 │ 20.496999999999996 │       5.09 │              22.84 │       12 │              10.16 │ 2018-04-21 09:46:34 │ 2018-09-21 12:04:30 │ 0.8466666666666667 │                  153 │
-│        2944 │ 0.08333333333333333 │            1 │  56.74166666666667 │ 39.956072660163215 │ 115.92499999999993 │      18.27 │             170.65 │       12 │             170.65 │ 2018-05-16 17:33:50 │ 2018-09-17 10:37:49 │ 14.220833333333333 │                  124 │
-│        4650 │ 0.08333333333333333 │            1 │ 111.15583333333332 │ 101.40020812766282 │ 280.17899999999986 │      29.83 │ 400.20000000000005 │       12 │ 400.20000000000005 │ 2018-04-11 16:49:44 │ 2018-09-28 13:46:55 │              33.35 │                  170 │
-│        1449 │ 0.07964601769911504 │            9 │  48.57345132743363 │  51.49663889465285 │ 109.41399999999935 │       1.56 │              354.4 │      113 │ 1672.6499999999999 │ 2018-04-01 03:53:28 │ 2018-09-29 08:59:12 │  14.80221238938053 │                  181 │
-│        1817 │ 0.07886435331230283 │           25 │ 113.97129337539432 │ 102.52207291463772 │ 222.58199999999974 │       1.71 │             786.15 │      317 │            9119.76 │ 2018-04-01 11:51:02 │ 2018-09-30 22:13:24 │ 28.768958990536277 │                  182 │
+│        1449 │ 0.07964601769911504 │            9 │ 48.573451327433624 │  51.49663889465283 │ 109.41399999999935 │       1.56 │              354.4 │      113 │            1672.65 │ 2018-04-01 03:53:28 │ 2018-09-29 08:59:12 │ 14.802212389380532 │                  181 │
+│        1817 │ 0.07886435331230283 │           25 │ 113.97129337539432 │ 102.52207291463773 │ 222.58199999999974 │       1.71 │             786.15 │      317 │            9119.76 │ 2018-04-01 11:51:02 │ 2018-09-30 22:13:24 │ 28.768958990536277 │                  182 │
 ├─────────────┴─────────────────────┴──────────────┴────────────────────┴────────────────────┴────────────────────┴────────────┴────────────────────┴──────────┴────────────────────┴─────────────────────┴─────────────────────┴────────────────────┴──────────────────────┤
 │ 10 rows                                                                                                                                                                                                                                                        14 columns │
 └───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘</code></pre>
@@ -1260,7 +1260,7 @@ Table&nbsp;7: Customer fraud-rate summary computed with DuckDB
 <span id="cb19-31"><a href="#cb19-31"></a><span class="bu">print</span>(<span class="ss">f"Pandas fraud analysis completed in </span><span class="sc">{</span>end_time <span class="op">-</span> start_time<span class="sc">:.2f}</span><span class="ss"> seconds."</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Pandas fraud analysis completed in 0.95 seconds.</code></pre>
+<pre><code>Pandas fraud analysis completed in 0.92 seconds.</code></pre>
 </div>
 </div>
 <div class="cell" data-execution_count="15">
@@ -2071,10 +2071,10 @@ Table&nbsp;10: Top non-ensemble models on the tuning leaderboard - Ignore Class 
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>CatBoost</td>
-<td>0.971279</td>
-<td>0.864226</td>
-<td>0.835703</td>
-<td>-0.011522</td>
+<td>0.971095</td>
+<td>0.863594</td>
+<td>0.834788</td>
+<td>-0.011552</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
@@ -2149,138 +2149,138 @@ Table&nbsp;11: Feature importance - Ignore Class Imbalance
 <tbody>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_30DAY_WINDOW</th>
-<td>1.981566</td>
-<td>0.002458</td>
-<td>2.840268e-13</td>
+<td>1.910229e+00</td>
+<td>0.002447</td>
+<td>3.232273e-13</td>
 <td>5</td>
-<td>1.986626</td>
-<td>1.976505</td>
+<td>1.915267</td>
+<td>1.905190</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TX_AMOUNT</th>
-<td>0.878152</td>
-<td>0.003219</td>
-<td>2.167004e-11</td>
+<td>8.635706e-01</td>
+<td>0.003174</td>
+<td>2.189159e-11</td>
 <td>5</td>
-<td>0.884780</td>
-<td>0.871523</td>
+<td>0.870105</td>
+<td>0.857036</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_7DAY_WINDOW</th>
-<td>0.632884</td>
-<td>0.002538</td>
-<td>3.102304e-11</td>
+<td>5.877285e-01</td>
+<td>0.002479</td>
+<td>3.799001e-11</td>
 <td>5</td>
-<td>0.638110</td>
-<td>0.627659</td>
+<td>0.592833</td>
+<td>0.582624</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TID_RISK_1DAY_WINDOW</th>
-<td>0.080585</td>
-<td>0.000537</td>
-<td>2.373931e-10</td>
+<td>7.930330e-02</td>
+<td>0.000524</td>
+<td>2.288501e-10</td>
 <td>5</td>
-<td>0.081692</td>
-<td>0.079478</td>
+<td>0.080382</td>
+<td>0.078224</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_1DAY_WINDOW</th>
-<td>0.031390</td>
-<td>0.000339</td>
-<td>1.628838e-09</td>
+<td>3.165646e-02</td>
+<td>0.000343</td>
+<td>1.660239e-09</td>
 <td>5</td>
-<td>0.032087</td>
-<td>0.030692</td>
+<td>0.032363</td>
+<td>0.030950</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TID_RISK_7DAY_WINDOW</th>
-<td>0.004919</td>
-<td>0.000037</td>
-<td>3.822464e-10</td>
+<td>4.779937e-03</td>
+<td>0.000036</td>
+<td>3.705826e-10</td>
 <td>5</td>
-<td>0.004995</td>
-<td>0.004843</td>
+<td>0.004853</td>
+<td>0.004707</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_NB_TX_1DAY_WINDOW</th>
-<td>0.001424</td>
-<td>0.000052</td>
-<td>2.091558e-07</td>
+<td>1.379226e-03</td>
+<td>0.000049</td>
+<td>1.984187e-07</td>
 <td>5</td>
-<td>0.001530</td>
-<td>0.001317</td>
+<td>0.001481</td>
+<td>0.001277</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">CID_NB_TX_7DAY_WINDOW</th>
-<td>0.000237</td>
-<td>0.000024</td>
-<td>1.348585e-05</td>
+<th data-quarto-table-cell-role="th">CID_NB_TX_1DAY_WINDOW</th>
+<td>2.277295e-04</td>
+<td>0.000021</td>
+<td>8.221003e-06</td>
 <td>5</td>
-<td>0.000287</td>
-<td>0.000186</td>
+<td>0.000271</td>
+<td>0.000185</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">CID_NB_TX_1DAY_WINDOW</th>
-<td>0.000231</td>
-<td>0.000019</td>
-<td>5.251659e-06</td>
+<th data-quarto-table-cell-role="th">CID_NB_TX_7DAY_WINDOW</th>
+<td>2.241299e-04</td>
+<td>0.000022</td>
+<td>1.171692e-05</td>
 <td>5</td>
 <td>0.000270</td>
-<td>0.000192</td>
+<td>0.000178</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TID_RISK_30DAY_WINDOW</th>
-<td>0.000034</td>
-<td>0.000019</td>
-<td>7.802037e-03</td>
+<td>3.297471e-05</td>
+<td>0.000017</td>
+<td>6.555693e-03</td>
 <td>5</td>
-<td>0.000072</td>
-<td>-0.000005</td>
+<td>0.000069</td>
+<td>-0.000003</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_NB_TX_30DAY_WINDOW</th>
-<td>0.000012</td>
+<td>1.087271e-05</td>
 <td>0.000016</td>
-<td>8.325006e-02</td>
+<td>1.037649e-01</td>
 <td>5</td>
-<td>0.000046</td>
-<td>-0.000021</td>
+<td>0.000044</td>
+<td>-0.000022</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TID_NB_TX_7DAY_WINDOW</th>
-<td>0.000008</td>
+<td>5.958367e-06</td>
 <td>0.000015</td>
-<td>1.482547e-01</td>
+<td>2.189616e-01</td>
 <td>5</td>
-<td>0.000039</td>
-<td>-0.000023</td>
+<td>0.000038</td>
+<td>-0.000026</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_NB_TX_30DAY_WINDOW</th>
-<td>0.000007</td>
-<td>0.000015</td>
-<td>1.866353e-01</td>
+<td>4.471550e-06</td>
+<td>0.000014</td>
+<td>2.536911e-01</td>
 <td>5</td>
-<td>0.000037</td>
+<td>0.000033</td>
 <td>-0.000024</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">TX_DURING_WEEKEND</th>
-<td>-0.000002</td>
-<td>0.000002</td>
-<td>9.567887e-01</td>
+<th data-quarto-table-cell-role="th">TX_DURING_NIGHT</th>
+<td>-7.003927e-07</td>
+<td>0.000004</td>
+<td>6.512706e-01</td>
 <td>5</td>
-<td>0.000002</td>
-<td>-0.000006</td>
+<td>0.000007</td>
+<td>-0.000008</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">TX_DURING_NIGHT</th>
-<td>-0.000003</td>
-<td>0.000004</td>
-<td>8.911976e-01</td>
+<th data-quarto-table-cell-role="th">TX_DURING_WEEKEND</th>
+<td>-1.450630e-06</td>
+<td>0.000002</td>
+<td>9.379828e-01</td>
 <td>5</td>
-<td>0.000005</td>
-<td>-0.000011</td>
+<td>0.000002</td>
+<td>-0.000005</td>
 </tr>
 </tbody>
 </table>
@@ -2407,17 +2407,17 @@ Table&nbsp;12: Threshold summary on the test set - Ignore Class Imbalance
 <th data-quarto-table-cell-role="th">0</th>
 <td>default</td>
 <td>0.5000</td>
-<td>0.9128</td>
-<td>0.7931</td>
-<td>0.8487</td>
+<td>0.9134</td>
+<td>0.7911</td>
+<td>0.8479</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>optimized</td>
-<td>0.4906</td>
-<td>0.9112</td>
-<td>0.7939</td>
-<td>0.8485</td>
+<td>0.4786</td>
+<td>0.9106</td>
+<td>0.7954</td>
+<td>0.8491</td>
 </tr>
 </tbody>
 </table>
@@ -2425,7 +2425,7 @@ Table&nbsp;12: Threshold summary on the test set - Ignore Class Imbalance
 </div>
 </div>
 <div class="cell-output cell-output-display cell-output-markdown">
-<p>On the test set, the default threshold still gives the higher F1-score for CatBoost. The default threshold of 0.500 gives F1-score 0.8487. The optimized threshold of 0.491 gives F1-score 0.8485.</p>
+<p>On the test set, threshold tuning improves the F1-score for CatBoost. The default threshold of 0.500 gives F1-score 0.8479. The optimized threshold of 0.479 gives F1-score 0.8491.</p>
 </div>
 </div>
 </figure>
@@ -2543,26 +2543,26 @@ Table&nbsp;13: Running comparison through the ignore-class-imbalance approach
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>default</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
 <td>0.5000</td>
-<td>0.9128</td>
-<td>0.7931</td>
-<td>0.8487</td>
+<td>0.9134</td>
+<td>0.7911</td>
+<td>0.8479</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>optimized</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
-<td>0.4906</td>
-<td>0.9112</td>
-<td>0.7939</td>
-<td>0.8485</td>
+<td>0.4786</td>
+<td>0.9106</td>
+<td>0.7954</td>
+<td>0.8491</td>
 </tr>
 </tbody>
 </table>
@@ -2715,18 +2715,18 @@ Table&nbsp;14: Top non-ensemble models on the tuning leaderboard - Class-Sensiti
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>RandomForestGini</td>
-<td>0.961398</td>
-<td>0.866517</td>
-<td>0.861169</td>
-<td>-0.027425</td>
+<td>0.961383</td>
+<td>0.866299</td>
+<td>0.860313</td>
+<td>-0.027428</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>CatBoost</td>
-<td>0.970877</td>
-<td>0.863169</td>
-<td>0.834860</td>
-<td>-0.011571</td>
+<td>0.970876</td>
+<td>0.863221</td>
+<td>0.834565</td>
+<td>-0.011569</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
@@ -2794,138 +2794,138 @@ Table&nbsp;15: Feature importance - Class-Sensitive Evaluation
 <tbody>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TX_AMOUNT</th>
-<td>0.697253</td>
-<td>0.001633</td>
-<td>3.610506e-12</td>
+<td>0.698240</td>
+<td>0.001652</td>
+<td>3.761586e-12</td>
 <td>5</td>
-<td>0.700616</td>
-<td>0.693891</td>
+<td>0.701642</td>
+<td>0.694838</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TID_RISK_1DAY_WINDOW</th>
-<td>0.688878</td>
-<td>0.000757</td>
-<td>1.748128e-13</td>
+<td>0.689134</td>
+<td>0.000650</td>
+<td>9.469911e-14</td>
 <td>5</td>
-<td>0.690436</td>
-<td>0.687320</td>
+<td>0.690471</td>
+<td>0.687796</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_30DAY_WINDOW</th>
-<td>0.300401</td>
-<td>0.001641</td>
-<td>1.069409e-10</td>
+<td>0.298987</td>
+<td>0.001488</td>
+<td>7.352303e-11</td>
 <td>5</td>
-<td>0.303780</td>
-<td>0.297021</td>
+<td>0.302050</td>
+<td>0.295924</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_1DAY_WINDOW</th>
-<td>0.076539</td>
-<td>0.000461</td>
-<td>1.572547e-10</td>
+<td>0.077212</td>
+<td>0.000401</td>
+<td>8.735895e-11</td>
 <td>5</td>
-<td>0.077487</td>
-<td>0.075590</td>
+<td>0.078038</td>
+<td>0.076386</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_7DAY_WINDOW</th>
-<td>0.050066</td>
-<td>0.000871</td>
-<td>1.100786e-08</td>
+<td>0.049725</td>
+<td>0.000898</td>
+<td>1.276566e-08</td>
 <td>5</td>
-<td>0.051860</td>
-<td>0.048272</td>
+<td>0.051575</td>
+<td>0.047876</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TID_RISK_7DAY_WINDOW</th>
-<td>0.046729</td>
-<td>0.000592</td>
-<td>3.087041e-09</td>
+<td>0.046264</td>
+<td>0.000559</td>
+<td>2.560060e-09</td>
 <td>5</td>
-<td>0.047947</td>
-<td>0.045510</td>
+<td>0.047415</td>
+<td>0.045112</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_NB_TX_1DAY_WINDOW</th>
-<td>0.014190</td>
-<td>0.000578</td>
-<td>3.298444e-07</td>
+<td>0.014162</td>
+<td>0.000563</td>
+<td>2.988921e-07</td>
 <td>5</td>
-<td>0.015381</td>
-<td>0.013000</td>
+<td>0.015321</td>
+<td>0.013003</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TID_RISK_30DAY_WINDOW</th>
-<td>0.002588</td>
-<td>0.000161</td>
-<td>1.789545e-06</td>
+<td>0.002631</td>
+<td>0.000157</td>
+<td>1.497288e-06</td>
 <td>5</td>
-<td>0.002919</td>
-<td>0.002256</td>
+<td>0.002953</td>
+<td>0.002309</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_NB_TX_1DAY_WINDOW</th>
-<td>0.002082</td>
-<td>0.000145</td>
-<td>2.808182e-06</td>
+<td>0.002055</td>
+<td>0.000116</td>
+<td>1.231351e-06</td>
 <td>5</td>
-<td>0.002380</td>
-<td>0.001783</td>
+<td>0.002295</td>
+<td>0.001816</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TID_NB_TX_7DAY_WINDOW</th>
-<td>0.000497</td>
-<td>0.001221</td>
-<td>2.072984e-01</td>
+<td>0.000440</td>
+<td>0.001220</td>
+<td>2.323336e-01</td>
 <td>5</td>
-<td>0.003010</td>
-<td>-0.002017</td>
+<td>0.002952</td>
+<td>-0.002071</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_NB_TX_30DAY_WINDOW</th>
-<td>0.000315</td>
-<td>0.000374</td>
-<td>6.667090e-02</td>
+<td>0.000297</td>
+<td>0.000372</td>
+<td>7.421427e-02</td>
 <td>5</td>
-<td>0.001085</td>
-<td>-0.000456</td>
+<td>0.001063</td>
+<td>-0.000469</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">TX_DURING_NIGHT</th>
-<td>0.000208</td>
-<td>0.000219</td>
-<td>5.035923e-02</td>
+<th data-quarto-table-cell-role="th">TX_DURING_WEEKEND</th>
+<td>0.000131</td>
+<td>0.000613</td>
+<td>3.284350e-01</td>
 <td>5</td>
-<td>0.000658</td>
-<td>-0.000242</td>
+<td>0.001394</td>
+<td>-0.001132</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">TX_DURING_WEEKEND</th>
-<td>0.000127</td>
-<td>0.000605</td>
-<td>3.316717e-01</td>
+<th data-quarto-table-cell-role="th">TX_DURING_NIGHT</th>
+<td>0.000101</td>
+<td>0.000184</td>
+<td>1.435102e-01</td>
 <td>5</td>
-<td>0.001372</td>
-<td>-0.001118</td>
+<td>0.000479</td>
+<td>-0.000277</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">CID_NB_TX_30DAY_WINDOW</th>
-<td>-0.000176</td>
-<td>0.000693</td>
-<td>6.997977e-01</td>
+<td>-0.000272</td>
+<td>0.000662</td>
+<td>7.946881e-01</td>
 <td>5</td>
-<td>0.001251</td>
-<td>-0.001603</td>
+<td>0.001092</td>
+<td>-0.001636</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_NB_TX_7DAY_WINDOW</th>
-<td>-0.001432</td>
-<td>0.000521</td>
-<td>9.982244e-01</td>
+<td>-0.001474</td>
+<td>0.000535</td>
+<td>9.982403e-01</td>
 <td>5</td>
-<td>-0.000360</td>
-<td>-0.002505</td>
+<td>-0.000373</td>
+<td>-0.002576</td>
 </tr>
 </tbody>
 </table>
@@ -3050,18 +3050,18 @@ Table&nbsp;16: Threshold summary on the test set - Class-Sensitive Evaluation
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>default</td>
-<td>0.5000</td>
+<td>0.500</td>
 <td>0.9362</td>
-<td>0.8174</td>
-<td>0.8728</td>
+<td>0.8186</td>
+<td>0.8735</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>optimized</td>
-<td>0.2856</td>
-<td>0.9165</td>
-<td>0.8532</td>
-<td>0.8837</td>
+<td>0.326</td>
+<td>0.9246</td>
+<td>0.8477</td>
+<td>0.8845</td>
 </tr>
 </tbody>
 </table>
@@ -3069,7 +3069,7 @@ Table&nbsp;16: Threshold summary on the test set - Class-Sensitive Evaluation
 </div>
 </div>
 <div class="cell-output cell-output-display cell-output-markdown">
-<p>On the test set, threshold tuning improves the F1-score for RandomForestGini. The default threshold of 0.500 gives F1-score 0.8728. The optimized threshold of 0.286 gives F1-score 0.8837.</p>
+<p>On the test set, threshold tuning improves the F1-score for RandomForestGini. The default threshold of 0.500 gives F1-score 0.8735. The optimized threshold of 0.326 gives F1-score 0.8845.</p>
 </div>
 </div>
 </figure>
@@ -3171,7 +3171,7 @@ Figure&nbsp;2
 <span id="cb59-20"><a href="#cb59-20"></a>display(Markdown(transition_note_s2))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div id="lab04-s1-s2-transition-note" class="cell-output cell-output-display cell-output-markdown">
-<p>In the running comparison after the class-sensitive strategy, comparing the ignore-class-imbalance baseline with the class-sensitive evaluation strategy. the ignore-class-imbalance baseline is better on Test PR-AUC (0.8758 versus 0.8688). the ignore-class-imbalance baseline is better on Test ROC-AUC (0.9727 versus 0.9634). the class-sensitive evaluation strategy is better on Test F1 at the optimized threshold (0.8837 versus 0.8485).</p>
+<p>In the running comparison after the class-sensitive strategy, comparing the ignore-class-imbalance baseline with the class-sensitive evaluation strategy. the ignore-class-imbalance baseline is better on Test PR-AUC (0.8755 versus 0.8686). the ignore-class-imbalance baseline is better on Test ROC-AUC (0.9726 versus 0.9634). the class-sensitive evaluation strategy is better on Test F1 at the optimized threshold (0.8845 versus 0.8491).</p>
 </div>
 </div>
 <div class="cell" data-execution_count="50">
@@ -3214,26 +3214,26 @@ Table&nbsp;17: Running comparison through the class-sensitive approach
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>default</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
 <td>0.5000</td>
-<td>0.9128</td>
-<td>0.7931</td>
-<td>0.8487</td>
+<td>0.9134</td>
+<td>0.7911</td>
+<td>0.8479</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>optimized</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
-<td>0.4906</td>
-<td>0.9112</td>
-<td>0.7939</td>
-<td>0.8485</td>
+<td>0.4786</td>
+<td>0.9106</td>
+<td>0.7954</td>
+<td>0.8491</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
@@ -3241,12 +3241,12 @@ Table&nbsp;17: Running comparison through the class-sensitive approach
 <td>RandomForestGini</td>
 <td>default</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
 <td>0.5000</td>
 <td>0.9362</td>
-<td>0.8174</td>
-<td>0.8728</td>
+<td>0.8186</td>
+<td>0.8735</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
@@ -3254,12 +3254,12 @@ Table&nbsp;17: Running comparison through the class-sensitive approach
 <td>RandomForestGini</td>
 <td>optimized</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
-<td>0.2856</td>
-<td>0.9165</td>
-<td>0.8532</td>
-<td>0.8837</td>
+<td>0.3260</td>
+<td>0.9246</td>
+<td>0.8477</td>
+<td>0.8845</td>
 </tr>
 </tbody>
 </table>
@@ -3878,26 +3878,26 @@ Table&nbsp;21: Running comparison through the cost-sensitive approach
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>default</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
 <td>0.5000</td>
-<td>0.9128</td>
-<td>0.7931</td>
-<td>0.8487</td>
+<td>0.9134</td>
+<td>0.7911</td>
+<td>0.8479</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>optimized</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
-<td>0.4906</td>
-<td>0.9112</td>
-<td>0.7939</td>
-<td>0.8485</td>
+<td>0.4786</td>
+<td>0.9106</td>
+<td>0.7954</td>
+<td>0.8491</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
@@ -3905,12 +3905,12 @@ Table&nbsp;21: Running comparison through the cost-sensitive approach
 <td>RandomForestGini</td>
 <td>default</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
 <td>0.5000</td>
 <td>0.9362</td>
-<td>0.8174</td>
-<td>0.8728</td>
+<td>0.8186</td>
+<td>0.8735</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
@@ -3918,12 +3918,12 @@ Table&nbsp;21: Running comparison through the cost-sensitive approach
 <td>RandomForestGini</td>
 <td>optimized</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
-<td>0.2856</td>
-<td>0.9165</td>
-<td>0.8532</td>
-<td>0.8837</td>
+<td>0.3260</td>
+<td>0.9246</td>
+<td>0.8477</td>
+<td>0.8845</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
@@ -4076,7 +4076,7 @@ Name: proportion, dtype: float64</code></pre>
 <span id="cb77-11"><a href="#cb77-11"></a>fit_args_s4a <span class="op">=</span> {<span class="st">'holdout_frac'</span>: <span class="fl">0.2</span>,</span>
 <span id="cb77-12"><a href="#cb77-12"></a>            <span class="st">'excluded_model_types'</span>: [<span class="st">'KNN'</span>],</span>
 <span id="cb77-13"><a href="#cb77-13"></a>            <span class="st">'presets'</span>: <span class="st">'medium_quality'</span>,</span>
-<span id="cb77-14"><a href="#cb77-14"></a>            <span class="st">'time_limit'</span>: <span class="dv">180</span>}</span>
+<span id="cb77-14"><a href="#cb77-14"></a>            <span class="st">'time_limit'</span>: <span class="dv">540</span>}</span>
 <span id="cb77-15"><a href="#cb77-15"></a></span>
 <span id="cb77-16"><a href="#cb77-16"></a>ag_wrapper_s4a <span class="op">=</span> AutoGluonSklearnWrapper(</span>
 <span id="cb77-17"><a href="#cb77-17"></a>    label<span class="op">=</span>target_label,</span>
@@ -4623,26 +4623,26 @@ Table&nbsp;25: Running comparison through random undersampling
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>default</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
 <td>0.5000</td>
-<td>0.9128</td>
-<td>0.7931</td>
-<td>0.8487</td>
+<td>0.9134</td>
+<td>0.7911</td>
+<td>0.8479</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>optimized</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
-<td>0.4906</td>
-<td>0.9112</td>
-<td>0.7939</td>
-<td>0.8485</td>
+<td>0.4786</td>
+<td>0.9106</td>
+<td>0.7954</td>
+<td>0.8491</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
@@ -4650,12 +4650,12 @@ Table&nbsp;25: Running comparison through random undersampling
 <td>RandomForestGini</td>
 <td>default</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
 <td>0.5000</td>
 <td>0.9362</td>
-<td>0.8174</td>
-<td>0.8728</td>
+<td>0.8186</td>
+<td>0.8735</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
@@ -4663,12 +4663,12 @@ Table&nbsp;25: Running comparison through random undersampling
 <td>RandomForestGini</td>
 <td>optimized</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
-<td>0.2856</td>
-<td>0.9165</td>
-<td>0.8532</td>
-<td>0.8837</td>
+<td>0.3260</td>
+<td>0.9246</td>
+<td>0.8477</td>
+<td>0.8845</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
@@ -4782,7 +4782,7 @@ Name: proportion, dtype: float64</code></pre>
 <span id="cb91-11"><a href="#cb91-11"></a>fit_args_s4b <span class="op">=</span> {<span class="st">'holdout_frac'</span>: <span class="fl">0.2</span>,</span>
 <span id="cb91-12"><a href="#cb91-12"></a>            <span class="st">'excluded_model_types'</span>: [<span class="st">'KNN'</span>],</span>
 <span id="cb91-13"><a href="#cb91-13"></a>            <span class="st">'presets'</span>: <span class="st">'medium_quality'</span>,</span>
-<span id="cb91-14"><a href="#cb91-14"></a>            <span class="st">'time_limit'</span>: <span class="dv">180</span>}</span>
+<span id="cb91-14"><a href="#cb91-14"></a>            <span class="st">'time_limit'</span>: <span class="dv">540</span>}</span>
 <span id="cb91-15"><a href="#cb91-15"></a></span>
 <span id="cb91-16"><a href="#cb91-16"></a>ag_wrapper_s4b <span class="op">=</span> AutoGluonSklearnWrapper(</span>
 <span id="cb91-17"><a href="#cb91-17"></a>    label<span class="op">=</span>target_label,</span>
@@ -4804,7 +4804,12 @@ Name: proportion, dtype: float64</code></pre>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>[1000]  valid_set's binary_logloss: 0.0346034   valid_set's average_precision: 0.980926
-[2000]  valid_set's binary_logloss: 0.0240035   valid_set's average_precision: 0.991011</code></pre>
+[2000]  valid_set's binary_logloss: 0.0240035   valid_set's average_precision: 0.991011
+[3000]  valid_set's binary_logloss: 0.0175231   valid_set's average_precision: 0.995334
+[4000]  valid_set's binary_logloss: 0.0131906   valid_set's average_precision: 0.997023
+[5000]  valid_set's binary_logloss: 0.0103838   valid_set's average_precision: 0.997661
+[6000]  valid_set's binary_logloss: 0.00843445  valid_set's average_precision: 0.997942
+[7000]  valid_set's binary_logloss: 0.00707926  valid_set's average_precision: 0.998108</code></pre>
 </div>
 </div>
 <p>Access the AutoGluon predictor object.</p>
@@ -4864,10 +4869,10 @@ Table&nbsp;26: Top non-ensemble models on the tuning leaderboard - Random Oversa
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>LightGBMXT</td>
-<td>0.966661</td>
-<td>0.872176</td>
-<td>0.842868</td>
-<td>-0.015077</td>
+<td>0.962107</td>
+<td>0.865491</td>
+<td>0.857002</td>
+<td>-0.013878</td>
 </tr>
 </tbody>
 </table>
@@ -4925,138 +4930,138 @@ Table&nbsp;27: Feature importance - Random Oversampling
 <tbody>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_30DAY_WINDOW</th>
-<td>0.847094</td>
-<td>0.000128</td>
-<td>6.285155e-17</td>
+<td>0.839611</td>
+<td>0.000245</td>
+<td>8.692010e-16</td>
 <td>5</td>
-<td>0.847358</td>
-<td>0.846831</td>
+<td>0.840115</td>
+<td>0.839107</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TX_AMOUNT</th>
-<td>0.835992</td>
-<td>0.000135</td>
-<td>8.126021e-17</td>
+<td>0.829719</td>
+<td>0.000129</td>
+<td>6.993330e-17</td>
 <td>5</td>
-<td>0.836270</td>
-<td>0.835715</td>
+<td>0.829984</td>
+<td>0.829453</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_RISK_1DAY_WINDOW</th>
-<td>0.703993</td>
-<td>0.002234</td>
-<td>1.217121e-11</td>
+<td>0.720722</td>
+<td>0.001691</td>
+<td>3.636208e-12</td>
 <td>5</td>
-<td>0.708593</td>
-<td>0.699393</td>
+<td>0.724204</td>
+<td>0.717240</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_7DAY_WINDOW</th>
-<td>0.669394</td>
-<td>0.002521</td>
-<td>2.415199e-11</td>
+<td>0.412756</td>
+<td>0.003579</td>
+<td>6.781829e-10</td>
 <td>5</td>
-<td>0.674585</td>
-<td>0.664202</td>
+<td>0.420124</td>
+<td>0.405387</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_1DAY_WINDOW</th>
-<td>0.161441</td>
-<td>0.001906</td>
-<td>2.328800e-09</td>
+<td>0.105228</td>
+<td>0.001111</td>
+<td>1.490892e-09</td>
 <td>5</td>
-<td>0.165365</td>
-<td>0.157518</td>
+<td>0.107516</td>
+<td>0.102941</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TID_RISK_7DAY_WINDOW</th>
-<td>0.045178</td>
+<td>0.050500</td>
 <td>0.000470</td>
-<td>1.405848e-09</td>
+<td>8.980216e-10</td>
 <td>5</td>
-<td>0.046146</td>
-<td>0.044210</td>
+<td>0.051468</td>
+<td>0.049533</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_NB_TX_1DAY_WINDOW</th>
-<td>0.021720</td>
-<td>0.001217</td>
-<td>1.176661e-06</td>
+<td>0.021837</td>
+<td>0.001307</td>
+<td>1.533677e-06</td>
 <td>5</td>
-<td>0.024225</td>
-<td>0.019215</td>
+<td>0.024529</td>
+<td>0.019146</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">CID_NB_TX_7DAY_WINDOW</th>
-<td>0.002852</td>
-<td>0.000616</td>
-<td>2.460351e-04</td>
+<td>0.007065</td>
+<td>0.001059</td>
+<td>5.883028e-05</td>
 <td>5</td>
-<td>0.004121</td>
-<td>0.001583</td>
-</tr>
-<tr class="odd">
-<th data-quarto-table-cell-role="th">CID_NB_TX_1DAY_WINDOW</th>
-<td>0.001513</td>
-<td>0.000340</td>
-<td>2.862990e-04</td>
-<td>5</td>
-<td>0.002212</td>
-<td>0.000813</td>
-</tr>
-<tr class="even">
-<th data-quarto-table-cell-role="th">TID_RISK_30DAY_WINDOW</th>
-<td>0.000528</td>
-<td>0.000376</td>
-<td>1.741326e-02</td>
-<td>5</td>
-<td>0.001302</td>
-<td>-0.000246</td>
-</tr>
-<tr class="odd">
-<th data-quarto-table-cell-role="th">TID_NB_TX_30DAY_WINDOW</th>
-<td>0.000124</td>
-<td>0.000398</td>
-<td>2.623758e-01</td>
-<td>5</td>
-<td>0.000942</td>
-<td>-0.000695</td>
-</tr>
-<tr class="even">
-<th data-quarto-table-cell-role="th">TX_DURING_WEEKEND</th>
-<td>0.000116</td>
-<td>0.000312</td>
-<td>2.263480e-01</td>
-<td>5</td>
-<td>0.000759</td>
-<td>-0.000527</td>
-</tr>
-<tr class="odd">
-<th data-quarto-table-cell-role="th">TID_NB_TX_7DAY_WINDOW</th>
-<td>-0.000231</td>
-<td>0.000557</td>
-<td>7.964360e-01</td>
-<td>5</td>
-<td>0.000917</td>
-<td>-0.001378</td>
-</tr>
-<tr class="even">
-<th data-quarto-table-cell-role="th">TX_DURING_NIGHT</th>
-<td>-0.000387</td>
-<td>0.000583</td>
-<td>8.940035e-01</td>
-<td>5</td>
-<td>0.000813</td>
-<td>-0.001586</td>
+<td>0.009245</td>
+<td>0.004884</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_NB_TX_30DAY_WINDOW</th>
-<td>-0.000503</td>
-<td>0.000844</td>
-<td>8.734988e-01</td>
+<td>0.003125</td>
+<td>0.001015</td>
+<td>1.168067e-03</td>
 <td>5</td>
-<td>0.001234</td>
-<td>-0.002241</td>
+<td>0.005216</td>
+<td>0.001034</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">CID_NB_TX_1DAY_WINDOW</th>
+<td>0.001933</td>
+<td>0.000692</td>
+<td>1.674471e-03</td>
+<td>5</td>
+<td>0.003358</td>
+<td>0.000508</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">TID_NB_TX_30DAY_WINDOW</th>
+<td>0.000814</td>
+<td>0.000613</td>
+<td>2.056818e-02</td>
+<td>5</td>
+<td>0.002077</td>
+<td>-0.000448</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">TX_DURING_WEEKEND</th>
+<td>0.000448</td>
+<td>0.000407</td>
+<td>3.483271e-02</td>
+<td>5</td>
+<td>0.001287</td>
+<td>-0.000391</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">TID_RISK_30DAY_WINDOW</th>
+<td>0.000332</td>
+<td>0.000341</td>
+<td>4.757538e-02</td>
+<td>5</td>
+<td>0.001033</td>
+<td>-0.000370</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">TX_DURING_NIGHT</th>
+<td>0.000090</td>
+<td>0.000663</td>
+<td>3.882995e-01</td>
+<td>5</td>
+<td>0.001454</td>
+<td>-0.001274</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">TID_NB_TX_7DAY_WINDOW</th>
+<td>-0.000198</td>
+<td>0.000714</td>
+<td>7.158806e-01</td>
+<td>5</td>
+<td>0.001271</td>
+<td>-0.001668</td>
 </tr>
 </tbody>
 </table>
@@ -5182,17 +5187,17 @@ Table&nbsp;28: Threshold summary on the test set - Random Oversampling
 <th data-quarto-table-cell-role="th">0</th>
 <td>default</td>
 <td>0.5000</td>
-<td>0.8379</td>
-<td>0.8583</td>
-<td>0.8479</td>
+<td>0.8851</td>
+<td>0.8437</td>
+<td>0.8639</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>optimized</td>
-<td>0.8335</td>
-<td>0.9238</td>
-<td>0.8280</td>
-<td>0.8733</td>
+<td>0.7348</td>
+<td>0.9129</td>
+<td>0.8308</td>
+<td>0.8699</td>
 </tr>
 </tbody>
 </table>
@@ -5200,7 +5205,7 @@ Table&nbsp;28: Threshold summary on the test set - Random Oversampling
 </div>
 </div>
 <div class="cell-output cell-output-display cell-output-markdown">
-<p>On the test set, threshold tuning improves the F1-score for LightGBMXT. The default threshold of 0.500 gives F1-score 0.8479. The optimized threshold of 0.833 gives F1-score 0.8733.</p>
+<p>On the test set, threshold tuning improves the F1-score for LightGBMXT. The default threshold of 0.500 gives F1-score 0.8639. The optimized threshold of 0.735 gives F1-score 0.8699.</p>
 </div>
 </div>
 </figure>
@@ -5317,26 +5322,26 @@ Table&nbsp;29: Running comparison through random oversampling
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>default</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
 <td>0.5000</td>
-<td>0.9128</td>
-<td>0.7931</td>
-<td>0.8487</td>
+<td>0.9134</td>
+<td>0.7911</td>
+<td>0.8479</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>optimized</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
-<td>0.4906</td>
-<td>0.9112</td>
-<td>0.7939</td>
-<td>0.8485</td>
+<td>0.4786</td>
+<td>0.9106</td>
+<td>0.7954</td>
+<td>0.8491</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
@@ -5344,12 +5349,12 @@ Table&nbsp;29: Running comparison through random oversampling
 <td>RandomForestGini</td>
 <td>default</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
 <td>0.5000</td>
 <td>0.9362</td>
-<td>0.8174</td>
-<td>0.8728</td>
+<td>0.8186</td>
+<td>0.8735</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
@@ -5357,12 +5362,12 @@ Table&nbsp;29: Running comparison through random oversampling
 <td>RandomForestGini</td>
 <td>optimized</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
-<td>0.2856</td>
-<td>0.9165</td>
-<td>0.8532</td>
-<td>0.8837</td>
+<td>0.3260</td>
+<td>0.9246</td>
+<td>0.8477</td>
+<td>0.8845</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
@@ -5421,26 +5426,26 @@ Table&nbsp;29: Running comparison through random oversampling
 <td>4b. ROS</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9675</td>
-<td>0.8784</td>
-<td>0.0147</td>
+<td>0.9606</td>
+<td>0.8695</td>
+<td>0.0137</td>
 <td>0.5000</td>
-<td>0.8379</td>
-<td>0.8583</td>
-<td>0.8479</td>
+<td>0.8851</td>
+<td>0.8437</td>
+<td>0.8639</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">9</th>
 <td>4b. ROS</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9675</td>
-<td>0.8784</td>
-<td>0.0147</td>
-<td>0.8335</td>
-<td>0.9238</td>
-<td>0.8280</td>
-<td>0.8733</td>
+<td>0.9606</td>
+<td>0.8695</td>
+<td>0.0137</td>
+<td>0.7348</td>
+<td>0.9129</td>
+<td>0.8308</td>
+<td>0.8699</td>
 </tr>
 </tbody>
 </table>
@@ -5495,7 +5500,7 @@ Name: proportion, dtype: float64</code></pre>
 <span id="cb106-11"><a href="#cb106-11"></a>fit_args_s4c <span class="op">=</span> {<span class="st">'holdout_frac'</span>: <span class="fl">0.2</span>,</span>
 <span id="cb106-12"><a href="#cb106-12"></a>            <span class="st">'excluded_model_types'</span>: [<span class="st">'KNN'</span>],</span>
 <span id="cb106-13"><a href="#cb106-13"></a>            <span class="st">'presets'</span>: <span class="st">'medium_quality'</span>,</span>
-<span id="cb106-14"><a href="#cb106-14"></a>            <span class="st">'time_limit'</span>: <span class="dv">180</span>}</span>
+<span id="cb106-14"><a href="#cb106-14"></a>            <span class="st">'time_limit'</span>: <span class="dv">540</span>}</span>
 <span id="cb106-15"><a href="#cb106-15"></a></span>
 <span id="cb106-16"><a href="#cb106-16"></a>ag_wrapper_s4c <span class="op">=</span> AutoGluonSklearnWrapper(</span>
 <span id="cb106-17"><a href="#cb106-17"></a>    label<span class="op">=</span>target_label,</span>
@@ -5516,7 +5521,9 @@ Name: proportion, dtype: float64</code></pre>
 <span id="cb108-2"><a href="#cb108-2"></a>ag_model_s4c.predictor.save()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>[1000]  valid_set's binary_logloss: 0.0323566   valid_set's average_precision: 0.999305</code></pre>
+<pre><code>[1000]  valid_set's binary_logloss: 0.0323566   valid_set's average_precision: 0.999305
+[2000]  valid_set's binary_logloss: 0.0223456   valid_set's average_precision: 0.999656
+[3000]  valid_set's binary_logloss: 0.0173875   valid_set's average_precision: 0.999769</code></pre>
 </div>
 </div>
 <p>Access the AutoGluon predictor object.</p>
@@ -5576,10 +5583,10 @@ Table&nbsp;30: Top non-ensemble models on the tuning leaderboard - SMOTE
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>LightGBMXT</td>
-<td>0.968018</td>
-<td>0.868634</td>
-<td>0.699343</td>
-<td>-0.027865</td>
+<td>0.964313</td>
+<td>0.867532</td>
+<td>0.797795</td>
+<td>-0.019382</td>
 </tr>
 </tbody>
 </table>
@@ -5637,138 +5644,138 @@ Table&nbsp;31: Feature importance - SMOTE
 <tbody>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_30DAY_WINDOW</th>
-<td>0.838424</td>
-<td>0.000220</td>
-<td>5.716667e-16</td>
+<td>0.839091</td>
+<td>0.000235</td>
+<td>7.437941e-16</td>
 <td>5</td>
-<td>0.838878</td>
-<td>0.837971</td>
+<td>0.839575</td>
+<td>0.838606</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TX_AMOUNT</th>
-<td>0.820444</td>
-<td>0.000306</td>
-<td>2.334173e-15</td>
+<td>0.822561</td>
+<td>0.000346</td>
+<td>3.739848e-15</td>
 <td>5</td>
-<td>0.821075</td>
-<td>0.819813</td>
+<td>0.823272</td>
+<td>0.821849</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_RISK_1DAY_WINDOW</th>
-<td>0.640720</td>
-<td>0.000716</td>
-<td>1.873251e-13</td>
+<td>0.623713</td>
+<td>0.001015</td>
+<td>8.405840e-13</td>
 <td>5</td>
-<td>0.642194</td>
-<td>0.639245</td>
+<td>0.625802</td>
+<td>0.621624</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_7DAY_WINDOW</th>
-<td>0.305628</td>
-<td>0.003408</td>
-<td>1.854021e-09</td>
+<td>0.290632</td>
+<td>0.002900</td>
+<td>1.188678e-09</td>
 <td>5</td>
-<td>0.312644</td>
-<td>0.298611</td>
+<td>0.296602</td>
+<td>0.284662</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_1DAY_WINDOW</th>
-<td>0.061478</td>
-<td>0.000319</td>
-<td>8.691489e-11</td>
+<td>0.056828</td>
+<td>0.001096</td>
+<td>1.658284e-08</td>
 <td>5</td>
-<td>0.062135</td>
-<td>0.060822</td>
+<td>0.059084</td>
+<td>0.054571</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TID_RISK_7DAY_WINDOW</th>
-<td>0.040539</td>
-<td>0.000442</td>
-<td>1.689708e-09</td>
+<td>0.046115</td>
+<td>0.000304</td>
+<td>2.273156e-10</td>
 <td>5</td>
-<td>0.041448</td>
-<td>0.039629</td>
+<td>0.046742</td>
+<td>0.045489</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_NB_TX_1DAY_WINDOW</th>
-<td>0.025803</td>
-<td>0.001058</td>
-<td>3.389292e-07</td>
+<td>0.034536</td>
+<td>0.001537</td>
+<td>4.700424e-07</td>
 <td>5</td>
-<td>0.027982</td>
-<td>0.023623</td>
+<td>0.037701</td>
+<td>0.031370</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">CID_NB_TX_7DAY_WINDOW</th>
-<td>0.006327</td>
-<td>0.000502</td>
-<td>4.708001e-06</td>
+<td>0.011753</td>
+<td>0.000661</td>
+<td>1.193951e-06</td>
 <td>5</td>
-<td>0.007360</td>
-<td>0.005293</td>
+<td>0.013113</td>
+<td>0.010392</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_NB_TX_7DAY_WINDOW</th>
-<td>0.002548</td>
-<td>0.000371</td>
-<td>5.216778e-05</td>
+<td>0.005834</td>
+<td>0.000525</td>
+<td>7.805637e-06</td>
 <td>5</td>
-<td>0.003311</td>
-<td>0.001785</td>
+<td>0.006915</td>
+<td>0.004752</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">CID_NB_TX_30DAY_WINDOW</th>
-<td>0.001064</td>
-<td>0.000312</td>
-<td>7.914877e-04</td>
+<td>0.004371</td>
+<td>0.000599</td>
+<td>4.124656e-05</td>
 <td>5</td>
-<td>0.001706</td>
-<td>0.000422</td>
+<td>0.005605</td>
+<td>0.003138</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_NB_TX_1DAY_WINDOW</th>
-<td>0.000803</td>
-<td>0.000309</td>
-<td>2.187131e-03</td>
+<td>0.001814</td>
+<td>0.000338</td>
+<td>1.389276e-04</td>
 <td>5</td>
-<td>0.001440</td>
-<td>0.000166</td>
+<td>0.002511</td>
+<td>0.001117</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">TX_DURING_NIGHT</th>
-<td>0.000582</td>
-<td>0.000713</td>
-<td>7.097781e-02</td>
-<td>5</td>
-<td>0.002049</td>
-<td>-0.000885</td>
-</tr>
-<tr class="odd">
 <th data-quarto-table-cell-role="th">TID_RISK_30DAY_WINDOW</th>
-<td>0.000334</td>
-<td>0.000257</td>
-<td>2.196635e-02</td>
+<td>0.001285</td>
+<td>0.000312</td>
+<td>3.839178e-04</td>
 <td>5</td>
-<td>0.000864</td>
-<td>-0.000196</td>
-</tr>
-<tr class="even">
-<th data-quarto-table-cell-role="th">TID_NB_TX_30DAY_WINDOW</th>
-<td>0.000245</td>
-<td>0.000182</td>
-<td>1.965683e-02</td>
-<td>5</td>
-<td>0.000619</td>
-<td>-0.000129</td>
+<td>0.001927</td>
+<td>0.000644</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">TX_DURING_WEEKEND</th>
-<td>-0.000046</td>
-<td>0.000355</td>
-<td>6.077509e-01</td>
+<th data-quarto-table-cell-role="th">TID_NB_TX_30DAY_WINDOW</th>
+<td>0.000754</td>
+<td>0.000092</td>
+<td>2.658665e-05</td>
 <td>5</td>
-<td>0.000684</td>
-<td>-0.000777</td>
+<td>0.000945</td>
+<td>0.000564</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">TX_DURING_WEEKEND</th>
+<td>0.000366</td>
+<td>0.000392</td>
+<td>5.257481e-02</td>
+<td>5</td>
+<td>0.001172</td>
+<td>-0.000441</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">TX_DURING_NIGHT</th>
+<td>0.000205</td>
+<td>0.000698</td>
+<td>2.735513e-01</td>
+<td>5</td>
+<td>0.001643</td>
+<td>-0.001233</td>
 </tr>
 </tbody>
 </table>
@@ -5894,17 +5901,17 @@ Table&nbsp;32: Threshold summary on the test set - SMOTE
 <th data-quarto-table-cell-role="th">0</th>
 <td>default</td>
 <td>0.5000</td>
-<td>0.592</td>
-<td>0.8869</td>
-<td>0.7100</td>
+<td>0.7498</td>
+<td>0.8685</td>
+<td>0.8048</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>optimized</td>
-<td>0.9501</td>
-<td>0.912</td>
-<td>0.8135</td>
-<td>0.8599</td>
+<td>0.8872</td>
+<td>0.8944</td>
+<td>0.8347</td>
+<td>0.8635</td>
 </tr>
 </tbody>
 </table>
@@ -5912,7 +5919,7 @@ Table&nbsp;32: Threshold summary on the test set - SMOTE
 </div>
 </div>
 <div class="cell-output cell-output-display cell-output-markdown">
-<p>On the test set, threshold tuning improves the F1-score for LightGBMXT. The default threshold of 0.500 gives F1-score 0.7100. The optimized threshold of 0.950 gives F1-score 0.8599.</p>
+<p>On the test set, threshold tuning improves the F1-score for LightGBMXT. The default threshold of 0.500 gives F1-score 0.8048. The optimized threshold of 0.887 gives F1-score 0.8635.</p>
 </div>
 </div>
 </figure>
@@ -6029,26 +6036,26 @@ Table&nbsp;33: Running comparison through SMOTE
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>default</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
 <td>0.5000</td>
-<td>0.9128</td>
-<td>0.7931</td>
-<td>0.8487</td>
+<td>0.9134</td>
+<td>0.7911</td>
+<td>0.8479</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>optimized</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
-<td>0.4906</td>
-<td>0.9112</td>
-<td>0.7939</td>
-<td>0.8485</td>
+<td>0.4786</td>
+<td>0.9106</td>
+<td>0.7954</td>
+<td>0.8491</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
@@ -6056,12 +6063,12 @@ Table&nbsp;33: Running comparison through SMOTE
 <td>RandomForestGini</td>
 <td>default</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
 <td>0.5000</td>
 <td>0.9362</td>
-<td>0.8174</td>
-<td>0.8728</td>
+<td>0.8186</td>
+<td>0.8735</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
@@ -6069,12 +6076,12 @@ Table&nbsp;33: Running comparison through SMOTE
 <td>RandomForestGini</td>
 <td>optimized</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
-<td>0.2856</td>
-<td>0.9165</td>
-<td>0.8532</td>
-<td>0.8837</td>
+<td>0.3260</td>
+<td>0.9246</td>
+<td>0.8477</td>
+<td>0.8845</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
@@ -6133,52 +6140,52 @@ Table&nbsp;33: Running comparison through SMOTE
 <td>4b. ROS</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9675</td>
-<td>0.8784</td>
-<td>0.0147</td>
+<td>0.9606</td>
+<td>0.8695</td>
+<td>0.0137</td>
 <td>0.5000</td>
-<td>0.8379</td>
-<td>0.8583</td>
-<td>0.8479</td>
+<td>0.8851</td>
+<td>0.8437</td>
+<td>0.8639</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">9</th>
 <td>4b. ROS</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9675</td>
-<td>0.8784</td>
-<td>0.0147</td>
-<td>0.8335</td>
-<td>0.9238</td>
-<td>0.8280</td>
-<td>0.8733</td>
+<td>0.9606</td>
+<td>0.8695</td>
+<td>0.0137</td>
+<td>0.7348</td>
+<td>0.9129</td>
+<td>0.8308</td>
+<td>0.8699</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">10</th>
 <td>4c. SMOTE</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9694</td>
-<td>0.8751</td>
-<td>0.0265</td>
+<td>0.9653</td>
+<td>0.8724</td>
+<td>0.0187</td>
 <td>0.5000</td>
-<td>0.5920</td>
-<td>0.8869</td>
-<td>0.7100</td>
+<td>0.7498</td>
+<td>0.8685</td>
+<td>0.8048</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">11</th>
 <td>4c. SMOTE</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9694</td>
-<td>0.8751</td>
-<td>0.0265</td>
-<td>0.9501</td>
-<td>0.9120</td>
-<td>0.8135</td>
-<td>0.8599</td>
+<td>0.9653</td>
+<td>0.8724</td>
+<td>0.0187</td>
+<td>0.8872</td>
+<td>0.8944</td>
+<td>0.8347</td>
+<td>0.8635</td>
 </tr>
 </tbody>
 </table>
@@ -6235,7 +6242,7 @@ Name: proportion, dtype: float64</code></pre>
 <span id="cb121-11"><a href="#cb121-11"></a>fit_args_s4d <span class="op">=</span> {<span class="st">'holdout_frac'</span>: <span class="fl">0.2</span>,</span>
 <span id="cb121-12"><a href="#cb121-12"></a>            <span class="st">'excluded_model_types'</span>: [<span class="st">'KNN'</span>],</span>
 <span id="cb121-13"><a href="#cb121-13"></a>            <span class="st">'presets'</span>: <span class="st">'medium_quality'</span>,</span>
-<span id="cb121-14"><a href="#cb121-14"></a>            <span class="st">'time_limit'</span>: <span class="dv">180</span>}</span>
+<span id="cb121-14"><a href="#cb121-14"></a>            <span class="st">'time_limit'</span>: <span class="dv">540</span>}</span>
 <span id="cb121-15"><a href="#cb121-15"></a></span>
 <span id="cb121-16"><a href="#cb121-16"></a>ag_wrapper_s4d <span class="op">=</span> AutoGluonSklearnWrapper(</span>
 <span id="cb121-17"><a href="#cb121-17"></a>    label<span class="op">=</span>target_label,</span>
@@ -6257,7 +6264,11 @@ Name: proportion, dtype: float64</code></pre>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>[1000]  valid_set's binary_logloss: 0.0325419   valid_set's average_precision: 0.999012
-[2000]  valid_set's binary_logloss: 0.0231331   valid_set's average_precision: 0.99946</code></pre>
+[2000]  valid_set's binary_logloss: 0.0231331   valid_set's average_precision: 0.99946
+[3000]  valid_set's binary_logloss: 0.0185275   valid_set's average_precision: 0.99961
+[4000]  valid_set's binary_logloss: 0.0156352   valid_set's average_precision: 0.999681
+[5000]  valid_set's binary_logloss: 0.0135886   valid_set's average_precision: 0.999723
+[6000]  valid_set's binary_logloss: 0.0120884   valid_set's average_precision: 0.999749</code></pre>
 </div>
 </div>
 <p>Access the AutoGluon predictor object.</p>
@@ -6317,10 +6328,10 @@ Table&nbsp;34: Top non-ensemble models on the tuning leaderboard - Hybrid (SMOTE
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>LightGBMXT</td>
-<td>0.966951</td>
-<td>0.869174</td>
-<td>0.766206</td>
-<td>-0.021956</td>
+<td>0.96254</td>
+<td>0.86523</td>
+<td>0.818649</td>
+<td>-0.017915</td>
 </tr>
 </tbody>
 </table>
@@ -6378,138 +6389,138 @@ Table&nbsp;35: Feature importance - Hybrid (SMOTE+RUS)
 <tbody>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_30DAY_WINDOW</th>
-<td>0.840737</td>
-<td>0.000197</td>
-<td>3.613292e-16</td>
+<td>0.836678</td>
+<td>0.000262</td>
+<td>1.159842e-15</td>
 <td>5</td>
-<td>0.841142</td>
-<td>0.840331</td>
+<td>0.837218</td>
+<td>0.836138</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TX_AMOUNT</th>
-<td>0.823455</td>
-<td>0.000335</td>
-<td>3.269290e-15</td>
+<td>0.821923</td>
+<td>0.000198</td>
+<td>4.031221e-16</td>
 <td>5</td>
-<td>0.824144</td>
-<td>0.822767</td>
+<td>0.822331</td>
+<td>0.821516</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_RISK_1DAY_WINDOW</th>
-<td>0.652532</td>
-<td>0.000531</td>
-<td>5.253139e-14</td>
+<td>0.696591</td>
+<td>0.001564</td>
+<td>3.046187e-12</td>
 <td>5</td>
-<td>0.653625</td>
-<td>0.651439</td>
+<td>0.699810</td>
+<td>0.693371</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_7DAY_WINDOW</th>
-<td>0.355499</td>
-<td>0.001818</td>
-<td>8.214727e-11</td>
+<td>0.254168</td>
+<td>0.002237</td>
+<td>7.199709e-10</td>
 <td>5</td>
-<td>0.359243</td>
-<td>0.351755</td>
+<td>0.258774</td>
+<td>0.249562</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">CID_AVG_AMOUNT_1DAY_WINDOW</th>
-<td>0.076334</td>
-<td>0.000685</td>
-<td>7.789441e-10</td>
+<td>0.076329</td>
+<td>0.000874</td>
+<td>2.065864e-09</td>
 <td>5</td>
-<td>0.077744</td>
-<td>0.074923</td>
+<td>0.078130</td>
+<td>0.074529</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">TID_RISK_7DAY_WINDOW</th>
-<td>0.040889</td>
-<td>0.000486</td>
-<td>2.399835e-09</td>
+<td>0.048382</td>
+<td>0.000626</td>
+<td>3.368239e-09</td>
 <td>5</td>
-<td>0.041890</td>
-<td>0.039888</td>
+<td>0.049672</td>
+<td>0.047093</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_NB_TX_1DAY_WINDOW</th>
-<td>0.032577</td>
-<td>0.001617</td>
-<td>7.256596e-07</td>
+<td>0.035138</td>
+<td>0.001727</td>
+<td>6.975220e-07</td>
 <td>5</td>
-<td>0.035906</td>
-<td>0.029248</td>
+<td>0.038694</td>
+<td>0.031583</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">CID_NB_TX_7DAY_WINDOW</th>
-<td>0.009466</td>
-<td>0.000320</td>
-<td>1.570014e-07</td>
+<td>0.011913</td>
+<td>0.000265</td>
+<td>2.935613e-08</td>
 <td>5</td>
-<td>0.010126</td>
-<td>0.008807</td>
+<td>0.012459</td>
+<td>0.011367</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TID_NB_TX_7DAY_WINDOW</th>
-<td>0.003699</td>
-<td>0.000466</td>
-<td>2.955605e-05</td>
+<td>0.004770</td>
+<td>0.000462</td>
+<td>1.039704e-05</td>
 <td>5</td>
-<td>0.004658</td>
-<td>0.002740</td>
+<td>0.005721</td>
+<td>0.003820</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">CID_NB_TX_30DAY_WINDOW</th>
-<td>0.002546</td>
-<td>0.000707</td>
-<td>6.455249e-04</td>
+<td>0.004669</td>
+<td>0.000702</td>
+<td>5.963924e-05</td>
 <td>5</td>
-<td>0.004002</td>
-<td>0.001090</td>
+<td>0.006115</td>
+<td>0.003223</td>
 </tr>
 <tr class="odd">
-<th data-quarto-table-cell-role="th">TID_NB_TX_30DAY_WINDOW</th>
-<td>0.000849</td>
-<td>0.000169</td>
-<td>1.789840e-04</td>
+<th data-quarto-table-cell-role="th">TID_RISK_30DAY_WINDOW</th>
+<td>0.001387</td>
+<td>0.000264</td>
+<td>1.508500e-04</td>
 <td>5</td>
-<td>0.001197</td>
-<td>0.000501</td>
+<td>0.001931</td>
+<td>0.000843</td>
 </tr>
 <tr class="even">
-<th data-quarto-table-cell-role="th">TID_RISK_30DAY_WINDOW</th>
-<td>0.000729</td>
-<td>0.000228</td>
-<td>1.007505e-03</td>
+<th data-quarto-table-cell-role="th">TID_NB_TX_30DAY_WINDOW</th>
+<td>0.001013</td>
+<td>0.000456</td>
+<td>3.842566e-03</td>
 <td>5</td>
-<td>0.001198</td>
-<td>0.000260</td>
+<td>0.001953</td>
+<td>0.000073</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">CID_NB_TX_1DAY_WINDOW</th>
+<td>0.000518</td>
+<td>0.000521</td>
+<td>4.531949e-02</td>
+<td>5</td>
+<td>0.001591</td>
+<td>-0.000556</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">TX_DURING_WEEKEND</th>
+<td>0.000480</td>
+<td>0.000603</td>
+<td>7.492027e-02</td>
+<td>5</td>
+<td>0.001722</td>
+<td>-0.000762</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">TX_DURING_NIGHT</th>
-<td>0.000525</td>
-<td>0.000683</td>
-<td>8.040296e-02</td>
+<td>0.000310</td>
+<td>0.000760</td>
+<td>2.068168e-01</td>
 <td>5</td>
-<td>0.001932</td>
-<td>-0.000882</td>
-</tr>
-<tr class="even">
-<th data-quarto-table-cell-role="th">CID_NB_TX_1DAY_WINDOW</th>
-<td>0.000308</td>
-<td>0.000463</td>
-<td>1.053888e-01</td>
-<td>5</td>
-<td>0.001262</td>
-<td>-0.000645</td>
-</tr>
-<tr class="odd">
-<th data-quarto-table-cell-role="th">TX_DURING_WEEKEND</th>
-<td>0.000280</td>
-<td>0.000505</td>
-<td>1.416746e-01</td>
-<td>5</td>
-<td>0.001319</td>
-<td>-0.000760</td>
+<td>0.001874</td>
+<td>-0.001254</td>
 </tr>
 </tbody>
 </table>
@@ -6634,18 +6645,18 @@ Table&nbsp;36: Threshold summary on the test set - Hybrid (SMOTE+RUS)
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>default</td>
-<td>0.500</td>
-<td>0.6918</td>
-<td>0.8787</td>
-<td>0.7741</td>
+<td>0.5000</td>
+<td>0.7839</td>
+<td>0.8657</td>
+<td>0.8228</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>optimized</td>
-<td>0.925</td>
-<td>0.9035</td>
-<td>0.8237</td>
-<td>0.8618</td>
+<td>0.9434</td>
+<td>0.9119</td>
+<td>0.8206</td>
+<td>0.8638</td>
 </tr>
 </tbody>
 </table>
@@ -6653,7 +6664,7 @@ Table&nbsp;36: Threshold summary on the test set - Hybrid (SMOTE+RUS)
 </div>
 </div>
 <div class="cell-output cell-output-display cell-output-markdown">
-<p>On the test set, threshold tuning improves the F1-score for LightGBMXT. The default threshold of 0.500 gives F1-score 0.7741. The optimized threshold of 0.925 gives F1-score 0.8618.</p>
+<p>On the test set, threshold tuning improves the F1-score for LightGBMXT. The default threshold of 0.500 gives F1-score 0.8228. The optimized threshold of 0.943 gives F1-score 0.8638.</p>
 </div>
 </div>
 </figure>
@@ -6770,26 +6781,26 @@ Table&nbsp;37: Running comparison through SMOTE plus random undersampling
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>default</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
 <td>0.5000</td>
-<td>0.9128</td>
-<td>0.7931</td>
-<td>0.8487</td>
+<td>0.9134</td>
+<td>0.7911</td>
+<td>0.8479</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>optimized</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
-<td>0.4906</td>
-<td>0.9112</td>
-<td>0.7939</td>
-<td>0.8485</td>
+<td>0.4786</td>
+<td>0.9106</td>
+<td>0.7954</td>
+<td>0.8491</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
@@ -6797,12 +6808,12 @@ Table&nbsp;37: Running comparison through SMOTE plus random undersampling
 <td>RandomForestGini</td>
 <td>default</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
 <td>0.5000</td>
 <td>0.9362</td>
-<td>0.8174</td>
-<td>0.8728</td>
+<td>0.8186</td>
+<td>0.8735</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
@@ -6810,12 +6821,12 @@ Table&nbsp;37: Running comparison through SMOTE plus random undersampling
 <td>RandomForestGini</td>
 <td>optimized</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
-<td>0.2856</td>
-<td>0.9165</td>
-<td>0.8532</td>
-<td>0.8837</td>
+<td>0.3260</td>
+<td>0.9246</td>
+<td>0.8477</td>
+<td>0.8845</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
@@ -6874,78 +6885,78 @@ Table&nbsp;37: Running comparison through SMOTE plus random undersampling
 <td>4b. ROS</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9675</td>
-<td>0.8784</td>
-<td>0.0147</td>
+<td>0.9606</td>
+<td>0.8695</td>
+<td>0.0137</td>
 <td>0.5000</td>
-<td>0.8379</td>
-<td>0.8583</td>
-<td>0.8479</td>
+<td>0.8851</td>
+<td>0.8437</td>
+<td>0.8639</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">9</th>
 <td>4b. ROS</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9675</td>
-<td>0.8784</td>
-<td>0.0147</td>
-<td>0.8335</td>
-<td>0.9238</td>
-<td>0.8280</td>
-<td>0.8733</td>
+<td>0.9606</td>
+<td>0.8695</td>
+<td>0.0137</td>
+<td>0.7348</td>
+<td>0.9129</td>
+<td>0.8308</td>
+<td>0.8699</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">10</th>
 <td>4c. SMOTE</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9694</td>
-<td>0.8751</td>
-<td>0.0265</td>
+<td>0.9653</td>
+<td>0.8724</td>
+<td>0.0187</td>
 <td>0.5000</td>
-<td>0.5920</td>
-<td>0.8869</td>
-<td>0.7100</td>
+<td>0.7498</td>
+<td>0.8685</td>
+<td>0.8048</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">11</th>
 <td>4c. SMOTE</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9694</td>
-<td>0.8751</td>
-<td>0.0265</td>
-<td>0.9501</td>
-<td>0.9120</td>
-<td>0.8135</td>
-<td>0.8599</td>
+<td>0.9653</td>
+<td>0.8724</td>
+<td>0.0187</td>
+<td>0.8872</td>
+<td>0.8944</td>
+<td>0.8347</td>
+<td>0.8635</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">12</th>
 <td>4d. Hybrid (SMOTE+RUS)</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9675</td>
-<td>0.8756</td>
-<td>0.0210</td>
+<td>0.9631</td>
+<td>0.8725</td>
+<td>0.0172</td>
 <td>0.5000</td>
-<td>0.6918</td>
-<td>0.8787</td>
-<td>0.7741</td>
+<td>0.7839</td>
+<td>0.8657</td>
+<td>0.8228</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">13</th>
 <td>4d. Hybrid (SMOTE+RUS)</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9675</td>
-<td>0.8756</td>
-<td>0.0210</td>
-<td>0.9250</td>
-<td>0.9035</td>
-<td>0.8237</td>
-<td>0.8618</td>
+<td>0.9631</td>
+<td>0.8725</td>
+<td>0.0172</td>
+<td>0.9434</td>
+<td>0.9119</td>
+<td>0.8206</td>
+<td>0.8638</td>
 </tr>
 </tbody>
 </table>
@@ -6993,21 +7004,21 @@ Table&nbsp;38: Comparison of Imbalance Handling Strategies
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>1. Ignore Class Imbalance</td>
-<td>0.972676</td>
-<td>0.875842</td>
-<td>0.010689</td>
-<td>0.848510</td>
-<td>0.490625</td>
+<td>0.972568</td>
+<td>0.875499</td>
+<td>0.010701</td>
+<td>0.849120</td>
+<td>0.478625</td>
 <td>The test-set calibration plot compares the perfectly calibrated reference line with the selected best model, CatBoost.</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>2. Class Sensitive Evaluation</td>
-<td>0.963388</td>
-<td>0.868828</td>
-<td>0.027078</td>
-<td>0.883693</td>
-<td>0.285625</td>
+<td>0.963359</td>
+<td>0.868591</td>
+<td>0.027085</td>
+<td>0.884474</td>
+<td>0.326000</td>
 <td>The test-set calibration plot compares the perfectly calibrated reference line with the selected best model, RandomForestGini.</td>
 </tr>
 <tr class="odd">
@@ -7033,31 +7044,31 @@ Table&nbsp;38: Comparison of Imbalance Handling Strategies
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
 <td>4b. ROS</td>
-<td>0.967518</td>
-<td>0.878435</td>
-<td>0.014683</td>
-<td>0.873292</td>
-<td>0.833500</td>
+<td>0.960576</td>
+<td>0.869488</td>
+<td>0.013693</td>
+<td>0.869887</td>
+<td>0.734750</td>
 <td>The test-set calibration plot compares the perfectly calibrated reference line with the selected best model, LightGBMXT.</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">5</th>
 <td>4c. SMOTE</td>
-<td>0.969433</td>
-<td>0.875143</td>
-<td>0.026526</td>
-<td>0.859929</td>
-<td>0.950125</td>
+<td>0.965334</td>
+<td>0.872418</td>
+<td>0.018697</td>
+<td>0.863526</td>
+<td>0.887250</td>
 <td>The test-set calibration plot compares the perfectly calibrated reference line with the selected best model, LightGBMXT.</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">6</th>
 <td>4d. Hybrid (SMOTE+RUS)</td>
-<td>0.967520</td>
-<td>0.875578</td>
-<td>0.020989</td>
-<td>0.861779</td>
-<td>0.925000</td>
+<td>0.963052</td>
+<td>0.872530</td>
+<td>0.017199</td>
+<td>0.863815</td>
+<td>0.943375</td>
 <td>The test-set calibration plot compares the perfectly calibrated reference line with the selected best model, LightGBMXT.</td>
 </tr>
 </tbody>
@@ -7207,152 +7218,152 @@ Table&nbsp;39: Permutation feature importance for the selected best model
 <tr class="odd">
 <th data-quarto-table-cell-role="th">0</th>
 <td>TID_RISK_1DAY_WINDOW</td>
-<td>0.681211</td>
-<td>0.062439</td>
-<td>0.000008</td>
+<td>0.683326</td>
+<td>0.059979</td>
+<td>0.000007</td>
 <td>5</td>
-<td>0.809774</td>
-<td>0.552648</td>
+<td>0.806824</td>
+<td>0.559827</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>TX_AMOUNT</td>
-<td>0.659182</td>
-<td>0.116861</td>
-<td>0.000114</td>
+<td>0.663830</td>
+<td>0.112203</td>
+<td>0.000094</td>
 <td>5</td>
-<td>0.899800</td>
-<td>0.418565</td>
+<td>0.894858</td>
+<td>0.432802</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
 <td>CID_AVG_AMOUNT_30DAY_WINDOW</td>
-<td>0.317498</td>
-<td>0.075670</td>
-<td>0.000360</td>
+<td>0.317322</td>
+<td>0.074343</td>
+<td>0.000337</td>
 <td>5</td>
-<td>0.473304</td>
-<td>0.161691</td>
+<td>0.470395</td>
+<td>0.164249</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
 <td>CID_AVG_AMOUNT_1DAY_WINDOW</td>
-<td>0.078155</td>
-<td>0.012601</td>
-<td>0.000078</td>
+<td>0.079840</td>
+<td>0.013861</td>
+<td>0.000105</td>
 <td>5</td>
-<td>0.104101</td>
-<td>0.052208</td>
+<td>0.108380</td>
+<td>0.051300</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
 <td>CID_AVG_AMOUNT_7DAY_WINDOW</td>
-<td>0.058945</td>
-<td>0.016578</td>
-<td>0.000678</td>
+<td>0.058190</td>
+<td>0.016160</td>
+<td>0.000646</td>
 <td>5</td>
-<td>0.093079</td>
-<td>0.024810</td>
+<td>0.091464</td>
+<td>0.024917</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">5</th>
 <td>TID_RISK_7DAY_WINDOW</td>
-<td>0.029582</td>
-<td>0.023776</td>
-<td>0.024856</td>
+<td>0.031177</td>
+<td>0.024823</td>
+<td>0.024196</td>
 <td>5</td>
-<td>0.078538</td>
-<td>-0.019374</td>
+<td>0.082287</td>
+<td>-0.019933</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">6</th>
 <td>TID_RISK_30DAY_WINDOW</td>
-<td>0.002325</td>
-<td>0.001730</td>
-<td>0.019867</td>
+<td>0.002512</td>
+<td>0.001577</td>
+<td>0.011791</td>
 <td>5</td>
-<td>0.005888</td>
-<td>-0.001237</td>
+<td>0.005759</td>
+<td>-0.000736</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">7</th>
 <td>TID_NB_TX_7DAY_WINDOW</td>
-<td>0.002161</td>
-<td>0.007364</td>
-<td>0.273763</td>
+<td>0.002121</td>
+<td>0.007983</td>
+<td>0.292185</td>
 <td>5</td>
-<td>0.017323</td>
-<td>-0.013001</td>
+<td>0.018559</td>
+<td>-0.014316</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">8</th>
 <td>TX_DURING_WEEKEND</td>
-<td>0.000313</td>
-<td>0.001994</td>
-<td>0.371473</td>
+<td>0.000954</td>
+<td>0.001738</td>
+<td>0.143403</td>
 <td>5</td>
-<td>0.004419</td>
-<td>-0.003792</td>
+<td>0.004532</td>
+<td>-0.002624</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">9</th>
-<td>CID_NB_TX_30DAY_WINDOW</td>
-<td>-0.000069</td>
-<td>0.016237</td>
-<td>0.503552</td>
+<td>TX_DURING_NIGHT</td>
+<td>-0.000403</td>
+<td>0.000693</td>
+<td>0.868505</td>
 <td>5</td>
-<td>0.033364</td>
-<td>-0.033501</td>
+<td>0.001023</td>
+<td>-0.001829</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">10</th>
-<td>TX_DURING_NIGHT</td>
-<td>-0.000457</td>
-<td>0.000571</td>
-<td>0.926225</td>
+<td>CID_NB_TX_30DAY_WINDOW</td>
+<td>-0.000817</td>
+<td>0.015192</td>
+<td>0.544951</td>
 <td>5</td>
-<td>0.000718</td>
-<td>-0.001632</td>
+<td>0.030464</td>
+<td>-0.032098</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">11</th>
 <td>TID_NB_TX_1DAY_WINDOW</td>
-<td>-0.002739</td>
-<td>0.012091</td>
-<td>0.680468</td>
+<td>-0.002332</td>
+<td>0.012207</td>
+<td>0.654397</td>
 <td>5</td>
-<td>0.022156</td>
-<td>-0.027635</td>
+<td>0.022803</td>
+<td>-0.027467</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">12</th>
 <td>TID_NB_TX_30DAY_WINDOW</td>
-<td>-0.004543</td>
-<td>0.008994</td>
-<td>0.839084</td>
+<td>-0.003188</td>
+<td>0.007741</td>
+<td>0.795372</td>
 <td>5</td>
-<td>0.013975</td>
-<td>-0.023061</td>
+<td>0.012751</td>
+<td>-0.019127</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">13</th>
 <td>CID_NB_TX_1DAY_WINDOW</td>
-<td>-0.008970</td>
-<td>0.008895</td>
-<td>0.956417</td>
+<td>-0.008749</td>
+<td>0.009473</td>
+<td>0.946084</td>
 <td>5</td>
-<td>0.009345</td>
-<td>-0.027285</td>
+<td>0.010757</td>
+<td>-0.028254</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">14</th>
 <td>CID_NB_TX_7DAY_WINDOW</td>
-<td>-0.009599</td>
-<td>0.019590</td>
-<td>0.832609</td>
+<td>-0.009211</td>
+<td>0.019656</td>
+<td>0.823065</td>
 <td>5</td>
-<td>0.030738</td>
-<td>-0.049935</td>
+<td>0.031262</td>
+<td>-0.049683</td>
 </tr>
 </tbody>
 </table>
@@ -7810,26 +7821,26 @@ Table&nbsp;41: Running comparison through the logistic-regression RUS prior corr
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>default</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
 <td>0.5000</td>
-<td>0.9128</td>
-<td>0.7931</td>
-<td>0.8487</td>
+<td>0.9134</td>
+<td>0.7911</td>
+<td>0.8479</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>optimized</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
-<td>0.4906</td>
-<td>0.9112</td>
-<td>0.7939</td>
-<td>0.8485</td>
+<td>0.4786</td>
+<td>0.9106</td>
+<td>0.7954</td>
+<td>0.8491</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
@@ -7837,12 +7848,12 @@ Table&nbsp;41: Running comparison through the logistic-regression RUS prior corr
 <td>RandomForestGini</td>
 <td>default</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
 <td>0.5000</td>
 <td>0.9362</td>
-<td>0.8174</td>
-<td>0.8728</td>
+<td>0.8186</td>
+<td>0.8735</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
@@ -7850,12 +7861,12 @@ Table&nbsp;41: Running comparison through the logistic-regression RUS prior corr
 <td>RandomForestGini</td>
 <td>optimized</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
-<td>0.2856</td>
-<td>0.9165</td>
-<td>0.8532</td>
-<td>0.8837</td>
+<td>0.3260</td>
+<td>0.9246</td>
+<td>0.8477</td>
+<td>0.8845</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
@@ -7914,78 +7925,78 @@ Table&nbsp;41: Running comparison through the logistic-regression RUS prior corr
 <td>4b. ROS</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9675</td>
-<td>0.8784</td>
-<td>0.0147</td>
+<td>0.9606</td>
+<td>0.8695</td>
+<td>0.0137</td>
 <td>0.5000</td>
-<td>0.8379</td>
-<td>0.8583</td>
-<td>0.8479</td>
+<td>0.8851</td>
+<td>0.8437</td>
+<td>0.8639</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">9</th>
 <td>4b. ROS</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9675</td>
-<td>0.8784</td>
-<td>0.0147</td>
-<td>0.8335</td>
-<td>0.9238</td>
-<td>0.8280</td>
-<td>0.8733</td>
+<td>0.9606</td>
+<td>0.8695</td>
+<td>0.0137</td>
+<td>0.7348</td>
+<td>0.9129</td>
+<td>0.8308</td>
+<td>0.8699</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">10</th>
 <td>4c. SMOTE</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9694</td>
-<td>0.8751</td>
-<td>0.0265</td>
+<td>0.9653</td>
+<td>0.8724</td>
+<td>0.0187</td>
 <td>0.5000</td>
-<td>0.5920</td>
-<td>0.8869</td>
-<td>0.7100</td>
+<td>0.7498</td>
+<td>0.8685</td>
+<td>0.8048</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">11</th>
 <td>4c. SMOTE</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9694</td>
-<td>0.8751</td>
-<td>0.0265</td>
-<td>0.9501</td>
-<td>0.9120</td>
-<td>0.8135</td>
-<td>0.8599</td>
+<td>0.9653</td>
+<td>0.8724</td>
+<td>0.0187</td>
+<td>0.8872</td>
+<td>0.8944</td>
+<td>0.8347</td>
+<td>0.8635</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">12</th>
 <td>4d. Hybrid (SMOTE+RUS)</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9675</td>
-<td>0.8756</td>
-<td>0.0210</td>
+<td>0.9631</td>
+<td>0.8725</td>
+<td>0.0172</td>
 <td>0.5000</td>
-<td>0.6918</td>
-<td>0.8787</td>
-<td>0.7741</td>
+<td>0.7839</td>
+<td>0.8657</td>
+<td>0.8228</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">13</th>
 <td>4d. Hybrid (SMOTE+RUS)</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9675</td>
-<td>0.8756</td>
-<td>0.0210</td>
-<td>0.9250</td>
-<td>0.9035</td>
-<td>0.8237</td>
-<td>0.8618</td>
+<td>0.9631</td>
+<td>0.8725</td>
+<td>0.0172</td>
+<td>0.9434</td>
+<td>0.9119</td>
+<td>0.8206</td>
+<td>0.8638</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">14</th>
@@ -8229,26 +8240,26 @@ Table&nbsp;43: Running comparison through the logistic-regression ROS prior corr
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>default</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
 <td>0.5000</td>
-<td>0.9128</td>
-<td>0.7931</td>
-<td>0.8487</td>
+<td>0.9134</td>
+<td>0.7911</td>
+<td>0.8479</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
 <td>1. Ignore Class Imbalance</td>
 <td>CatBoost</td>
 <td>optimized</td>
-<td>0.9727</td>
-<td>0.8758</td>
+<td>0.9726</td>
+<td>0.8755</td>
 <td>0.0107</td>
-<td>0.4906</td>
-<td>0.9112</td>
-<td>0.7939</td>
-<td>0.8485</td>
+<td>0.4786</td>
+<td>0.9106</td>
+<td>0.7954</td>
+<td>0.8491</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">2</th>
@@ -8256,12 +8267,12 @@ Table&nbsp;43: Running comparison through the logistic-regression ROS prior corr
 <td>RandomForestGini</td>
 <td>default</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
 <td>0.5000</td>
 <td>0.9362</td>
-<td>0.8174</td>
-<td>0.8728</td>
+<td>0.8186</td>
+<td>0.8735</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">3</th>
@@ -8269,12 +8280,12 @@ Table&nbsp;43: Running comparison through the logistic-regression ROS prior corr
 <td>RandomForestGini</td>
 <td>optimized</td>
 <td>0.9634</td>
-<td>0.8688</td>
+<td>0.8686</td>
 <td>0.0271</td>
-<td>0.2856</td>
-<td>0.9165</td>
-<td>0.8532</td>
-<td>0.8837</td>
+<td>0.3260</td>
+<td>0.9246</td>
+<td>0.8477</td>
+<td>0.8845</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
@@ -8333,78 +8344,78 @@ Table&nbsp;43: Running comparison through the logistic-regression ROS prior corr
 <td>4b. ROS</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9675</td>
-<td>0.8784</td>
-<td>0.0147</td>
+<td>0.9606</td>
+<td>0.8695</td>
+<td>0.0137</td>
 <td>0.5000</td>
-<td>0.8379</td>
-<td>0.8583</td>
-<td>0.8479</td>
+<td>0.8851</td>
+<td>0.8437</td>
+<td>0.8639</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">9</th>
 <td>4b. ROS</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9675</td>
-<td>0.8784</td>
-<td>0.0147</td>
-<td>0.8335</td>
-<td>0.9238</td>
-<td>0.8280</td>
-<td>0.8733</td>
+<td>0.9606</td>
+<td>0.8695</td>
+<td>0.0137</td>
+<td>0.7348</td>
+<td>0.9129</td>
+<td>0.8308</td>
+<td>0.8699</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">10</th>
 <td>4c. SMOTE</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9694</td>
-<td>0.8751</td>
-<td>0.0265</td>
+<td>0.9653</td>
+<td>0.8724</td>
+<td>0.0187</td>
 <td>0.5000</td>
-<td>0.5920</td>
-<td>0.8869</td>
-<td>0.7100</td>
+<td>0.7498</td>
+<td>0.8685</td>
+<td>0.8048</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">11</th>
 <td>4c. SMOTE</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9694</td>
-<td>0.8751</td>
-<td>0.0265</td>
-<td>0.9501</td>
-<td>0.9120</td>
-<td>0.8135</td>
-<td>0.8599</td>
+<td>0.9653</td>
+<td>0.8724</td>
+<td>0.0187</td>
+<td>0.8872</td>
+<td>0.8944</td>
+<td>0.8347</td>
+<td>0.8635</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">12</th>
 <td>4d. Hybrid (SMOTE+RUS)</td>
 <td>LightGBMXT</td>
 <td>default</td>
-<td>0.9675</td>
-<td>0.8756</td>
-<td>0.0210</td>
+<td>0.9631</td>
+<td>0.8725</td>
+<td>0.0172</td>
 <td>0.5000</td>
-<td>0.6918</td>
-<td>0.8787</td>
-<td>0.7741</td>
+<td>0.7839</td>
+<td>0.8657</td>
+<td>0.8228</td>
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">13</th>
 <td>4d. Hybrid (SMOTE+RUS)</td>
 <td>LightGBMXT</td>
 <td>optimized</td>
-<td>0.9675</td>
-<td>0.8756</td>
-<td>0.0210</td>
-<td>0.9250</td>
-<td>0.9035</td>
-<td>0.8237</td>
-<td>0.8618</td>
+<td>0.9631</td>
+<td>0.8725</td>
+<td>0.0172</td>
+<td>0.9434</td>
+<td>0.9119</td>
+<td>0.8206</td>
+<td>0.8638</td>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">14</th>
@@ -8472,11 +8483,7 @@ Table&nbsp;43: Running comparison through the logistic-regression ROS prior corr
 </section>
 <section id="key-conclusions-and-recommendations" class="level1" data-number="9">
 <h1 data-number="9"><span class="header-section-number">9</span> Key Conclusions and Recommendations</h1>
-<p>At this point the comparison is clean: we held the feature set fixed and changed only how the model responds to severe class imbalance.</p>
-<p><strong>Template For Interpreting Your Results:</strong></p>
-<p>Do not copy the discussion below verbatim into a submission. Use it as a guide for writing up what your own runs actually showed.</p>
 <ul>
-<li><p><strong>Strategy 1 (Ignore Class Imbalance):</strong> Treat this as the control case. If it already ranks fraud reasonably well, the feature set is doing more work than you might expect. If ROC-AUC looks respectable but thresholded performance is weak, that is a reminder that broad ranking quality does not automatically translate into a workable alert rule.</p></li>
 <li><p><strong>Strategy 1 (Ignore Class Imbalance):</strong> Treat this as the control case. If it already ranks fraud reasonably well, the feature set is doing more work than you might expect. If ROC-AUC looks respectable but thresholded performance is weak, that is a reminder that broad ranking quality does not automatically translate into a workable alert rule.</p></li>
 <li><p><strong>Strategy 2 (Class-Sensitive Metric Selection):</strong> Using PR-AUC (<code>average_precision</code>) as the primary metric usually lines up better with how fraud teams work, because only a small high-risk slice of transactions will be reviewed. Keep ROC-AUC in the report, but let AP and threshold metrics carry more weight in the decision.</p></li>
 <li><p><strong>Strategy 3 (Cost-Sensitive Learning with <code>balance_weight</code>):</strong> When you have enough data, reweighting is often the least disruptive way to make the learner take fraud more seriously. It keeps the original sample intact and usually creates fewer side effects than aggressive resampling.</p></li>
@@ -8505,7 +8512,7 @@ Table&nbsp;43: Running comparison through the logistic-regression ROS prior corr
 <li><strong>Increased Complexity:</strong> More complex pipelines can be harder to maintain, understand, and debug.</li>
 </ul></li>
 <li><p><strong>Calibrate If Scores Will Be Used as Probabilities:</strong> If the model scores feed queue priority, expected-loss estimates, or any downstream decision that depends on the size of the probability, good ranking is not enough. Calibrate on untouched data that reflects the real production population.</p></li>
-<li><p><strong>Tune Thresholds on a Separate Set:</strong> Regardless of the imbalance strategy, always use a dedicated tuning set to find an optimal decision threshold that aligns with business objectives (e.g., maximizing F1-score, or balancing precision and recall according to specific cost considerations).</p></li>
+<li><p><strong>Tune Thresholds on a Separate Set:</strong> Regardless of the imbalance strategy, always use a dedicated tuning set to find an optimal decision threshold that aligns with business objectives (e.g., maximizing F1-score, or balancing precision and recall according to specific cost considerations). The tuning set should not undergo any reweighting or resampling to ensure that threshold selection is based on data that reflects the true distribution of transactions.</p></li>
 <li><p><strong>Spend Time on Features:</strong> In fraud work, a small set of good recency, customer-history, and terminal-history features usually matters more than switching from one imbalance trick to another.</p></li>
 </ol>
 <!-- -->
@@ -10747,7 +10754,7 @@ Le Borgne, Yann-Aël, Wissam Siblini, Bertrand Lebichot, and Gianluca Bontempi. 
 <span id="cb148-1901"><a href="#cb148-1901"></a>fit_args_s4a <span class="op">=</span> {<span class="st">'holdout_frac'</span>: <span class="fl">0.2</span>,</span>
 <span id="cb148-1902"><a href="#cb148-1902"></a>            <span class="st">'excluded_model_types'</span>: [<span class="st">'KNN'</span>],</span>
 <span id="cb148-1903"><a href="#cb148-1903"></a>            <span class="st">'presets'</span>: <span class="st">'medium_quality'</span>,</span>
-<span id="cb148-1904"><a href="#cb148-1904"></a>            <span class="st">'time_limit'</span>: <span class="dv">180</span>}</span>
+<span id="cb148-1904"><a href="#cb148-1904"></a>            <span class="st">'time_limit'</span>: <span class="dv">540</span>}</span>
 <span id="cb148-1905"><a href="#cb148-1905"></a></span>
 <span id="cb148-1906"><a href="#cb148-1906"></a>ag_wrapper_s4a <span class="op">=</span> AutoGluonSklearnWrapper(</span>
 <span id="cb148-1907"><a href="#cb148-1907"></a>    label<span class="op">=</span>target_label,</span>
@@ -11014,7 +11021,7 @@ Le Borgne, Yann-Aël, Wissam Siblini, Bertrand Lebichot, and Gianluca Bontempi. 
 <span id="cb148-2192"><a href="#cb148-2192"></a>fit_args_s4b <span class="op">=</span> {<span class="st">'holdout_frac'</span>: <span class="fl">0.2</span>,</span>
 <span id="cb148-2193"><a href="#cb148-2193"></a>            <span class="st">'excluded_model_types'</span>: [<span class="st">'KNN'</span>],</span>
 <span id="cb148-2194"><a href="#cb148-2194"></a>            <span class="st">'presets'</span>: <span class="st">'medium_quality'</span>,</span>
-<span id="cb148-2195"><a href="#cb148-2195"></a>            <span class="st">'time_limit'</span>: <span class="dv">180</span>}</span>
+<span id="cb148-2195"><a href="#cb148-2195"></a>            <span class="st">'time_limit'</span>: <span class="dv">540</span>}</span>
 <span id="cb148-2196"><a href="#cb148-2196"></a></span>
 <span id="cb148-2197"><a href="#cb148-2197"></a>ag_wrapper_s4b <span class="op">=</span> AutoGluonSklearnWrapper(</span>
 <span id="cb148-2198"><a href="#cb148-2198"></a>    label<span class="op">=</span>target_label,</span>
@@ -11275,7 +11282,7 @@ Le Borgne, Yann-Aël, Wissam Siblini, Bertrand Lebichot, and Gianluca Bontempi. 
 <span id="cb148-2477"><a href="#cb148-2477"></a>fit_args_s4c <span class="op">=</span> {<span class="st">'holdout_frac'</span>: <span class="fl">0.2</span>,</span>
 <span id="cb148-2478"><a href="#cb148-2478"></a>            <span class="st">'excluded_model_types'</span>: [<span class="st">'KNN'</span>],</span>
 <span id="cb148-2479"><a href="#cb148-2479"></a>            <span class="st">'presets'</span>: <span class="st">'medium_quality'</span>,</span>
-<span id="cb148-2480"><a href="#cb148-2480"></a>            <span class="st">'time_limit'</span>: <span class="dv">180</span>}</span>
+<span id="cb148-2480"><a href="#cb148-2480"></a>            <span class="st">'time_limit'</span>: <span class="dv">540</span>}</span>
 <span id="cb148-2481"><a href="#cb148-2481"></a></span>
 <span id="cb148-2482"><a href="#cb148-2482"></a>ag_wrapper_s4c <span class="op">=</span> AutoGluonSklearnWrapper(</span>
 <span id="cb148-2483"><a href="#cb148-2483"></a>    label<span class="op">=</span>target_label,</span>
@@ -11538,7 +11545,7 @@ Le Borgne, Yann-Aël, Wissam Siblini, Bertrand Lebichot, and Gianluca Bontempi. 
 <span id="cb148-2764"><a href="#cb148-2764"></a>fit_args_s4d <span class="op">=</span> {<span class="st">'holdout_frac'</span>: <span class="fl">0.2</span>,</span>
 <span id="cb148-2765"><a href="#cb148-2765"></a>            <span class="st">'excluded_model_types'</span>: [<span class="st">'KNN'</span>],</span>
 <span id="cb148-2766"><a href="#cb148-2766"></a>            <span class="st">'presets'</span>: <span class="st">'medium_quality'</span>,</span>
-<span id="cb148-2767"><a href="#cb148-2767"></a>            <span class="st">'time_limit'</span>: <span class="dv">180</span>}</span>
+<span id="cb148-2767"><a href="#cb148-2767"></a>            <span class="st">'time_limit'</span>: <span class="dv">540</span>}</span>
 <span id="cb148-2768"><a href="#cb148-2768"></a></span>
 <span id="cb148-2769"><a href="#cb148-2769"></a>ag_wrapper_s4d <span class="op">=</span> AutoGluonSklearnWrapper(</span>
 <span id="cb148-2770"><a href="#cb148-2770"></a>    label<span class="op">=</span>target_label,</span>
@@ -12346,49 +12353,42 @@ Le Borgne, Yann-Aël, Wissam Siblini, Bertrand Lebichot, and Gianluca Bontempi. 
 <span id="cb148-3618"><a href="#cb148-3618"></a></span>
 <span id="cb148-3619"><a href="#cb148-3619"></a><span class="fu"># Key Conclusions and Recommendations</span></span>
 <span id="cb148-3620"><a href="#cb148-3620"></a></span>
-<span id="cb148-3621"><a href="#cb148-3621"></a>At this point the comparison is clean: we held the feature set fixed and changed only how the model responds to severe class imbalance.</span>
+<span id="cb148-3621"><a href="#cb148-3621"></a><span class="ss">-   </span>**Strategy 1 (Ignore Class Imbalance):** Treat this as the control case. If it already ranks fraud reasonably well, the feature set is doing more work than you might expect. If ROC-AUC looks respectable but thresholded performance is weak, that is a reminder that broad ranking quality does not automatically translate into a workable alert rule.</span>
 <span id="cb148-3622"><a href="#cb148-3622"></a></span>
-<span id="cb148-3623"><a href="#cb148-3623"></a>**Template For Interpreting Your Results:**</span>
+<span id="cb148-3623"><a href="#cb148-3623"></a><span class="ss">-   </span>**Strategy 2 (Class-Sensitive Metric Selection):** Using PR-AUC (<span class="in">`average_precision`</span>) as the primary metric usually lines up better with how fraud teams work, because only a small high-risk slice of transactions will be reviewed. Keep ROC-AUC in the report, but let AP and threshold metrics carry more weight in the decision.</span>
 <span id="cb148-3624"><a href="#cb148-3624"></a></span>
-<span id="cb148-3625"><a href="#cb148-3625"></a>Do not copy the discussion below verbatim into a submission. Use it as a guide for writing up what your own runs actually showed.</span>
+<span id="cb148-3625"><a href="#cb148-3625"></a><span class="ss">-   </span>**Strategy 3 (Cost-Sensitive Learning with `balance_weight`):** When you have enough data, reweighting is often the least disruptive way to make the learner take fraud more seriously. It keeps the original sample intact and usually creates fewer side effects than aggressive resampling.</span>
 <span id="cb148-3626"><a href="#cb148-3626"></a></span>
-<span id="cb148-3627"><a href="#cb148-3627"></a><span class="ss">-   </span>**Strategy 1 (Ignore Class Imbalance):** Treat this as the control case. If it already ranks fraud reasonably well, the feature set is doing more work than you might expect. If ROC-AUC looks respectable but thresholded performance is weak, that is a reminder that broad ranking quality does not automatically translate into a workable alert rule.</span>
-<span id="cb148-3628"><a href="#cb148-3628"></a><span class="ss">-   </span>**Strategy 1 (Ignore Class Imbalance):** Treat this as the control case. If it already ranks fraud reasonably well, the feature set is doing more work than you might expect. If ROC-AUC looks respectable but thresholded performance is weak, that is a reminder that broad ranking quality does not automatically translate into a workable alert rule.</span>
-<span id="cb148-3629"><a href="#cb148-3629"></a></span>
-<span id="cb148-3630"><a href="#cb148-3630"></a><span class="ss">-   </span>**Strategy 2 (Class-Sensitive Metric Selection):** Using PR-AUC (<span class="in">`average_precision`</span>) as the primary metric usually lines up better with how fraud teams work, because only a small high-risk slice of transactions will be reviewed. Keep ROC-AUC in the report, but let AP and threshold metrics carry more weight in the decision.</span>
-<span id="cb148-3631"><a href="#cb148-3631"></a></span>
-<span id="cb148-3632"><a href="#cb148-3632"></a><span class="ss">-   </span>**Strategy 3 (Cost-Sensitive Learning with `balance_weight`):** When you have enough data, reweighting is often the least disruptive way to make the learner take fraud more seriously. It keeps the original sample intact and usually creates fewer side effects than aggressive resampling.</span>
-<span id="cb148-3633"><a href="#cb148-3633"></a></span>
-<span id="cb148-3634"><a href="#cb148-3634"></a><span class="ss">-   </span>**Strategy 4 (Resampling — RUS, ROS, SMOTE, Hybrid):** This family asks a practical question: if you are going to rebalance, how far should you go? For fraud data, 1:1 is often too aggressive. Ratios such as 5:1, 10:1, and 20:1 usually preserve more legitimate behavior while still making the fit easier:</span>
+<span id="cb148-3627"><a href="#cb148-3627"></a><span class="ss">-   </span>**Strategy 4 (Resampling — RUS, ROS, SMOTE, Hybrid):** This family asks a practical question: if you are going to rebalance, how far should you go? For fraud data, 1:1 is often too aggressive. Ratios such as 5:1, 10:1, and 20:1 usually preserve more legitimate behavior while still making the fit easier:</span>
+<span id="cb148-3628"><a href="#cb148-3628"></a></span>
+<span id="cb148-3629"><a href="#cb148-3629"></a><span class="ss">    -   </span>**RUS (Random Undersampling):** RUS lowers training cost by throwing away majority-class rows, but the discarded rows may contain exactly the legitimate variation you need.</span>
+<span id="cb148-3630"><a href="#cb148-3630"></a><span class="ss">    -   </span>**ROS (Random Oversampling):** ROS is easy to implement, but duplicated fraud cases can make the model overreact to a small set of examples.</span>
+<span id="cb148-3631"><a href="#cb148-3631"></a><span class="ss">    -   </span>**SMOTE:** SMOTE creates synthetic minority samples by interpolation. It can add variety relative to ROS, but it still changes the training distribution and usually hurts raw calibration.</span>
+<span id="cb148-3632"><a href="#cb148-3632"></a><span class="ss">    -   </span>**Hybrid (SMOTE + RUS):** Hybrid pipelines can be effective, but they buy flexibility by adding more moving parts to debug and recalibrate.</span>
+<span id="cb148-3633"><a href="#cb148-3633"></a><span class="ss">    -   </span>**Probability Calibration:** Any resampling scheme can distort score calibration. If the probabilities will be used as probabilities rather than just rankings, recalibrate on an untouched tuning set.</span>
+<span id="cb148-3634"><a href="#cb148-3634"></a><span class="ss">    -   </span>**Performance:** Do not assume resampling wins by default. In many fraud problems, better features, a better selection metric, or class weights buy more than a more complex sampling pipeline.</span>
 <span id="cb148-3635"><a href="#cb148-3635"></a></span>
-<span id="cb148-3636"><a href="#cb148-3636"></a><span class="ss">    -   </span>**RUS (Random Undersampling):** RUS lowers training cost by throwing away majority-class rows, but the discarded rows may contain exactly the legitimate variation you need.</span>
-<span id="cb148-3637"><a href="#cb148-3637"></a><span class="ss">    -   </span>**ROS (Random Oversampling):** ROS is easy to implement, but duplicated fraud cases can make the model overreact to a small set of examples.</span>
-<span id="cb148-3638"><a href="#cb148-3638"></a><span class="ss">    -   </span>**SMOTE:** SMOTE creates synthetic minority samples by interpolation. It can add variety relative to ROS, but it still changes the training distribution and usually hurts raw calibration.</span>
-<span id="cb148-3639"><a href="#cb148-3639"></a><span class="ss">    -   </span>**Hybrid (SMOTE + RUS):** Hybrid pipelines can be effective, but they buy flexibility by adding more moving parts to debug and recalibrate.</span>
-<span id="cb148-3640"><a href="#cb148-3640"></a><span class="ss">    -   </span>**Probability Calibration:** Any resampling scheme can distort score calibration. If the probabilities will be used as probabilities rather than just rankings, recalibrate on an untouched tuning set.</span>
-<span id="cb148-3641"><a href="#cb148-3641"></a><span class="ss">    -   </span>**Performance:** Do not assume resampling wins by default. In many fraud problems, better features, a better selection metric, or class weights buy more than a more complex sampling pipeline.</span>
-<span id="cb148-3642"><a href="#cb148-3642"></a></span>
-<span id="cb148-3643"><a href="#cb148-3643"></a>**General Recommendations:**</span>
-<span id="cb148-3644"><a href="#cb148-3644"></a></span>
-<span id="cb148-3645"><a href="#cb148-3645"></a><span class="ss">1.  </span>**Do Not Rely on One Metric:** In imbalanced fraud detection, ROC-AUC is a useful secondary view of ranking quality, not the whole report card. Pair it with PR-AUC (<span class="in">`average_precision`</span>) and operations-aware metrics such as precision at top-$k$/top-$x\%$, recall at fixed review capacity, dollar-weighted capture or savings, false positives per true positive, and calibration diagnostics.</span>
-<span id="cb148-3646"><a href="#cb148-3646"></a></span>
-<span id="cb148-3647"><a href="#cb148-3647"></a><span class="ss">2.  </span>**Try Cost-Sensitive Learning Before Aggressive Resampling:** If you have enough data and want to avoid synthetic examples or heavy undersampling, <span class="in">`sample_weight='balance_weight'`</span> is often the cleanest next step.</span>
-<span id="cb148-3648"><a href="#cb148-3648"></a></span>
-<span id="cb148-3649"><a href="#cb148-3649"></a><span class="ss">3.  </span>**Resample Carefully, Not Automatically:** Do not manipulate training data (e.g., via RUS, ROS, SMOTE) solely because it is imbalanced or feels difficult to model. Such methods can introduce their own problems:</span>
-<span id="cb148-3650"><a href="#cb148-3650"></a></span>
-<span id="cb148-3651"><a href="#cb148-3651"></a><span class="ss">    -   </span>**Use Moderate Targets:** For RUS and ROS, ratios such as 5:1, 10:1, or 20:1 non-events to events are often more realistic than 1:1.</span>
-<span id="cb148-3652"><a href="#cb148-3652"></a><span class="ss">    -   </span>**Preserve Legitimate Variation:** More non-fraud controls help the model learn the sea of legitimate activity rather than a tiny puddle of non-fraud examples.</span>
-<span id="cb148-3653"><a href="#cb148-3653"></a><span class="ss">    -   </span>**Loss of Information (RUS):** Undersampling can discard valuable data from the majority class, especially if you force the data all the way to 1:1.</span>
-<span id="cb148-3654"><a href="#cb148-3654"></a><span class="ss">    -   </span>**Overfitting (ROS, SMOTE):** Oversampling can lead to models that are too specific to the (potentially synthetic) minority samples, and a 1:1 ROS sample makes that risk worse.</span>
-<span id="cb148-3655"><a href="#cb148-3655"></a><span class="ss">    -   </span>**Avoid False-Positive Inflation:** A fraud-heavy sampled training set can teach the model a world where fraud is much more common than it really is, which may translate into more alerts than the business can absorb.</span>
-<span id="cb148-3656"><a href="#cb148-3656"></a><span class="ss">    -   </span>**Destroyed Probability Calibration:** This is a major issue, especially if the model outputs are used for more than just binary classification (e.g., risk scoring, estimating expected fraud rates). More aggressive rebalancing usually makes calibration harder.</span>
-<span id="cb148-3657"><a href="#cb148-3657"></a><span class="ss">    -   </span>**Increased Complexity:** More complex pipelines can be harder to maintain, understand, and debug.</span>
-<span id="cb148-3658"><a href="#cb148-3658"></a></span>
-<span id="cb148-3659"><a href="#cb148-3659"></a><span class="ss">4.  </span>**Calibrate If Scores Will Be Used as Probabilities:** If the model scores feed queue priority, expected-loss estimates, or any downstream decision that depends on the size of the probability, good ranking is not enough. Calibrate on untouched data that reflects the real production population.</span>
-<span id="cb148-3660"><a href="#cb148-3660"></a></span>
-<span id="cb148-3661"><a href="#cb148-3661"></a><span class="ss">5.  </span>**Tune Thresholds on a Separate Set:** Regardless of the imbalance strategy, always use a dedicated tuning set to find an optimal decision threshold that aligns with business objectives (e.g., maximizing F1-score, or balancing precision and recall according to specific cost considerations).</span>
-<span id="cb148-3662"><a href="#cb148-3662"></a></span>
-<span id="cb148-3663"><a href="#cb148-3663"></a><span class="ss">6.  </span>**Spend Time on Features:** In fraud work, a small set of good recency, customer-history, and terminal-history features usually matters more than switching from one imbalance trick to another.</span>
+<span id="cb148-3636"><a href="#cb148-3636"></a>**General Recommendations:**</span>
+<span id="cb148-3637"><a href="#cb148-3637"></a></span>
+<span id="cb148-3638"><a href="#cb148-3638"></a><span class="ss">1.  </span>**Do Not Rely on One Metric:** In imbalanced fraud detection, ROC-AUC is a useful secondary view of ranking quality, not the whole report card. Pair it with PR-AUC (<span class="in">`average_precision`</span>) and operations-aware metrics such as precision at top-$k$/top-$x\%$, recall at fixed review capacity, dollar-weighted capture or savings, false positives per true positive, and calibration diagnostics.</span>
+<span id="cb148-3639"><a href="#cb148-3639"></a></span>
+<span id="cb148-3640"><a href="#cb148-3640"></a><span class="ss">2.  </span>**Try Cost-Sensitive Learning Before Aggressive Resampling:** If you have enough data and want to avoid synthetic examples or heavy undersampling, <span class="in">`sample_weight='balance_weight'`</span> is often the cleanest next step.</span>
+<span id="cb148-3641"><a href="#cb148-3641"></a></span>
+<span id="cb148-3642"><a href="#cb148-3642"></a><span class="ss">3.  </span>**Resample Carefully, Not Automatically:** Do not manipulate training data (e.g., via RUS, ROS, SMOTE) solely because it is imbalanced or feels difficult to model. Such methods can introduce their own problems:</span>
+<span id="cb148-3643"><a href="#cb148-3643"></a></span>
+<span id="cb148-3644"><a href="#cb148-3644"></a><span class="ss">    -   </span>**Use Moderate Targets:** For RUS and ROS, ratios such as 5:1, 10:1, or 20:1 non-events to events are often more realistic than 1:1.</span>
+<span id="cb148-3645"><a href="#cb148-3645"></a><span class="ss">    -   </span>**Preserve Legitimate Variation:** More non-fraud controls help the model learn the sea of legitimate activity rather than a tiny puddle of non-fraud examples.</span>
+<span id="cb148-3646"><a href="#cb148-3646"></a><span class="ss">    -   </span>**Loss of Information (RUS):** Undersampling can discard valuable data from the majority class, especially if you force the data all the way to 1:1.</span>
+<span id="cb148-3647"><a href="#cb148-3647"></a><span class="ss">    -   </span>**Overfitting (ROS, SMOTE):** Oversampling can lead to models that are too specific to the (potentially synthetic) minority samples, and a 1:1 ROS sample makes that risk worse.</span>
+<span id="cb148-3648"><a href="#cb148-3648"></a><span class="ss">    -   </span>**Avoid False-Positive Inflation:** A fraud-heavy sampled training set can teach the model a world where fraud is much more common than it really is, which may translate into more alerts than the business can absorb.</span>
+<span id="cb148-3649"><a href="#cb148-3649"></a><span class="ss">    -   </span>**Destroyed Probability Calibration:** This is a major issue, especially if the model outputs are used for more than just binary classification (e.g., risk scoring, estimating expected fraud rates). More aggressive rebalancing usually makes calibration harder.</span>
+<span id="cb148-3650"><a href="#cb148-3650"></a><span class="ss">    -   </span>**Increased Complexity:** More complex pipelines can be harder to maintain, understand, and debug.</span>
+<span id="cb148-3651"><a href="#cb148-3651"></a></span>
+<span id="cb148-3652"><a href="#cb148-3652"></a><span class="ss">4.  </span>**Calibrate If Scores Will Be Used as Probabilities:** If the model scores feed queue priority, expected-loss estimates, or any downstream decision that depends on the size of the probability, good ranking is not enough. Calibrate on untouched data that reflects the real production population.</span>
+<span id="cb148-3653"><a href="#cb148-3653"></a></span>
+<span id="cb148-3654"><a href="#cb148-3654"></a><span class="ss">5.  </span>**Tune Thresholds on a Separate Set:** Regardless of the imbalance strategy, always use a dedicated tuning set to find an optimal decision threshold that aligns with business objectives (e.g., maximizing F1-score, or balancing precision and recall according to specific cost considerations). The tuning set should not undergo any reweighting or resampling to ensure that threshold selection is based on data that reflects the true distribution of transactions.</span>
+<span id="cb148-3655"><a href="#cb148-3655"></a></span>
+<span id="cb148-3656"><a href="#cb148-3656"></a><span class="ss">6.  </span>**Spend Time on Features:** In fraud work, a small set of good recency, customer-history, and terminal-history features usually matters more than switching from one imbalance trick to another.</span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->

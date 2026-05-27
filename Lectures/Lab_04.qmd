@@ -1775,7 +1775,7 @@ predictor_args_s4a = {
 fit_args_s4a = {'holdout_frac': 0.2,
             'excluded_model_types': ['KNN'],
             'presets': 'medium_quality',
-            'time_limit': 180}
+            'time_limit': 540}
 
 ag_wrapper_s4a = AutoGluonSklearnWrapper(
     label=target_label,
@@ -2042,7 +2042,7 @@ predictor_args_s4b = {
 fit_args_s4b = {'holdout_frac': 0.2,
             'excluded_model_types': ['KNN'],
             'presets': 'medium_quality',
-            'time_limit': 180}
+            'time_limit': 540}
 
 ag_wrapper_s4b = AutoGluonSklearnWrapper(
     label=target_label,
@@ -2303,7 +2303,7 @@ predictor_args_s4c = {
 fit_args_s4c = {'holdout_frac': 0.2,
             'excluded_model_types': ['KNN'],
             'presets': 'medium_quality',
-            'time_limit': 180}
+            'time_limit': 540}
 
 ag_wrapper_s4c = AutoGluonSklearnWrapper(
     label=target_label,
@@ -2566,7 +2566,7 @@ predictor_args_s4d = {
 fit_args_s4d = {'holdout_frac': 0.2,
             'excluded_model_types': ['KNN'],
             'presets': 'medium_quality',
-            'time_limit': 180}
+            'time_limit': 540}
 
 ag_wrapper_s4d = AutoGluonSklearnWrapper(
     label=target_label,
@@ -3374,13 +3374,6 @@ append_running_metric_summary(
 
 # Key Conclusions and Recommendations
 
-At this point the comparison is clean: we held the feature set fixed and changed only how the model responds to severe class imbalance.
-
-**Template For Interpreting Your Results:**
-
-Do not copy the discussion below verbatim into a submission. Use it as a guide for writing up what your own runs actually showed.
-
--   **Strategy 1 (Ignore Class Imbalance):** Treat this as the control case. If it already ranks fraud reasonably well, the feature set is doing more work than you might expect. If ROC-AUC looks respectable but thresholded performance is weak, that is a reminder that broad ranking quality does not automatically translate into a workable alert rule.
 -   **Strategy 1 (Ignore Class Imbalance):** Treat this as the control case. If it already ranks fraud reasonably well, the feature set is doing more work than you might expect. If ROC-AUC looks respectable but thresholded performance is weak, that is a reminder that broad ranking quality does not automatically translate into a workable alert rule.
 
 -   **Strategy 2 (Class-Sensitive Metric Selection):** Using PR-AUC (`average_precision`) as the primary metric usually lines up better with how fraud teams work, because only a small high-risk slice of transactions will be reviewed. Keep ROC-AUC in the report, but let AP and threshold metrics carry more weight in the decision.
@@ -3414,6 +3407,6 @@ Do not copy the discussion below verbatim into a submission. Use it as a guide f
 
 4.  **Calibrate If Scores Will Be Used as Probabilities:** If the model scores feed queue priority, expected-loss estimates, or any downstream decision that depends on the size of the probability, good ranking is not enough. Calibrate on untouched data that reflects the real production population.
 
-5.  **Tune Thresholds on a Separate Set:** Regardless of the imbalance strategy, always use a dedicated tuning set to find an optimal decision threshold that aligns with business objectives (e.g., maximizing F1-score, or balancing precision and recall according to specific cost considerations).
+5.  **Tune Thresholds on a Separate Set:** Regardless of the imbalance strategy, always use a dedicated tuning set to find an optimal decision threshold that aligns with business objectives (e.g., maximizing F1-score, or balancing precision and recall according to specific cost considerations). The tuning set should not undergo any reweighting or resampling to ensure that threshold selection is based on data that reflects the true distribution of transactions.
 
 6.  **Spend Time on Features:** In fraud work, a small set of good recency, customer-history, and terminal-history features usually matters more than switching from one imbalance trick to another.
